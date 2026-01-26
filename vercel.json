@@ -2,8 +2,16 @@
   "version": 2,
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
+      "source": "/privacy-policy.html",
+      "destination": "/api/privacy-policy"
+    },
+    {
+      "source": "/terms-of-service.html",
+      "destination": "/api/terms-of-service"
+    },
+    {
+      "source": "/",
+      "destination": "/api/index"
     }
   ]
 }
