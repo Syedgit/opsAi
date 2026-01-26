@@ -1,28 +1,4 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "package.json",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/webhook/whatsapp",
-      "dest": "/dist/index.js"
-    },
-    {
-      "src": "/whatsapp/webhook",
-      "dest": "/dist/index.js"
-    },
-    {
-      "src": "/health",
-      "dest": "/dist/index.js"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/dist/index.js"
-    }
-  ]
+  "version": 2
 }
 
