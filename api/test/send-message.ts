@@ -47,15 +47,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       messageId: response.data.messages?.[0]?.id,
       to: to,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorDetails = axios.isAxiosError(error)
+      ? error.response?.data || error.message
+      : error instanceof Error
+      ? error.message
+      : 'Unknown error';
+
     console.error('❌ Failed to send message', {
-      error: error.response?.data || error.message,
+      error: errorDetails,
       to,
     });
 
     return res.status(500).json({
       error: 'Failed to send message',
-      details: error.response?.data || error.message,
+      details: errorDetails,
     });
   }
 }

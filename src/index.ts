@@ -1,6 +1,8 @@
 import express from 'express';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { logger } from './utils/logger';
 import { whatsappRouter } from './routes/whatsapp';
 import { errorHandler } from './middleware/errorHandler';
@@ -18,6 +20,40 @@ app.use(express.urlencoded({ extended: true }));
 // Health check
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Serve HTML pages
+app.get('/', (_req, res) => {
+  try {
+    const html = readFileSync(join(__dirname, '..', 'public', 'index.html'), 'utf8');
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  } catch (error) {
+    logger.error('Error serving index.html', error);
+    res.status(500).send('Error loading page');
+  }
+});
+
+app.get('/privacy-policy.html', (_req, res) => {
+  try {
+    const html = readFileSync(join(__dirname, '..', 'public', 'privacy-policy.html'), 'utf8');
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  } catch (error) {
+    logger.error('Error serving privacy-policy.html', error);
+    res.status(500).send('Error loading privacy policy');
+  }
+});
+
+app.get('/terms-of-service.html', (_req, res) => {
+  try {
+    const html = readFileSync(join(__dirname, '..', 'public', 'terms-of-service.html'), 'utf8');
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  } catch (error) {
+    logger.error('Error serving terms-of-service.html', error);
+    res.status(500).send('Error loading terms of service');
+  }
 });
 
 // Routes

@@ -65,8 +65,9 @@ async function handleWebhook(req: VercelRequest, res: VercelResponse) {
         });
       }
     }
-  } catch (error: any) {
-    console.error('❌ Error handling webhook:', error);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('❌ Error handling webhook:', errorMessage);
     // Still return 200 to WhatsApp even on error
     res.status(200).send('OK');
   }
