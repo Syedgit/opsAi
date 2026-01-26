@@ -13,7 +13,7 @@ function verifyWebhook(req: VercelRequest, res: VercelResponse) {
     res.status(200).send(challenge);
   } else {
     console.warn('❌ Webhook verification failed', { mode, token, expected: verifyToken });
-    res.sendStatus(403);
+    res.status(403).send('Forbidden');
   }
 }
 
