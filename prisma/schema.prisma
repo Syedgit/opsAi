@@ -1,0 +1,124 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model UserDirectory {
+  id          String   @id @default(uuid())
+  phoneE164   String   @unique @map("phone_e164")
+  name        String?
+  role        UserRole @default(STAFF)
+  storeId     String?  @map("store_id")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("user_directory")
+  @@index([phoneE164])
+  @@index([storeId])
+}
+
+model StoreConfig {
+  id        String   @id @default(uuid())
+  storeId   String   @unique @map("store_id")
+  storeName String   @map("store_name")
+  sheetId   String   @map("sheet_id")
+  timezone  String   @default("America/New_York")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("store_config")
+  @@index([storeId])
+}
+
+model PendingActions {
+  id              String            @id @default(uuid())
+  actionId        String            @unique @default(uuid()) @map("action_id")
+  phoneE164       String            @map("phone_e164")
+  storeId         String            @map("store_id")
+  type            ClassificationType
+  payloadJson     Json              @map("payload_json")
+  confidence      Float
+  status          PendingStatus     @default(PENDING)
+  messageIdInbound String?          @map("message_id_inbound")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  expiresAt       DateTime          @map("expires_at")
+
+  @@map("pending_actions")
+  @@index([phoneE164, status])
+  @@index([storeId])
+  @@index([actionId])
+}
+
+model VendorContacts {
+  id            String   @id @default(uuid())
+  storeId       String   @map("store_id")
+  vendorName    String   @map("vendor_name")
+  sendMethod    SendMethod @map("send_method")
+  destination   String
+  formatTemplate String? @map("format_template")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("vendor_contacts")
+  @@index([storeId, vendorName])
+}
+
+model MessageLog {
+  id            String   @id @default(uuid())
+  messageId     String   @unique @map("message_id")
+  phoneE164     String   @map("phone_e164")
+  storeId       String?  @map("store_id")
+  messageType   String   @map("message_type")
+  messageText   String?  @map("message_text")
+  mediaUrl      String?  @map("media_url")
+  mediaId       String?  @map("media_id")
+  classification String? @map("classification")
+  extractedData Json?    @map("extracted_data")
+  processed     Boolean  @default(false)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("message_log")
+  @@index([messageId])
+  @@index([phoneE164])
+  @@index([storeId])
+  @@index([createdAt])
+}
+
+enum UserRole {
+  OWNER
+  MANAGER
+  STAFF
+}
+
+enum ClassificationType {
+  ORDER_REQUEST
+  STORE_SALES
+  FUEL_SALES
+  INVOICE_EXPENSE
+  PAID_OUT
+  UNKNOWN
+}
+
+enum PendingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  EXPIRED
+}
+
+enum SendMethod {
+  WHATSAPP
+  SMS
+  EMAIL
+}
+
