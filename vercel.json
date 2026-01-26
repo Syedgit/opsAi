@@ -1,21 +1,9 @@
 {
   "version": 2,
-  "routes": [
+  "rewrites": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api/$1"
-    },
-    {
-      "src": "/privacy-policy.html",
-      "dest": "/api/index.js"
-    },
-    {
-      "src": "/terms-of-service.html",
-      "dest": "/api/index.js"
-    },
-    {
-      "src": "/",
-      "dest": "/api/index.js"
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
     }
   ]
 }
