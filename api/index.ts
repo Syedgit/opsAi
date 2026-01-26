@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-export default function handler(req: VercelRequest, res: VercelResponse) {
+export default function handler(req: VercelRequest, res: VercelResponse): void {
   const path = req.url || '/';
   
   // Serve static HTML files
@@ -10,15 +10,17 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
     try {
       const html = readFileSync(join(process.cwd(), 'public', 'index.html'), 'utf8');
       res.setHeader('Content-Type', 'text/html');
-      return res.send(html);
+      res.send(html);
+      return;
     } catch (error) {
-      return res.json({ 
+      res.json({ 
         message: 'opsAi API',
         endpoints: {
           webhook: '/api/webhook/whatsapp',
           health: '/api/health'
         }
       });
+      return;
     }
   }
   
@@ -26,9 +28,11 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
     try {
       const html = readFileSync(join(process.cwd(), 'public', 'privacy-policy.html'), 'utf8');
       res.setHeader('Content-Type', 'text/html');
-      return res.send(html);
+      res.send(html);
+      return;
     } catch (error) {
-      return res.status(404).send('Privacy Policy not found');
+      res.status(404).send('Privacy Policy not found');
+      return;
     }
   }
   
@@ -36,9 +40,11 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
     try {
       const html = readFileSync(join(process.cwd(), 'public', 'terms-of-service.html'), 'utf8');
       res.setHeader('Content-Type', 'text/html');
-      return res.send(html);
+      res.send(html);
+      return;
     } catch (error) {
-      return res.status(404).send('Terms of Service not found');
+      res.status(404).send('Terms of Service not found');
+      return;
     }
   }
   
