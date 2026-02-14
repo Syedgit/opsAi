@@ -8,11 +8,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   const type = req.query.type as string; // sales, invoices, fuel, paidouts, orders
 
   if (!storeId) {
-    return res.status(400).json({ error: 'Store ID required (?storeId=S001)' });
+    res.status(400).json({ error: 'Store ID required (?storeId=S001)' });
+    return;
   }
 
   if (!type) {
-    return res.status(400).json({ error: 'Type required (?type=sales|invoices|fuel|paidouts|orders)' });
+    res.status(400).json({ error: 'Type required (?type=sales|invoices|fuel|paidouts|orders)' });
+    return;
   }
 
   try {
@@ -34,13 +36,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         dbType = 'ORDER_REQUEST';
         break;
       default:
-        return res.status(400).json({ error: 'Invalid type' });
+        res.status(400).json({ error: 'Invalid type' });
+        return;
     }
 
     const data = await prisma.pendingActions.findMany({
       where: {
         storeId,
-        type: dbType as any,
+        type: dbType as 'STORE_SALES' | 'INVOICE_EXPENSE' | 'FUEL_SALES' | 'PAID_OUT' | 'ORDER_REQUEST',
         status: 'CONFIRMED',
       },
       orderBy: { createdAt: 'desc' },

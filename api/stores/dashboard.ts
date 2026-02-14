@@ -8,7 +8,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   const storeId = req.query.storeId as string;
 
   if (!storeId) {
-    return res.status(400).json({ error: 'Store ID required (query param: ?storeId=S001)' });
+    res.status(400).json({ error: 'Store ID required (query param: ?storeId=S001)' });
+    return;
   }
 
   try {

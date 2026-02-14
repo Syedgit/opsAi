@@ -5,15 +5,16 @@ import axios from 'axios';
  * Mock webhook endpoint to simulate WhatsApp messages
  * Useful for testing without a real WhatsApp number
  */
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
   }
 
   const { phone, message, type = 'text' } = req.body;
 
   if (!phone || !message) {
-    return res.status(400).json({
+    res.status(400).json({
       error: 'Missing required fields',
       required: ['phone', 'message'],
       example: {
@@ -22,6 +23,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         type: 'text', // or 'image'
       },
     });
+    return;
   }
 
   // Simulate WhatsApp webhook payload
@@ -78,19 +80,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const responseText = response.data;
 
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
       message: 'Mock webhook sent',
       payload: mockPayload,
       webhookResponse: responseText,
       status: response.status || 200,
     });
+    return;
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return res.status(500).json({
+    res.status(500).json({
       error: 'Failed to forward mock webhook',
       details: errorMessage,
       payload: mockPayload,
     });
+    return;
   }
 }
