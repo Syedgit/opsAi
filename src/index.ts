@@ -56,6 +56,17 @@ app.get('/terms-of-service.html', (_req, res) => {
   }
 });
 
+app.get('/dashboard', (_req, res) => {
+  try {
+    const html = readFileSync(join(__dirname, '..', 'public', 'dashboard.html'), 'utf8');
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  } catch (error) {
+    logger.error('Error serving dashboard.html', error);
+    res.status(500).send('Error loading dashboard');
+  }
+});
+
 // Routes
 app.use('/api/webhook', whatsappRouter);
 // Also support /whatsapp for backward compatibility

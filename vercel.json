@@ -2,6 +2,10 @@
   "version": 2,
   "rewrites": [
     {
+      "source": "/dashboard",
+      "destination": "/api/dashboard"
+    },
+    {
       "source": "/privacy-policy.html",
       "destination": "/api/privacy-policy"
     },
