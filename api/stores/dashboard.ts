@@ -4,7 +4,7 @@ import { startOfDay, endOfDay, startOfMonth, endOfMonth } from 'date-fns';
 
 const prisma = new PrismaClient();
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   const storeId = req.query.storeId as string;
 
   if (!storeId) {
