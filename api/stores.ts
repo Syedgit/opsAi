@@ -7,12 +7,11 @@ export default async function handler(_req: VercelRequest, res: VercelResponse):
   try {
     const stores = await prisma.storeConfig.findMany({
       where: { active: true },
-      include: {
-        _count: {
-          select: {
-            // We'll need to add relations for counts
-          },
-        },
+      select: {
+        storeId: true,
+        storeName: true,
+        timezone: true,
+        active: true,
       },
     });
 

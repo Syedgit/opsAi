@@ -2,8 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>opsAi - WhatsApp Store Management</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="theme-color" content="#25D366">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>opsAi - Simplify Daily Store Reporting for Small Businesses</title>
     <style>
         * {
             margin: 0;
@@ -11,173 +14,1008 @@
             box-sizing: border-box;
         }
         
+        :root {
+            --primary: #25D366;
+            --primary-dark: #128C7E;
+            --secondary: #075E54;
+            --text: #1a1a1a;
+            --text-light: #666;
+            --bg: #ffffff;
+            --bg-light: #f8f9fa;
+            --border: #e0e0e0;
+        }
+        
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            color: var(--text);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+        
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 1000;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.05);
+        }
+        
+        .logo {
+            font-size: 24px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        
+        .logo:hover {
+            opacity: 0.8;
+        }
+        
+        nav a:hover .logo {
+            opacity: 0.8;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 30px;
+            align-items: center;
+        }
+        
+        .nav-links a {
+            color: var(--text);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+        
+        .nav-links a:hover {
+            color: var(--primary);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            padding: 12px 28px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s;
+            border: none;
+            cursor: pointer;
+            display: inline-block;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(37, 211, 102, 0.3);
+        }
+        
+        .btn-secondary {
+            background: white;
+            color: var(--primary);
+            padding: 12px 28px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s;
+            border: 2px solid var(--primary);
+            cursor: pointer;
+            display: inline-block;
+        }
+        
+        .btn-secondary:hover {
+            background: var(--primary);
+            color: white;
+        }
+        
+        /* Hero Section */
+        .hero {
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 20px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
+            padding: 120px 40px 80px;
+            position: relative;
+            overflow: hidden;
         }
         
-        .container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            max-width: 800px;
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 800px;
+            height: 800px;
+            background: radial-gradient(circle, rgba(37, 211, 102, 0.1) 0%, transparent 70%);
+            border-radius: 50%;
+            animation: float 20s ease-in-out infinite;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            50% { transform: translate(-50px, -50px) rotate(180deg); }
+        }
+        
+        .hero-content {
+            max-width: 1200px;
             width: 100%;
-            padding: 40px;
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .hero h1 {
+            font-size: clamp(42px, 8vw, 72px);
+            font-weight: 800;
+            line-height: 1.1;
+            margin-bottom: 24px;
+            background: linear-gradient(135deg, var(--text) 0%, var(--primary-dark) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .hero .subtitle {
+            font-size: clamp(20px, 3vw, 28px);
+            color: var(--text-light);
+            margin-bottom: 40px;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+            line-height: 1.5;
+        }
+        
+        .hero-cta {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 40px;
+        }
+        
+        .hero-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 40px;
+            margin-top: 80px;
+            max-width: 900px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .stat-item {
             text-align: center;
         }
         
-        .icon {
-            width: 120px;
-            height: 120px;
-            background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
-            border-radius: 30px;
-            margin: 0 auto 30px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 60px;
-            color: white;
-            box-shadow: 0 10px 30px rgba(37, 211, 102, 0.3);
-        }
-        
-        h1 {
-            color: #25D366;
+        .stat-number {
             font-size: 48px;
-            margin-bottom: 10px;
             font-weight: 700;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
         
-        .subtitle {
-            color: #666;
+        .stat-label {
+            color: var(--text-light);
+            font-size: 16px;
+            margin-top: 8px;
+        }
+        
+        /* Problem Section */
+        .problem {
+            padding: 100px 40px;
+            background: var(--bg-light);
+        }
+        
+        .section-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .section-title {
+            font-size: clamp(36px, 5vw, 48px);
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 16px;
+            color: var(--text);
+        }
+        
+        .section-subtitle {
             font-size: 20px;
-            margin-bottom: 40px;
+            color: var(--text-light);
+            text-align: center;
+            max-width: 700px;
+            margin: 0 auto 60px;
         }
         
-        .features {
+        .problem-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin: 40px 0;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-top: 60px;
         }
         
-        .feature {
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 15px;
+        .problem-card {
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
             transition: transform 0.3s;
         }
         
-        .feature:hover {
-            transform: translateY(-5px);
+        .problem-card:hover {
+            transform: translateY(-8px);
         }
         
-        .feature-icon {
-            font-size: 40px;
-            margin-bottom: 10px;
+        .problem-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
         }
         
-        .feature h3 {
-            color: #333;
-            margin-bottom: 8px;
-            font-size: 18px;
+        .problem-card h3 {
+            font-size: 24px;
+            margin-bottom: 12px;
+            color: var(--text);
         }
         
-        .feature p {
-            color: #666;
-            font-size: 14px;
+        .problem-card p {
+            color: var(--text-light);
+            line-height: 1.7;
         }
         
-        .links {
-            margin-top: 40px;
-            padding-top: 30px;
-            border-top: 2px solid #f0f0f0;
+        /* Solution Section */
+        .solution {
+            padding: 100px 40px;
+            background: white;
         }
         
-        .links a {
-            display: inline-block;
-            margin: 10px;
-            padding: 12px 30px;
-            background: #25D366;
-            color: white;
-            text-decoration: none;
-            border-radius: 25px;
-            font-weight: 600;
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 40px;
+            margin-top: 60px;
+        }
+        
+        .feature-card {
+            padding: 40px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+            border: 2px solid var(--border);
             transition: all 0.3s;
         }
         
-        .links a:hover {
-            background: #128C7E;
-            transform: scale(1.05);
+        .feature-card:hover {
+            border-color: var(--primary);
+            box-shadow: 0 8px 30px rgba(37, 211, 102, 0.15);
+            transform: translateY(-4px);
         }
         
-        .links a.secondary {
-            background: #f0f0f0;
-            color: #333;
+        .feature-icon {
+            width: 64px;
+            height: 64px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            margin-bottom: 24px;
         }
         
-        .links a.secondary:hover {
-            background: #e0e0e0;
+        .feature-card h3 {
+            font-size: 24px;
+            margin-bottom: 12px;
+            color: var(--text);
         }
         
-        @media (max-width: 600px) {
-            h1 {
+        .feature-card p {
+            color: var(--text-light);
+            line-height: 1.7;
+        }
+        
+        /* How It Works */
+        .how-it-works {
+            padding: 100px 40px;
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary) 100%);
+            color: white;
+        }
+        
+        .how-it-works .section-title,
+        .how-it-works .section-subtitle {
+            color: white;
+        }
+        
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 40px;
+            margin-top: 60px;
+        }
+        
+        .step {
+            text-align: center;
+            position: relative;
+        }
+        
+        .step-number {
+            width: 60px;
+            height: 60px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            font-weight: 700;
+            margin: 0 auto 20px;
+            border: 3px solid white;
+        }
+        
+        .step h3 {
+            font-size: 22px;
+            margin-bottom: 12px;
+        }
+        
+        .step p {
+            opacity: 0.9;
+            line-height: 1.7;
+        }
+        
+        /* Benefits Section */
+        .benefits {
+            padding: 100px 40px;
+            background: var(--bg-light);
+        }
+        
+        .benefits-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 30px;
+            margin-top: 60px;
+        }
+        
+        .benefit-item {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+        }
+        
+        .benefit-icon {
+            font-size: 32px;
+            flex-shrink: 0;
+        }
+        
+        .benefit-content h3 {
+            font-size: 20px;
+            margin-bottom: 8px;
+            color: var(--text);
+        }
+        
+        .benefit-content p {
+            color: var(--text-light);
+            line-height: 1.7;
+        }
+        
+        /* CTA Section */
+        .cta-section {
+            padding: 100px 40px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            text-align: center;
+        }
+        
+        .cta-section h2 {
+            font-size: clamp(36px, 5vw, 48px);
+            margin-bottom: 20px;
+        }
+        
+        .cta-section p {
+            font-size: 20px;
+            margin-bottom: 40px;
+            opacity: 0.95;
+        }
+        
+        /* Footer */
+        footer {
+            background: var(--text);
+            color: white;
+            padding: 60px 40px 30px;
+        }
+        
+        .footer-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 40px;
+            margin-bottom: 40px;
+        }
+        
+        .footer-section h4 {
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+        
+        .footer-section a {
+            display: block;
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
+            margin-bottom: 12px;
+            transition: color 0.3s;
+        }
+        
+        .footer-section a:hover {
+            color: white;
+        }
+        
+        .footer-bottom {
+            text-align: center;
+            padding-top: 30px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.6);
+        }
+        
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .hero-stats {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 30px;
+            }
+            
+            .problem-grid, .features-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .steps {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        
+        @media (max-width: 768px) {
+            nav {
+                padding: 15px 20px;
+                flex-wrap: wrap;
+            }
+            
+            .nav-links {
+                gap: 10px;
+                font-size: 14px;
+                flex-wrap: wrap;
+            }
+            
+            .nav-links a:not(.btn-primary) {
+                display: none;
+            }
+            
+            .btn-primary {
+                padding: 10px 20px;
+                font-size: 14px;
+            }
+            
+            .hero {
+                padding: 100px 20px 60px;
+            }
+            
+            .hero h1 {
                 font-size: 36px;
             }
             
-            .subtitle {
+            .hero .subtitle {
                 font-size: 18px;
             }
             
-            .features {
+            .hero-cta {
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .hero-cta a {
+                width: 100%;
+                text-align: center;
+            }
+            
+            .hero-stats {
+                grid-template-columns: 1fr;
+                gap: 20px;
+                margin-top: 40px;
+            }
+            
+            .problem, .solution, .how-it-works, .benefits, .cta-section {
+                padding: 60px 20px;
+            }
+            
+            .problem-grid, .features-grid {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+            
+            .steps {
+                grid-template-columns: 1fr;
+                gap: 30px;
+            }
+            
+            .benefits-grid {
                 grid-template-columns: 1fr;
             }
+            
+            .footer-content {
+                grid-template-columns: 1fr;
+                gap: 30px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            nav {
+                padding: 12px 15px;
+            }
+            
+            .logo {
+                font-size: 20px;
+            }
+            
+            .hero h1 {
+                font-size: 28px;
+                line-height: 1.2;
+            }
+            
+            .hero .subtitle {
+                font-size: 16px;
+            }
+            
+            .section-title {
+                font-size: 28px;
+            }
+            
+            .section-subtitle {
+                font-size: 16px;
+            }
+            
+            .problem-card, .feature-card {
+                padding: 30px 20px;
+            }
+            
+            .stat-number {
+                font-size: 36px;
+            }
+            
+            .cta-section h2 {
+                font-size: 28px;
+            }
+            
+            .cta-section p {
+                font-size: 16px;
+            }
+        }
+        
+        /* Touch-friendly buttons on mobile */
+        @media (hover: none) and (pointer: coarse) {
+            .btn-primary, .btn-secondary {
+                min-height: 44px;
+                padding: 14px 28px;
+            }
+            
+            .nav-links a {
+                min-height: 44px;
+                display: flex;
+                align-items: center;
+            }
+        }
+        
+        /* Animations */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .fade-in-up {
+            animation: fadeInUp 0.6s ease-out;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="icon">📱</div>
-        <h1>opsAi</h1>
-        <p class="subtitle">WhatsApp-Based Store Operations Management</p>
-        
-        <div class="features">
-            <div class="feature">
-                <div class="feature-icon">💬</div>
-                <h3>WhatsApp Integration</h3>
-                <p>Send messages and images via WhatsApp</p>
+    <!-- Navigation -->
+    <nav>
+        <a href="/" style="text-decoration: none; color: inherit;">
+            <div class="logo">opsAi</div>
+        </a>
+        <div class="nav-links">
+            <a href="#features">Features</a>
+            <a href="#how-it-works">How It Works</a>
+            <a href="#benefits">Benefits</a>
+            <a href="/dashboard" class="btn-primary">Dashboard</a>
+        </div>
+    </nav>
+    
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-content fade-in-up">
+            <h1>Stop Chasing Daily Reports.<br>Start Managing Your Business.</h1>
+            <p class="subtitle">
+                opsAi simplifies daily store reporting for small businesses. Send receipts, invoices, and sales data via WhatsApp, 
+                and see everything organized in one place. No more manual tracking, no more scattered spreadsheets.
+            </p>
+            <div class="hero-cta">
+                <a href="/dashboard" class="btn-primary">Get Started Free</a>
+                <a href="#how-it-works" class="btn-secondary">See How It Works</a>
             </div>
-            
-            <div class="feature">
-                <div class="feature-icon">🤖</div>
-                <h3>AI-Powered</h3>
-                <p>Automatic classification and data extraction</p>
-            </div>
-            
-            <div class="feature">
-                <div class="feature-icon">📊</div>
-                <h3>Google Sheets</h3>
-                <p>Automatic data writing to your sheets</p>
-            </div>
-            
-            <div class="feature">
-                <div class="feature-icon">✅</div>
-                <h3>Confirmation Flow</h3>
-                <p>Verify data before saving</p>
+            <div class="hero-stats">
+                <div class="stat-item">
+                    <div class="stat-number">100%</div>
+                    <div class="stat-label">Automated</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">24/7</div>
+                    <div class="stat-label">Available</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">1-Click</div>
+                    <div class="stat-label">Reporting</div>
+                </div>
             </div>
         </div>
-        
-        <div class="links">
-            <a href="/dashboard">📊 Dashboard</a>
-            <a href="/privacy-policy.html">Privacy Policy</a>
-            <a href="/terms-of-service.html">Terms of Service</a>
-            <a href="/api/health" class="secondary">API Status</a>
+    </section>
+    
+    <!-- Problem Section -->
+    <section class="problem" id="problem">
+        <div class="section-container">
+            <h2 class="section-title">The Daily Reporting Struggle is Real</h2>
+            <p class="section-subtitle">
+                Small business owners spend hours every day manually tracking sales, expenses, invoices, and orders. 
+                This time could be better spent growing your business.
+            </p>
+            <div class="problem-grid">
+                <div class="problem-card">
+                    <div class="problem-icon">📊</div>
+                    <h3>Scattered Data</h3>
+                    <p>
+                        Sales receipts in one place, invoices in another, expenses scribbled on paper. 
+                        Finding what you need takes forever, and important information gets lost.
+                    </p>
+                </div>
+                <div class="problem-card">
+                    <div class="problem-icon">⏰</div>
+                    <h3>Time Consuming</h3>
+                    <p>
+                        Hours spent every day manually entering data into spreadsheets, organizing receipts, 
+                        and trying to keep track of everything. Time you don't have.
+                    </p>
+                </div>
+                <div class="problem-card">
+                    <div class="problem-icon">❌</div>
+                    <h3>Error Prone</h3>
+                    <p>
+                        Manual data entry leads to mistakes. Wrong numbers, missed entries, and incorrect 
+                        calculations can cost you money and create accounting headaches.
+                    </p>
+                </div>
+                <div class="problem-card">
+                    <div class="problem-icon">📱</div>
+                    <h3>No Real-Time Visibility</h3>
+                    <p>
+                        You can't see your business performance until you manually compile everything. 
+                        By then, it's too late to make timely decisions or catch issues early.
+                    </p>
+                </div>
+                <div class="problem-card">
+                    <div class="problem-icon">💸</div>
+                    <h3>Expensive Solutions</h3>
+                    <p>
+                        Enterprise software costs thousands of dollars and requires training. 
+                        Small businesses need something simple, affordable, and effective.
+                    </p>
+                </div>
+                <div class="problem-card">
+                    <div class="problem-icon">🤯</div>
+                    <h3>Mental Overload</h3>
+                    <p>
+                        Juggling multiple systems, remembering where everything is stored, and trying to 
+                        stay organized creates unnecessary stress and mental fatigue.
+                    </p>
+                </div>
+            </div>
         </div>
-    </div>
+    </section>
+    
+    <!-- Solution Section -->
+    <section class="solution" id="features">
+        <div class="section-container">
+            <h2 class="section-title">Everything You Need in One Place</h2>
+            <p class="section-subtitle">
+                opsAi transforms how small businesses handle daily reporting. Simple, fast, and designed for convenience stores, 
+                gas stations, and retail shops.
+            </p>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">💬</div>
+                    <h3>WhatsApp Integration</h3>
+                    <p>
+                        Your team already uses WhatsApp. Just send photos of receipts, invoices, and sales reports. 
+                        No new apps to learn, no complicated interfaces. It's that simple.
+                    </p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📸</div>
+                    <h3>Smart Image Processing</h3>
+                    <p>
+                        Take a photo of any document - sales receipt, invoice, expense receipt, or fuel report. 
+                        Our system extracts all the important information automatically.
+                    </p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3>Unified Dashboard</h3>
+                    <p>
+                        See all your data in one beautiful dashboard. Daily sales, invoices, expenses, fuel sales, 
+                        paid outs, and orders - all organized and easy to understand.
+                    </p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">✅</div>
+                    <h3>Confirmation Flow</h3>
+                    <p>
+                        Review extracted data before it's saved. Confirm or correct any information via WhatsApp. 
+                        You're always in control, with zero risk of errors.
+                    </p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📈</div>
+                    <h3>Real-Time Insights</h3>
+                    <p>
+                        Get instant visibility into your business performance. See today's sales, pending invoices, 
+                        and expenses as they happen. Make informed decisions faster.
+                    </p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔮</div>
+                    <h3>AI Summaries (Coming Soon)</h3>
+                    <p>
+                        Get intelligent summaries of your business performance. AI-powered insights will help you 
+                        understand trends, identify opportunities, and make better decisions.
+                    </p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📋</div>
+                    <h3>Google Sheets Integration</h3>
+                    <p>
+                        All your data automatically syncs to Google Sheets. Use it for accounting, reporting, 
+                        or analysis. Your data, your way.
+                    </p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🏪</div>
+                    <h3>Multi-Store Support</h3>
+                    <p>
+                        Manage multiple locations from one dashboard. Switch between stores instantly, 
+                        compare performance, and get a complete view of your business.
+                    </p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔒</div>
+                    <h3>Secure & Private</h3>
+                    <p>
+                        Your data is encrypted and secure. We never share your information, and you have 
+                        complete control over your data at all times.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- How It Works -->
+    <section class="how-it-works" id="how-it-works">
+        <div class="section-container">
+            <h2 class="section-title">How It Works</h2>
+            <p class="section-subtitle">
+                Getting started takes less than 5 minutes. No complicated setup, no training required.
+            </p>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <h3>Send via WhatsApp</h3>
+                    <p>
+                        Take a photo of your sales receipt, invoice, expense, or any document and send it 
+                        to your opsAi WhatsApp number.
+                    </p>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <h3>AI Extracts Data</h3>
+                    <p>
+                        Our system automatically reads and extracts all important information - amounts, dates, 
+                        vendors, categories, and more.
+                    </p>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <h3>Confirm & Save</h3>
+                    <p>
+                        Review the extracted data via WhatsApp. Confirm if correct, or make corrections. 
+                        Once confirmed, it's saved automatically.
+                    </p>
+                </div>
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <h3>View in Dashboard</h3>
+                    <p>
+                        Access your unified dashboard anytime to see all your data organized by category. 
+                        Export to Google Sheets or view insights instantly.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Benefits Section -->
+    <section class="benefits" id="benefits">
+        <div class="section-container">
+            <h2 class="section-title">Why Business Owners Love opsAi</h2>
+            <p class="section-subtitle">
+                Join hundreds of small business owners who've simplified their daily reporting.
+            </p>
+            <div class="benefits-grid">
+                <div class="benefit-item">
+                    <div class="benefit-icon">⏱️</div>
+                    <div class="benefit-content">
+                        <h3>Save 2+ Hours Daily</h3>
+                        <p>No more manual data entry. What used to take hours now takes minutes.</p>
+                    </div>
+                </div>
+                <div class="benefit-item">
+                    <div class="benefit-icon">💰</div>
+                    <div class="benefit-content">
+                        <h3>Reduce Errors</h3>
+                        <p>Automated extraction eliminates human errors and calculation mistakes.</p>
+                    </div>
+                </div>
+                <div class="benefit-item">
+                    <div class="benefit-icon">👁️</div>
+                    <div class="benefit-content">
+                        <h3>Real-Time Visibility</h3>
+                        <p>See your business performance instantly, not days or weeks later.</p>
+                    </div>
+                </div>
+                <div class="benefit-item">
+                    <div class="benefit-icon">📱</div>
+                    <div class="benefit-content">
+                        <h3>Use What You Know</h3>
+                        <p>No new apps to learn. Your team already knows how to use WhatsApp.</p>
+                    </div>
+                </div>
+                <div class="benefit-item">
+                    <div class="benefit-icon">📊</div>
+                    <div class="benefit-content">
+                        <h3>Better Decisions</h3>
+                        <p>Access to organized data helps you make smarter business decisions faster.</p>
+                    </div>
+                </div>
+                <div class="benefit-item">
+                    <div class="benefit-icon">😌</div>
+                    <div class="benefit-content">
+                        <h3>Less Stress</h3>
+                        <p>Stop worrying about lost receipts or forgotten entries. Everything is organized.</p>
+                    </div>
+                </div>
+                <div class="benefit-item">
+                    <div class="benefit-icon">📈</div>
+                    <div class="benefit-content">
+                        <h3>Grow Faster</h3>
+                        <p>Spend less time on paperwork and more time growing your business.</p>
+                    </div>
+                </div>
+                <div class="benefit-item">
+                    <div class="benefit-icon">💼</div>
+                    <div class="benefit-content">
+                        <h3>Professional Reports</h3>
+                        <p>Generate clean, professional reports for accountants, investors, or your own analysis.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- CTA Section -->
+    <section class="cta-section">
+        <div class="section-container">
+            <h2>Ready to Simplify Your Daily Reporting?</h2>
+            <p>Join small business owners who've transformed how they manage their store operations.</p>
+            <div style="margin-top: 40px;">
+                <a href="/dashboard" class="btn-primary" style="background: white; color: var(--primary); font-size: 18px; padding: 16px 40px;">
+                    Get Started Free
+                </a>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Footer -->
+    <footer>
+        <div class="footer-content">
+            <div class="footer-section">
+                <h4>opsAi</h4>
+                <p style="color: rgba(255, 255, 255, 0.7); line-height: 1.7;">
+                    Simplifying daily store reporting for small businesses. 
+                    One WhatsApp message at a time.
+                </p>
+            </div>
+            <div class="footer-section">
+                <h4>Product</h4>
+                <a href="#features">Features</a>
+                <a href="#how-it-works">How It Works</a>
+                <a href="#benefits">Benefits</a>
+                <a href="/dashboard">Dashboard</a>
+            </div>
+            <div class="footer-section">
+                <h4>Company</h4>
+                <a href="/privacy-policy">Privacy Policy</a>
+                <a href="/terms-of-service">Terms of Service</a>
+                <a href="/api/health">API Status</a>
+            </div>
+            <div class="footer-section">
+                <h4>Support</h4>
+                <a href="mailto:support@opsai.us">Contact Us</a>
+                <a href="#how-it-works">Getting Started</a>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2026 opsAi. All rights reserved.</p>
+        </div>
+    </footer>
+    
+    <script>
+        // Smooth scrolling for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+        
+        // Add fade-in animation on scroll
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+        
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, observerOptions);
+        
+        document.querySelectorAll('.problem-card, .feature-card, .step, .benefit-item').forEach(el => {
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(30px)';
+            el.style.transition = 'opacity 0.6s ease-out, transform 0.6s ease-out';
+            observer.observe(el);
+        });
+    </script>
 </body>
 </html>
-

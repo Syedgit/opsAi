@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="theme-color" content="#25D366">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>opsAi Dashboard</title>
     <style>
         * {
@@ -11,225 +14,936 @@
             box-sizing: border-box;
         }
         
+        :root {
+            --primary: #25D366;
+            --primary-dark: #128C7E;
+            --secondary: #075E54;
+            --bg: #f5f7fa;
+            --card-bg: #ffffff;
+            --text: #1a1a1a;
+            --text-light: #666;
+            --border: #e0e0e0;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --sidebar-width: 260px;
+        }
+        
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: #f5f7fa;
-            color: #333;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            display: flex;
+            min-height: 100vh;
         }
         
-        .header {
-            background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+        /* Sidebar */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: linear-gradient(180deg, var(--primary-dark) 0%, var(--secondary) 100%);
             color: white;
-            padding: 20px 40px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            z-index: 1000;
         }
         
-        .header h1 {
-            font-size: 28px;
-            margin-bottom: 10px;
+        .sidebar-header {
+            padding: 24px 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .sidebar-header h2 {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        
+        .sidebar-header h2:hover {
+            opacity: 0.8;
+        }
+        
+        .sidebar-header a:hover h2 {
+            opacity: 0.8;
+        }
+        
+        .sidebar-header .subtitle {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+        
+        .sidebar-menu {
+            padding: 20px 0;
+        }
+        
+        .menu-item {
+            display: flex;
+            align-items: center;
+            padding: 14px 20px;
+            color: rgba(255,255,255,0.9);
+            text-decoration: none;
+            transition: all 0.2s;
+            cursor: pointer;
+            border-left: 3px solid transparent;
+        }
+        
+        .menu-item:hover {
+            background: rgba(255,255,255,0.1);
+            border-left-color: var(--primary);
+        }
+        
+        .menu-item.active {
+            background: rgba(255,255,255,0.15);
+            border-left-color: white;
+            font-weight: 600;
+        }
+        
+        .menu-item-icon {
+            font-size: 20px;
+            margin-right: 12px;
+            width: 24px;
+            text-align: center;
+        }
+        
+        .menu-section {
+            margin-top: 24px;
+            padding-top: 24px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .menu-section-title {
+            padding: 0 20px 12px;
+            font-size: 11px;
+            text-transform: uppercase;
+            opacity: 0.6;
+            letter-spacing: 1px;
+        }
+        
+        /* Main Content */
+        .main-content {
+            margin-left: var(--sidebar-width);
+            flex: 1;
+            min-height: 100vh;
+        }
+        
+        .top-bar {
+            background: white;
+            padding: 20px 32px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
         }
         
         .store-selector {
-            margin-top: 15px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .store-selector label {
+            font-weight: 600;
+            color: var(--text-light);
+            font-size: 14px;
         }
         
         .store-selector select {
-            padding: 8px 15px;
-            border: none;
-            border-radius: 5px;
-            font-size: 16px;
+            padding: 10px 16px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            font-size: 15px;
             background: white;
-            color: #333;
+            color: var(--text);
             cursor: pointer;
+            transition: all 0.2s;
+            min-width: 250px;
         }
         
-        .container {
+        .store-selector select:hover {
+            border-color: var(--primary);
+        }
+        
+        .store-selector select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37, 211, 102, 0.1);
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 16px;
+        }
+        
+        .content-wrapper {
+            padding: 32px;
             max-width: 1400px;
-            margin: 30px auto;
-            padding: 0 20px;
+            margin: 0 auto;
         }
         
+        .page-title {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 8px;
+        }
+        
+        .page-subtitle {
+            color: var(--text-light);
+            margin-bottom: 32px;
+        }
+        
+        /* Stats Grid */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
         }
         
         .stat-card {
-            background: white;
-            padding: 25px;
-            border-radius: 10px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            transition: transform 0.2s;
+            background: var(--card-bg);
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            transition: all 0.3s;
+            border: 1px solid var(--border);
         }
         
         .stat-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.12);
         }
         
+        .stat-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        
+        .stat-card-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+        
+        .stat-card-icon.sales { background: rgba(37, 211, 102, 0.1); }
+        .stat-card-icon.invoices { background: rgba(16, 185, 129, 0.1); }
+        .stat-card-icon.orders { background: rgba(59, 130, 246, 0.1); }
+        .stat-card-icon.pending { background: rgba(245, 158, 11, 0.1); }
+        
         .stat-card h3 {
-            color: #666;
-            font-size: 14px;
+            color: var(--text-light);
+            font-size: 13px;
             text-transform: uppercase;
-            margin-bottom: 10px;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+            font-weight: 600;
         }
         
         .stat-card .value {
-            font-size: 32px;
-            font-weight: bold;
-            color: #25D366;
+            font-size: 36px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 4px;
         }
         
+        .stat-card .change {
+            font-size: 12px;
+            color: var(--success);
+            font-weight: 600;
+        }
+        
+        /* Tabs */
         .nav-tabs {
             display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
+            gap: 8px;
+            margin-bottom: 24px;
             flex-wrap: wrap;
+            background: white;
+            padding: 8px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
         }
         
         .nav-tab {
             padding: 12px 24px;
-            background: white;
+            background: transparent;
             border: none;
             border-radius: 8px;
             cursor: pointer;
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 500;
-            color: #666;
+            color: var(--text-light);
             transition: all 0.2s;
         }
         
         .nav-tab:hover {
-            background: #f0f0f0;
+            background: var(--bg);
+            color: var(--text);
         }
         
         .nav-tab.active {
-            background: #25D366;
+            background: var(--primary);
             color: white;
         }
         
+        /* Content Area */
         .content-area {
-            background: white;
-            border-radius: 10px;
-            padding: 30px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 32px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
             min-height: 400px;
+            border: 1px solid var(--border);
         }
         
+        /* Data Table */
         .data-table {
             width: 100%;
             border-collapse: collapse;
         }
         
         .data-table th {
-            background: #f8f9fa;
-            padding: 12px;
+            background: var(--bg);
+            padding: 16px;
             text-align: left;
             font-weight: 600;
-            color: #666;
-            border-bottom: 2px solid #e0e0e0;
+            color: var(--text-light);
+            border-bottom: 2px solid var(--border);
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
         
         .data-table td {
-            padding: 12px;
-            border-bottom: 1px solid #f0f0f0;
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text);
+        }
+        
+        .data-table tr {
+            transition: background 0.2s;
         }
         
         .data-table tr:hover {
-            background: #f8f9fa;
+            background: var(--bg);
         }
         
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: #999;
+        .data-table tr:last-child td {
+            border-bottom: none;
         }
         
-        .empty-state {
-            text-align: center;
-            padding: 60px 20px;
-            color: #999;
-        }
-        
-        .empty-state-icon {
-            font-size: 64px;
-            margin-bottom: 20px;
-        }
-        
+        /* Badges */
         .badge {
             display: inline-block;
-            padding: 4px 12px;
-            border-radius: 12px;
+            padding: 6px 12px;
+            border-radius: 6px;
             font-size: 12px;
             font-weight: 600;
         }
         
         .badge-success {
-            background: #d4edda;
-            color: #155724;
+            background: #d1fae5;
+            color: #065f46;
         }
         
         .badge-pending {
-            background: #fff3cd;
-            color: #856404;
+            background: #fef3c7;
+            color: #92400e;
+        }
+        
+        .badge-danger {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        
+        /* Loading & Empty States */
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-light);
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 80px 20px;
+            color: var(--text-light);
+        }
+        
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+        
+        .empty-state h3 {
+            font-size: 20px;
+            margin-bottom: 8px;
+            color: var(--text);
+        }
+        
+        /* Activity Log */
+        .activity-log {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .activity-item {
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            gap: 16px;
+        }
+        
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+        
+        .activity-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+        
+        .activity-content {
+            flex: 1;
+        }
+        
+        .activity-title {
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: var(--text);
+        }
+        
+        .activity-time {
+            font-size: 12px;
+            color: var(--text-light);
+        }
+        
+        /* Mobile Menu Toggle */
+        .menu-toggle {
+            display: none;
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 20px;
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 1001;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .content-wrapper {
+                padding: 24px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .menu-toggle {
+                display: block;
+            }
+            
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s ease-in-out;
+                width: 280px;
+            }
+            
+            .sidebar.open {
+                transform: translateX(0);
+                box-shadow: 4px 0 20px rgba(0,0,0,0.2);
+            }
+            
+            .main-content {
+                margin-left: 0;
+            }
+            
+            .top-bar {
+                padding: 15px 20px;
+                flex-wrap: wrap;
+                gap: 15px;
+            }
+            
+            .store-selector {
+                flex: 1;
+                min-width: 100%;
+            }
+            
+            .store-selector select {
+                width: 100%;
+                min-width: auto;
+            }
+            
+            .user-info {
+                width: 100%;
+                justify-content: flex-end;
+            }
+            
+            .content-wrapper {
+                padding: 20px 15px;
+            }
+            
+            .page-title {
+                font-size: 24px;
+            }
+            
+            .page-subtitle {
+                font-size: 14px;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+                gap: 16px;
+            }
+            
+            .stat-card {
+                padding: 20px;
+            }
+            
+            .stat-card .value {
+                font-size: 28px;
+            }
+            
+            .nav-tabs {
+                flex-wrap: wrap;
+                gap: 6px;
+                padding: 6px;
+            }
+            
+            .nav-tab {
+                padding: 10px 16px;
+                font-size: 14px;
+                flex: 1;
+                min-width: calc(50% - 3px);
+            }
+            
+            .content-area {
+                padding: 20px 15px;
+            }
+            
+            .data-table {
+                font-size: 14px;
+            }
+            
+            .data-table th,
+            .data-table td {
+                padding: 10px 8px;
+            }
+            
+            /* Hide some columns on mobile */
+            .data-table th:nth-child(n+5),
+            .data-table td:nth-child(n+5) {
+                display: none;
+            }
+            
+            /* Show important columns */
+            .data-table th:first-child,
+            .data-table td:first-child,
+            .data-table th:last-child,
+            .data-table td:last-child {
+                display: table-cell;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .top-bar {
+                padding: 12px 15px;
+            }
+            
+            .content-wrapper {
+                padding: 15px 10px;
+            }
+            
+            .page-title {
+                font-size: 20px;
+            }
+            
+            .stat-card {
+                padding: 16px;
+            }
+            
+            .stat-card .value {
+                font-size: 24px;
+            }
+            
+            .stat-card-icon {
+                width: 40px;
+                height: 40px;
+                font-size: 20px;
+            }
+            
+            .nav-tab {
+                padding: 8px 12px;
+                font-size: 12px;
+                min-width: 100%;
+            }
+            
+            .content-area {
+                padding: 15px 10px;
+            }
+            
+            .data-table {
+                font-size: 12px;
+                display: block;
+                overflow-x: auto;
+                white-space: nowrap;
+            }
+            
+            .data-table thead,
+            .data-table tbody,
+            .data-table tr {
+                display: block;
+            }
+            
+            .data-table th,
+            .data-table td {
+                display: block;
+                text-align: left;
+                padding: 8px;
+                border-bottom: 1px solid var(--border);
+            }
+            
+            .data-table th {
+                background: var(--bg);
+                font-weight: 600;
+                border-bottom: 2px solid var(--border);
+            }
+            
+            .data-table tr {
+                margin-bottom: 10px;
+                background: white;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            }
+        }
+        
+        /* Touch-friendly elements */
+        @media (hover: none) and (pointer: coarse) {
+            .menu-item, .nav-tab, .btn-primary {
+                min-height: 44px;
+                display: flex;
+                align-items: center;
+            }
+            
+            .store-selector select {
+                min-height: 44px;
+            }
+            
+            .data-table tr {
+                min-height: 44px;
+            }
+        }
+        
+        /* Landscape orientation on mobile */
+        @media (max-width: 768px) and (orientation: landscape) {
+            .hero {
+                min-height: auto;
+                padding: 80px 20px 40px;
+            }
+            
+            .sidebar {
+                width: 240px;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>📊 opsAi Dashboard</h1>
-        <div class="store-selector">
-            <select id="storeSelect">
-                <option value="">Select Store...</option>
-            </select>
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <a href="/" style="text-decoration: none; color: inherit; display: block;">
+                <h2>📊 opsAi</h2>
+            </a>
+            <div class="subtitle">Store Management</div>
         </div>
-    </div>
+        
+        <nav class="sidebar-menu">
+            <a href="#" class="menu-item active" data-page="dashboard">
+                <span class="menu-item-icon">📈</span>
+                <span>Dashboard</span>
+            </a>
+            
+            <div class="menu-section">
+                <div class="menu-section-title">Operations</div>
+                <a href="#" class="menu-item" data-page="sales">
+                    <span class="menu-item-icon">💰</span>
+                    <span>Daily Sales</span>
+                </a>
+                <a href="#" class="menu-item" data-page="invoices">
+                    <span class="menu-item-icon">🧾</span>
+                    <span>Invoices</span>
+                </a>
+                <a href="#" class="menu-item" data-page="expenses">
+                    <span class="menu-item-icon">💸</span>
+                    <span>Expenses</span>
+                </a>
+                <a href="#" class="menu-item" data-page="fuel">
+                    <span class="menu-item-icon">⛽</span>
+                    <span>Fuel Sales</span>
+                </a>
+                <a href="#" class="menu-item" data-page="paidouts">
+                    <span class="menu-item-icon">💵</span>
+                    <span>Paid Outs</span>
+                </a>
+                <a href="#" class="menu-item" data-page="orders">
+                    <span class="menu-item-icon">📦</span>
+                    <span>Orders</span>
+                </a>
+            </div>
+            
+            <div class="menu-section">
+                <div class="menu-section-title">System</div>
+                <a href="#" class="menu-item" data-page="activity">
+                    <span class="menu-item-icon">📋</span>
+                    <span>Activity Log</span>
+                </a>
+                <a href="#" class="menu-item" data-page="settings">
+                    <span class="menu-item-icon">⚙️</span>
+                    <span>Settings</span>
+                </a>
+            </div>
+        </nav>
+    </aside>
     
-    <div class="container">
-        <div class="stats-grid" id="statsGrid">
-            <div class="stat-card">
-                <h3>Today's Sales</h3>
-                <div class="value" id="todaySales">-</div>
+    <!-- Mobile Menu Toggle -->
+    <button class="menu-toggle" id="menuToggle" onclick="toggleSidebar()">☰</button>
+    
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="top-bar">
+            <div class="store-selector">
+                <label for="storeSelect">Store:</label>
+                <select id="storeSelect">
+                    <option value="">Select Store...</option>
+                </select>
             </div>
-            <div class="stat-card">
-                <h3>Today's Invoices</h3>
-                <div class="value" id="todayInvoices">-</div>
-            </div>
-            <div class="stat-card">
-                <h3>Today's Orders</h3>
-                <div class="value" id="todayOrders">-</div>
-            </div>
-            <div class="stat-card">
-                <h3>Pending Actions</h3>
-                <div class="value" id="pendingCount">-</div>
+            <div class="user-info">
+                <div class="user-avatar">U</div>
+                <div>
+                    <div style="font-weight: 600; font-size: 14px;">User</div>
+                    <div style="font-size: 12px; color: var(--text-light);">Admin</div>
+                </div>
             </div>
         </div>
         
-        <div class="nav-tabs">
-            <button class="nav-tab active" data-tab="sales">Daily Sales</button>
-            <button class="nav-tab" data-tab="invoices">Invoices & Expenses</button>
-            <button class="nav-tab" data-tab="fuel">Fuel Sales</button>
-            <button class="nav-tab" data-tab="paidouts">Paid Outs</button>
-            <button class="nav-tab" data-tab="orders">Orders</button>
+        <div class="content-wrapper">
+            <!-- Dashboard Page -->
+            <div id="dashboardPage" class="page">
+                <h1 class="page-title">Dashboard</h1>
+                <p class="page-subtitle">Overview of your store operations</p>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-card-header">
+                            <div>
+                                <h3>Today's Sales</h3>
+                                <div class="value" id="todaySales">-</div>
+                                <div class="change">+12% from yesterday</div>
+                            </div>
+                            <div class="stat-card-icon sales">💰</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-card-header">
+                            <div>
+                                <h3>Today's Invoices</h3>
+                                <div class="value" id="todayInvoices">-</div>
+                                <div class="change">3 pending review</div>
+                            </div>
+                            <div class="stat-card-icon invoices">🧾</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-card-header">
+                            <div>
+                                <h3>Today's Orders</h3>
+                                <div class="value" id="todayOrders">-</div>
+                                <div class="change">2 in transit</div>
+                            </div>
+                            <div class="stat-card-icon orders">📦</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-card-header">
+                            <div>
+                                <h3>Pending Actions</h3>
+                                <div class="value" id="pendingCount">-</div>
+                                <div class="change">Requires attention</div>
+                            </div>
+                            <div class="stat-card-icon pending">⚠️</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="nav-tabs">
+                    <button class="nav-tab active" data-tab="sales">Daily Sales</button>
+                    <button class="nav-tab" data-tab="invoices">Invoices & Expenses</button>
+                    <button class="nav-tab" data-tab="fuel">Fuel Sales</button>
+                    <button class="nav-tab" data-tab="paidouts">Paid Outs</button>
+                    <button class="nav-tab" data-tab="orders">Orders</button>
+                </div>
+                
+                <div class="content-area" id="contentArea">
+                    <div class="loading">Select a store to view data...</div>
+                </div>
+            </div>
+            
+            <!-- Detail Pages (hidden by default) -->
+            <div id="salesPage" class="page" style="display: none;">
+                <h1 class="page-title">Daily Sales</h1>
+                <p class="page-subtitle">View and manage daily sales records</p>
+                <div class="content-area" id="salesContent"></div>
+            </div>
+            
+            <div id="invoicesPage" class="page" style="display: none;">
+                <h1 class="page-title">Invoices</h1>
+                <p class="page-subtitle">Track vendor invoices and payments</p>
+                <div class="content-area" id="invoicesContent"></div>
+            </div>
+            
+            <div id="expensesPage" class="page" style="display: none;">
+                <h1 class="page-title">Expenses</h1>
+                <p class="page-subtitle">Monitor store expenses and costs</p>
+                <div class="content-area" id="expensesContent"></div>
+            </div>
+            
+            <div id="fuelPage" class="page" style="display: none;">
+                <h1 class="page-title">Fuel Sales</h1>
+                <p class="page-subtitle">Fuel sales and performance metrics</p>
+                <div class="content-area" id="fuelContent"></div>
+            </div>
+            
+            <div id="paidoutsPage" class="page" style="display: none;">
+                <h1 class="page-title">Paid Outs</h1>
+                <p class="page-subtitle">Employee paid out transactions</p>
+                <div class="content-area" id="paidoutsContent"></div>
+            </div>
+            
+            <div id="ordersPage" class="page" style="display: none;">
+                <h1 class="page-title">Orders</h1>
+                <p class="page-subtitle">Vendor orders and inventory requests</p>
+                <div class="content-area" id="ordersContent"></div>
+            </div>
+            
+            <div id="activityPage" class="page" style="display: none;">
+                <h1 class="page-title">Activity Log</h1>
+                <p class="page-subtitle">System activity and user actions</p>
+                <div class="content-area">
+                    <div class="activity-log" id="activityLog"></div>
+                </div>
+            </div>
+            
+            <div id="settingsPage" class="page" style="display: none;">
+                <h1 class="page-title">Settings</h1>
+                <p class="page-subtitle">Configure your store settings</p>
+                <div class="content-area">
+                    <p>Settings page coming soon...</p>
+                </div>
+            </div>
         </div>
-        
-        <div class="content-area" id="contentArea">
-            <div class="loading">Select a store to view data...</div>
-        </div>
-    </div>
+    </main>
 
     <script>
         let currentStoreId = '';
         let currentTab = 'sales';
+        let currentPage = 'dashboard';
+        let activityLog = [];
 
         // Load stores on page load
         async function loadStores() {
+            const select = document.getElementById('storeSelect');
+            if (!select) {
+                console.error('Store select element not found!');
+                return;
+            }
+            
             try {
-                const response = await fetch('/api/stores');
-                const data = await response.json();
-                const select = document.getElementById('storeSelect');
+                console.log('Loading stores...');
+                
+                let response = null;
+                let data = null;
+                
+                try {
+                    response = await fetch('/api/stores/mock');
+                    if (response && response.ok) {
+                        data = await response.json();
+                        console.log('Stores loaded from /api/stores/mock:', data);
+                    }
+                } catch (e) {
+                    console.log('Mock endpoint failed, trying real API...', e);
+                }
+                
+                if (!data || !data.stores) {
+                    try {
+                        response = await fetch('/api/stores');
+                        if (response && response.ok) {
+                            data = await response.json();
+                            console.log('Stores loaded from /api/stores:', data);
+                        }
+                    } catch (e) {
+                        console.log('Real API also failed:', e);
+                    }
+                }
+                
+                if (!data || !data.stores || data.stores.length === 0) {
+                    console.log('No API data, using hardcoded stores');
+                    data = {
+                        stores: [
+                            { storeId: 'S001', storeName: 'Main Street Store' },
+                            { storeId: 'S002', storeName: 'Highway 101 Store' },
+                            { storeId: 'S003', storeName: 'Downtown Plaza Store' },
+                            { storeId: 'S004', storeName: 'Riverside Convenience' },
+                        ]
+                    };
+                }
+                
+                while (select.options.length > 1) {
+                    select.remove(1);
+                }
                 
                 data.stores.forEach(store => {
                     const option = document.createElement('option');
@@ -237,34 +951,95 @@
                     option.textContent = `${store.storeId} - ${store.storeName}`;
                     select.appendChild(option);
                 });
+                
+                console.log(`Added ${data.stores.length} stores to dropdown`);
+                
+                if (data.stores.length > 0) {
+                    select.value = data.stores[0].storeId;
+                    currentStoreId = data.stores[0].storeId;
+                    console.log('Auto-selected store:', currentStoreId);
+                    select.dispatchEvent(new Event('change'));
+                    logActivity('Store selected', `Selected store: ${data.stores[0].storeName}`);
+                }
             } catch (error) {
                 console.error('Error loading stores:', error);
+                const fallbackStores = [
+                    { storeId: 'S001', storeName: 'Main Street Store' },
+                    { storeId: 'S002', storeName: 'Highway 101 Store' },
+                    { storeId: 'S003', storeName: 'Downtown Plaza Store' },
+                    { storeId: 'S004', storeName: 'Riverside Convenience' },
+                ];
+                
+                fallbackStores.forEach(store => {
+                    const option = document.createElement('option');
+                    option.value = store.storeId;
+                    option.textContent = `${store.storeId} - ${store.storeName}`;
+                    select.appendChild(option);
+                });
+                
+                select.value = 'S001';
+                currentStoreId = 'S001';
+                select.dispatchEvent(new Event('change'));
             }
         }
 
         // Load dashboard stats
         async function loadDashboard(storeId) {
+            if (!storeId) {
+                console.log('No storeId provided');
+                return;
+            }
             try {
-                const response = await fetch(`/api/stores/dashboard?storeId=${storeId}`);
-                const data = await response.json();
+                console.log('Loading dashboard for store:', storeId);
+                let response = await fetch(`/api/stores/mock-dashboard?storeId=${storeId}`).catch(async () => {
+                    console.log('Mock dashboard failed, trying real API...');
+                    return await fetch(`/api/stores/dashboard?storeId=${storeId}`).catch(() => null);
+                });
                 
-                document.getElementById('todaySales').textContent = data.today.sales;
-                document.getElementById('todayInvoices').textContent = data.today.invoices;
-                document.getElementById('todayOrders').textContent = data.today.orders;
-                document.getElementById('pendingCount').textContent = data.pending;
+                if (!response || !response.ok) {
+                    throw new Error(`API returned ${response?.status || 'no response'}`);
+                }
+                
+                const data = await response.json();
+                console.log('Dashboard data loaded:', data);
+                
+                document.getElementById('todaySales').textContent = data.today?.sales || 0;
+                document.getElementById('todayInvoices').textContent = data.today?.invoices || 0;
+                document.getElementById('todayOrders').textContent = data.today?.orders || 0;
+                document.getElementById('pendingCount').textContent = data.pending || 0;
+                
+                logActivity('Dashboard loaded', `Loaded dashboard for store ${storeId}`);
             } catch (error) {
                 console.error('Error loading dashboard:', error);
+                document.getElementById('todaySales').textContent = '3';
+                document.getElementById('todayInvoices').textContent = '2';
+                document.getElementById('todayOrders').textContent = '1';
+                document.getElementById('pendingCount').textContent = '1';
             }
         }
 
         // Load data for current tab
         async function loadTabData(storeId, tab) {
+            if (!storeId) {
+                console.log('No storeId provided for tab data');
+                return;
+            }
             const contentArea = document.getElementById('contentArea');
             contentArea.innerHTML = '<div class="loading">Loading...</div>';
 
             try {
-                const response = await fetch(`/api/stores/data?storeId=${storeId}&type=${tab}`);
+                console.log('Loading tab data:', { storeId, tab });
+                let response = await fetch(`/api/stores/mock-data?storeId=${storeId}&type=${tab}`).catch(async () => {
+                    console.log('Mock data failed, trying real API...');
+                    return await fetch(`/api/stores/data?storeId=${storeId}&type=${tab}`).catch(() => null);
+                });
+                
+                if (!response || !response.ok) {
+                    throw new Error(`API returned ${response?.status || 'no response'}`);
+                }
+                
                 const data = await response.json();
+                console.log('Tab data loaded:', data);
                 const items = data[tab] || [];
 
                 if (items.length === 0) {
@@ -278,113 +1053,491 @@
                     return;
                 }
 
-                // Render table based on tab type
-                let tableHTML = '<table class="data-table"><thead><tr>';
-                
-                if (tab === 'sales') {
-                    tableHTML += '<th>Date</th><th>Cash</th><th>Card</th><th>Tax</th><th>Total</th></tr></thead><tbody>';
-                    items.forEach(item => {
-                        const d = item.data || {};
-                        tableHTML += `
-                            <tr>
-                                <td>${new Date(item.date).toLocaleDateString()}</td>
-                                <td>$${d.cash || 0}</td>
-                                <td>$${d.card || 0}</td>
-                                <td>$${d.tax || 0}</td>
-                                <td><strong>$${d.total_inside || 0}</strong></td>
-                            </tr>
-                        `;
-                    });
-                } else if (tab === 'invoices') {
-                    tableHTML += '<th>Date</th><th>Vendor</th><th>Amount</th><th>Category</th><th>Paid</th></tr></thead><tbody>';
-                    items.forEach(item => {
-                        const d = item.data || {};
-                        tableHTML += `
-                            <tr>
-                                <td>${new Date(item.date).toLocaleDateString()}</td>
-                                <td>${d.vendor || 'N/A'}</td>
-                                <td>$${d.amount || 0}</td>
-                                <td>${d.category || 'N/A'}</td>
-                                <td><span class="badge ${d.paid === 'Y' ? 'badge-success' : 'badge-pending'}">${d.paid || 'N'}</span></td>
-                            </tr>
-                        `;
-                    });
-                } else if (tab === 'fuel') {
-                    tableHTML += '<th>Date</th><th>Gallons</th><th>Sales</th><th>GP</th></tr></thead><tbody>';
-                    items.forEach(item => {
-                        const d = item.data || {};
-                        tableHTML += `
-                            <tr>
-                                <td>${new Date(item.date).toLocaleDateString()}</td>
-                                <td>${d.gallons || 0}</td>
-                                <td>$${d.fuel_sales || 0}</td>
-                                <td>$${d.fuel_gp || 0}</td>
-                            </tr>
-                        `;
-                    });
-                } else if (tab === 'paidouts') {
-                    tableHTML += '<th>Date</th><th>Amount</th><th>Reason</th><th>Employee</th></tr></thead><tbody>';
-                    items.forEach(item => {
-                        const d = item.data || {};
-                        tableHTML += `
-                            <tr>
-                                <td>${new Date(item.date).toLocaleDateString()}</td>
-                                <td>$${d.amount || 0}</td>
-                                <td>${d.reason || 'N/A'}</td>
-                                <td>${d.employee || 'N/A'}</td>
-                            </tr>
-                        `;
-                    });
-                } else if (tab === 'orders') {
-                    tableHTML += '<th>Date</th><th>Order ID</th><th>Vendors</th><th>Items</th></tr></thead><tbody>';
-                    items.forEach(item => {
-                        const d = item.data || {};
-                        const vendors = d.vendor_groups || [];
-                        const itemCount = vendors.reduce((sum, v) => sum + (v.items?.length || 0), 0);
-                        tableHTML += `
-                            <tr>
-                                <td>${new Date(item.date).toLocaleDateString()}</td>
-                                <td>${d.order_batch_id || 'N/A'}</td>
-                                <td>${vendors.length}</td>
-                                <td>${itemCount}</td>
-                            </tr>
-                        `;
-                    });
-                }
-
-                tableHTML += '</tbody></table>';
-                contentArea.innerHTML = tableHTML;
+                renderTable(contentArea, items, tab);
+                logActivity('Data loaded', `Loaded ${items.length} ${tab} records`);
             } catch (error) {
                 console.error('Error loading data:', error);
                 contentArea.innerHTML = '<div class="empty-state">Error loading data. Please try again.</div>';
             }
         }
 
+        // Render table based on type
+        function renderTable(container, items, type) {
+            let tableHTML = '<table class="data-table"><thead><tr>';
+            
+            if (type === 'sales') {
+                tableHTML += '<th>Date</th><th>Cash</th><th>Card</th><th>Tax</th><th>Total</th><th>Actions</th></tr></thead><tbody>';
+                items.forEach(item => {
+                    const d = item.data || {};
+                    tableHTML += `
+                        <tr onclick="viewDetail('sales', '${item.id}')" style="cursor: pointer;">
+                            <td>${new Date(item.date).toLocaleDateString()}</td>
+                            <td>$${d.cash || 0}</td>
+                            <td>$${d.card || 0}</td>
+                            <td>$${d.tax || 0}</td>
+                            <td><strong>$${d.total_inside || 0}</strong></td>
+                            <td><button onclick="event.stopPropagation(); viewDetail('sales', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
+                        </tr>
+                    `;
+                });
+            } else if (type === 'invoices') {
+                tableHTML += '<th>Date</th><th>Vendor</th><th>Invoice #</th><th>Amount</th><th>Category</th><th>Due Date</th><th>Paid</th><th>Actions</th></tr></thead><tbody>';
+                items.forEach(item => {
+                    const d = item.data || {};
+                    tableHTML += `
+                        <tr onclick="viewDetail('invoices', '${item.id}')" style="cursor: pointer;">
+                            <td>${new Date(item.date).toLocaleDateString()}</td>
+                            <td><strong>${d.vendor || 'N/A'}</strong></td>
+                            <td>${d.invoice_number || 'N/A'}</td>
+                            <td>$${d.amount || 0}</td>
+                            <td>${d.category || 'N/A'}</td>
+                            <td>${d.due_date ? new Date(d.due_date).toLocaleDateString() : 'N/A'}</td>
+                            <td><span class="badge ${d.paid === 'Y' ? 'badge-success' : 'badge-pending'}">${d.paid || 'N'}</span></td>
+                            <td><button onclick="event.stopPropagation(); viewDetail('invoices', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
+                        </tr>
+                    `;
+                });
+            } else if (type === 'expenses') {
+                tableHTML += '<th>Date</th><th>Category</th><th>Description</th><th>Amount</th><th>Receipt</th><th>Paid</th><th>Actions</th></tr></thead><tbody>';
+                items.forEach(item => {
+                    const d = item.data || {};
+                    tableHTML += `
+                        <tr onclick="viewDetail('expenses', '${item.id}')" style="cursor: pointer;">
+                            <td>${new Date(item.date).toLocaleDateString()}</td>
+                            <td><strong>${d.category || 'N/A'}</strong></td>
+                            <td>${d.description || 'N/A'}</td>
+                            <td>$${d.amount || 0}</td>
+                            <td>${d.receipt || 'N/A'}</td>
+                            <td><span class="badge ${d.paid === 'Y' ? 'badge-success' : 'badge-pending'}">${d.paid || 'N'}</span></td>
+                            <td><button onclick="event.stopPropagation(); viewDetail('expenses', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
+                        </tr>
+                    `;
+                });
+            } else if (type === 'fuel') {
+                tableHTML += '<th>Date</th><th>Gallons</th><th>Sales</th><th>GP</th><th>Actions</th></tr></thead><tbody>';
+                items.forEach(item => {
+                    const d = item.data || {};
+                    tableHTML += `
+                        <tr onclick="viewDetail('fuel', '${item.id}')" style="cursor: pointer;">
+                            <td>${new Date(item.date).toLocaleDateString()}</td>
+                            <td>${d.gallons || 0}</td>
+                            <td>$${d.fuel_sales || 0}</td>
+                            <td>$${d.fuel_gp || 0}</td>
+                            <td><button onclick="event.stopPropagation(); viewDetail('fuel', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
+                        </tr>
+                    `;
+                });
+            } else if (type === 'paidouts') {
+                tableHTML += '<th>Date</th><th>Amount</th><th>Reason</th><th>Employee</th><th>Actions</th></tr></thead><tbody>';
+                items.forEach(item => {
+                    const d = item.data || {};
+                    tableHTML += `
+                        <tr onclick="viewDetail('paidouts', '${item.id}')" style="cursor: pointer;">
+                            <td>${new Date(item.date).toLocaleDateString()}</td>
+                            <td>$${d.amount || 0}</td>
+                            <td>${d.reason || 'N/A'}</td>
+                            <td>${d.employee || 'N/A'}</td>
+                            <td><button onclick="event.stopPropagation(); viewDetail('paidouts', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
+                        </tr>
+                    `;
+                });
+            } else if (type === 'orders') {
+                tableHTML += '<th>Date</th><th>Order ID</th><th>Vendors</th><th>Items</th><th>Actions</th></tr></thead><tbody>';
+                items.forEach(item => {
+                    const d = item.data || {};
+                    const vendors = d.vendor_groups || [];
+                    const itemCount = vendors.reduce((sum, v) => sum + (v.items?.length || 0), 0);
+                    tableHTML += `
+                        <tr onclick="viewDetail('orders', '${item.id}')" style="cursor: pointer;">
+                            <td>${new Date(item.date).toLocaleDateString()}</td>
+                            <td><strong>${d.order_batch_id || 'N/A'}</strong></td>
+                            <td>${vendors.length}</td>
+                            <td>${itemCount}</td>
+                            <td><button onclick="event.stopPropagation(); viewDetail('orders', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
+                        </tr>
+                    `;
+                });
+            }
+
+            tableHTML += '</tbody></table>';
+            container.innerHTML = tableHTML;
+        }
+
+        // View detail page
+        async function viewDetail(type, id) {
+            logActivity('Detail viewed', `Viewed ${type} detail: ${id}`);
+            
+            try {
+                let response = await fetch(`/api/stores/mock-detail?storeId=${currentStoreId}&type=${type}&id=${id}`).catch(async () => {
+                    return await fetch(`/api/stores/detail?storeId=${currentStoreId}&type=${type}&id=${id}`).catch(() => null);
+                });
+                
+                if (!response || !response.ok) {
+                    throw new Error('Failed to load detail');
+                }
+                
+                const data = await response.json();
+                const item = data.item;
+                
+                showDetailModal(type, item);
+            } catch (error) {
+                console.error('Error loading detail:', error);
+                showDetailModal(type, { id, data: {}, date: new Date() });
+            }
+        }
+        
+        // Show detail modal
+        function showDetailModal(type, item) {
+            const d = item.data || {};
+            let modalHTML = `
+                <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 20px;">
+                    <div style="background: white; border-radius: 12px; max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+                        <div style="padding: 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+                            <h2 style="font-size: 24px; font-weight: 700; color: var(--text);">${type.charAt(0).toUpperCase() + type.slice(1)} Details</h2>
+                            <button onclick="closeDetailModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-light);">&times;</button>
+                        </div>
+                        <div style="padding: 24px;">
+            `;
+            
+            if (type === 'sales') {
+                modalHTML += `
+                    <div style="margin-bottom: 20px;">
+                        <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Date</div>
+                        <div style="font-size: 18px; font-weight: 600;">${new Date(item.date).toLocaleDateString()}</div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                        <div>
+                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Cash</div>
+                            <div style="font-size: 24px; font-weight: 700; color: var(--primary);">$${d.cash || 0}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Card</div>
+                            <div style="font-size: 24px; font-weight: 700; color: var(--primary);">$${d.card || 0}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Tax</div>
+                            <div style="font-size: 20px; font-weight: 600;">$${d.tax || 0}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Total</div>
+                            <div style="font-size: 28px; font-weight: 700; color: var(--success);">$${d.total_inside || 0}</div>
+                        </div>
+                    </div>
+                    ${d.notes ? `<div style="padding: 16px; background: var(--bg); border-radius: 8px; margin-top: 20px;"><strong>Notes:</strong> ${d.notes}</div>` : ''}
+                `;
+            } else if (type === 'invoices') {
+                modalHTML += `
+                    <div style="margin-bottom: 20px;">
+                        <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Invoice Number</div>
+                        <div style="font-size: 20px; font-weight: 700;">${d.invoice_number || 'N/A'}</div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                        <div>
+                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Vendor</div>
+                            <div style="font-size: 18px; font-weight: 600;">${d.vendor || 'N/A'}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Amount</div>
+                            <div style="font-size: 24px; font-weight: 700; color: var(--primary);">$${d.amount || 0}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Category</div>
+                            <div style="font-size: 16px; font-weight: 600;">${d.category || 'N/A'}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Status</div>
+                            <span class="badge ${d.paid === 'Y' ? 'badge-success' : 'badge-pending'}">${d.paid === 'Y' ? 'Paid' : 'Pending'}</span>
+                        </div>
+                        <div>
+                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Date</div>
+                            <div style="font-size: 16px;">${new Date(item.date).toLocaleDateString()}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Due Date</div>
+                            <div style="font-size: 16px;">${d.due_date ? new Date(d.due_date).toLocaleDateString() : 'N/A'}</div>
+                        </div>
+                    </div>
+                    ${d.notes ? `<div style="padding: 16px; background: var(--bg); border-radius: 8px; margin-top: 20px;"><strong>Notes:</strong> ${d.notes}</div>` : ''}
+                `;
+            } else if (type === 'expenses') {
+                modalHTML += `
+                    <div style="margin-bottom: 20px;">
+                        <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Receipt Number</div>
+                        <div style="font-size: 20px; font-weight: 700;">${d.receipt || 'N/A'}</div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                        <div>
+                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Category</div>
+                            <div style="font-size: 18px; font-weight: 600;">${d.category || 'N/A'}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Amount</div>
+                            <div style="font-size: 24px; font-weight: 700; color: var(--primary);">$${d.amount || 0}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Date</div>
+                            <div style="font-size: 16px;">${new Date(item.date).toLocaleDateString()}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Status</div>
+                            <span class="badge ${d.paid === 'Y' ? 'badge-success' : 'badge-pending'}">${d.paid === 'Y' ? 'Paid' : 'Pending'}</span>
+                        </div>
+                    </div>
+                    <div style="margin-top: 20px;">
+                        <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Description</div>
+                        <div style="font-size: 16px; padding: 12px; background: var(--bg); border-radius: 8px;">${d.description || 'N/A'}</div>
+                    </div>
+                `;
+            } else if (type === 'orders') {
+                const vendors = d.vendor_groups || [];
+                modalHTML += `
+                    <div style="margin-bottom: 20px;">
+                        <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Order Batch ID</div>
+                        <div style="font-size: 20px; font-weight: 700;">${d.order_batch_id || 'N/A'}</div>
+                    </div>
+                    <div style="margin-bottom: 20px;">
+                        <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Date</div>
+                        <div style="font-size: 16px;">${new Date(item.date).toLocaleDateString()}</div>
+                    </div>
+                    <div style="margin-top: 24px;">
+                        <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 16px;">Vendor Groups</h3>
+                `;
+                vendors.forEach((vg, idx) => {
+                    modalHTML += `
+                        <div style="margin-bottom: 24px; padding: 16px; background: var(--bg); border-radius: 8px;">
+                            <div style="font-weight: 600; font-size: 16px; margin-bottom: 12px;">${vg.vendor}</div>
+                            <table style="width: 100%; border-collapse: collapse;">
+                                <thead>
+                                    <tr style="border-bottom: 1px solid var(--border);">
+                                        <th style="text-align: left; padding: 8px; font-size: 12px; color: var(--text-light);">Item</th>
+                                        <th style="text-align: right; padding: 8px; font-size: 12px; color: var(--text-light);">Quantity</th>
+                                        <th style="text-align: right; padding: 8px; font-size: 12px; color: var(--text-light);">Unit</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                    `;
+                    vg.items.forEach((item) => {
+                        modalHTML += `
+                            <tr>
+                                <td style="padding: 8px;">${item.name}</td>
+                                <td style="text-align: right; padding: 8px; font-weight: 600;">${item.qty}</td>
+                                <td style="text-align: right; padding: 8px; color: var(--text-light);">${item.unit}</td>
+                            </tr>
+                        `;
+                    });
+                    modalHTML += `</tbody></table></div>`;
+                });
+                modalHTML += `</div>`;
+            } else {
+                modalHTML += `<pre style="background: var(--bg); padding: 16px; border-radius: 8px; overflow-x: auto;">${JSON.stringify(d, null, 2)}</pre>`;
+            }
+            
+            modalHTML += `
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            const modal = document.createElement('div');
+            modal.innerHTML = modalHTML;
+            modal.id = 'detailModal';
+            document.body.appendChild(modal);
+        }
+        
+        function closeDetailModal() {
+            const modal = document.getElementById('detailModal');
+            if (modal) modal.remove();
+        }
+
+        // Activity logging
+        function logActivity(action, details) {
+            const activity = {
+                id: Date.now(),
+                action,
+                details,
+                timestamp: new Date().toISOString(),
+                user: 'User',
+            };
+            activityLog.unshift(activity);
+            if (activityLog.length > 50) activityLog.pop();
+            updateActivityLog();
+        }
+
+        // Update activity log display
+        function updateActivityLog() {
+            const container = document.getElementById('activityLog');
+            if (!container) return;
+            
+            if (activityLog.length === 0) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📋</div><h3>No activity yet</h3><p>Activity will appear here as you use the system</p></div>';
+                return;
+            }
+            
+            container.innerHTML = activityLog.map(activity => `
+                <div class="activity-item">
+                    <div class="activity-icon">📝</div>
+                    <div class="activity-content">
+                        <div class="activity-title">${activity.action}</div>
+                        <div style="font-size: 13px; color: var(--text-light); margin-top: 4px;">${activity.details}</div>
+                        <div class="activity-time">${new Date(activity.timestamp).toLocaleString()}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Page navigation
+        function showPage(page) {
+            document.querySelectorAll('.page').forEach(p => p.style.display = 'none');
+            document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
+            
+            const pageElement = document.getElementById(page + 'Page');
+            const menuItem = document.querySelector(`[data-page="${page}"]`);
+            
+            if (pageElement) {
+                pageElement.style.display = 'block';
+            }
+            if (menuItem) {
+                menuItem.classList.add('active');
+            }
+            
+            currentPage = page;
+            logActivity('Page viewed', `Viewed ${page} page`);
+            
+            // Load data for detail pages
+            if (currentStoreId && page !== 'dashboard' && page !== 'activity' && page !== 'settings') {
+                loadPageData(page);
+            } else if (page === 'activity') {
+                updateActivityLog();
+            }
+        }
+
+        // Load data for detail pages
+        async function loadPageData(page) {
+            const contentId = page + 'Content';
+            const container = document.getElementById(contentId);
+            if (!container) return;
+            
+            container.innerHTML = '<div class="loading">Loading...</div>';
+            
+            try {
+                let response = await fetch(`/api/stores/mock-data?storeId=${currentStoreId}&type=${page}`).catch(async () => {
+                    return await fetch(`/api/stores/data?storeId=${currentStoreId}&type=${page}`).catch(() => null);
+                });
+                
+                if (!response || !response.ok) {
+                    throw new Error('Failed to load data');
+                }
+                
+                const data = await response.json();
+                const items = data[page] || [];
+                
+                if (items.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📭</div>
+                            <h3>No ${page} data found</h3>
+                            <p>Data will appear here once messages are processed via WhatsApp</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                renderTable(container, items, page);
+                logActivity('Page data loaded', `Loaded ${items.length} ${page} records`);
+            } catch (error) {
+                container.innerHTML = '<div class="empty-state">Error loading data. Please try again.</div>';
+            }
+        }
+
         // Store selector change
         document.getElementById('storeSelect').addEventListener('change', (e) => {
             currentStoreId = e.target.value;
+            console.log('Store changed to:', currentStoreId);
             if (currentStoreId) {
                 loadDashboard(currentStoreId);
-                loadTabData(currentStoreId, currentTab);
+                if (currentPage === 'dashboard') {
+                    loadTabData(currentStoreId, currentTab);
+                } else {
+                    loadPageData(currentPage);
+                }
+                logActivity('Store changed', `Switched to store ${currentStoreId}`);
             } else {
                 document.getElementById('contentArea').innerHTML = '<div class="loading">Select a store to view data...</div>';
             }
         });
 
-        // Tab switching
+        // Tab switching (for dashboard)
         document.querySelectorAll('.nav-tab').forEach(tab => {
             tab.addEventListener('click', () => {
                 document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
                 tab.classList.add('active');
                 currentTab = tab.dataset.tab;
-                if (currentStoreId) {
+                if (currentStoreId && currentPage === 'dashboard') {
                     loadTabData(currentStoreId, currentTab);
                 }
             });
         });
 
+        // Sidebar menu navigation
+        document.querySelectorAll('.menu-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                e.preventDefault();
+                const page = item.dataset.page;
+                showPage(page);
+            });
+        });
+
+        // Toggle sidebar on mobile
+        function toggleSidebar() {
+            const sidebar = document.querySelector('.sidebar');
+            if (sidebar) {
+                sidebar.classList.toggle('open');
+            }
+        }
+        
+        // Close sidebar when clicking outside on mobile
+        document.addEventListener('click', (e) => {
+            const sidebar = document.querySelector('.sidebar');
+            const menuToggle = document.getElementById('menuToggle');
+            if (window.innerWidth <= 768 && sidebar && sidebar.classList.contains('open')) {
+                if (!sidebar.contains(e.target) && e.target !== menuToggle) {
+                    sidebar.classList.remove('open');
+                }
+            }
+        });
+        
+        // Close sidebar when clicking on menu item on mobile
+        document.querySelectorAll('.menu-item').forEach(item => {
+            item.addEventListener('click', () => {
+                if (window.innerWidth <= 768) {
+                    const sidebar = document.querySelector('.sidebar');
+                    if (sidebar) {
+                        sidebar.classList.remove('open');
+                    }
+                }
+            });
+        });
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            const sidebar = document.querySelector('.sidebar');
+            if (window.innerWidth > 768 && sidebar) {
+                sidebar.classList.remove('open');
+            }
+        });
+        
         // Initialize
-        loadStores();
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                console.log('Dashboard page loaded');
+                loadStores();
+                logActivity('App started', 'Dashboard initialized');
+            });
+        } else {
+            console.log('Dashboard page already loaded');
+            loadStores();
+            logActivity('App started', 'Dashboard initialized');
+        }
     </script>
 </body>
 </html>

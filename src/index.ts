@@ -5,6 +5,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { logger } from './utils/logger';
 import { whatsappRouter } from './routes/whatsapp';
+import { storesRouter } from './routes/stores';
 import { errorHandler } from './middleware/errorHandler';
 
 dotenv.config();
@@ -13,7 +14,18 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'https:'],
+      },
+    },
+  })
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -71,6 +83,8 @@ app.get('/dashboard', (_req, res) => {
 app.use('/api/webhook', whatsappRouter);
 // Also support /whatsapp for backward compatibility
 app.use('/whatsapp', whatsappRouter);
+// Stores API routes (for dashboard)
+app.use('/api/stores', storesRouter);
 
 // Error handling
 app.use(errorHandler);
