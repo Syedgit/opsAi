@@ -3,19 +3,18 @@
   "rewrites": [
     {
       "source": "/dashboard",
-      "destination": "/api/dashboard"
-    },
+      "destination": "/dashboard.html"
+    }
+  ],
+  "headers": [
     {
-      "source": "/privacy-policy.html",
-      "destination": "/api/privacy-policy"
-    },
-    {
-      "source": "/terms-of-service.html",
-      "destination": "/api/terms-of-service"
-    },
-    {
-      "source": "/",
-      "destination": "/api/index"
+      "source": "/(.*\\.html)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:;"
+        }
+      ]
     }
   ]
 }

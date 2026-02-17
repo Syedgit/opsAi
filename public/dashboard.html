@@ -888,6 +888,9 @@
     </main>
 
     <script>
+        // Configuration: Set to false when Facebook verification is complete and you want real data
+        const USE_MOCK_DATA = true; // Currently using mock data until Facebook verification
+        
         let currentStoreId = '';
         let currentTab = 'sales';
         let currentPage = 'dashboard';
@@ -907,25 +910,30 @@
                 let response = null;
                 let data = null;
                 
+                // Use mock data by default (until Facebook verification is complete)
+                const mockParam = USE_MOCK_DATA ? '?mock=true' : '';
+                
                 try {
-                    response = await fetch('/api/stores/mock');
+                    response = await fetch(`/api/stores${mockParam}`);
                     if (response && response.ok) {
                         data = await response.json();
-                        console.log('Stores loaded from /api/stores/mock:', data);
+                        console.log(`Stores loaded from /api/stores${mockParam}:`, data);
                     }
                 } catch (e) {
-                    console.log('Mock endpoint failed, trying real API...', e);
+                    console.log('API failed, trying fallback...', e);
                 }
                 
+                // Fallback: Try opposite mode if primary fails
                 if (!data || !data.stores) {
                     try {
-                        response = await fetch('/api/stores');
+                        const fallbackParam = USE_MOCK_DATA ? '' : '?mock=true';
+                        response = await fetch(`/api/stores${fallbackParam}`);
                         if (response && response.ok) {
                             data = await response.json();
-                            console.log('Stores loaded from /api/stores:', data);
+                            console.log(`Stores loaded from fallback /api/stores${fallbackParam}:`, data);
                         }
                     } catch (e) {
-                        console.log('Real API also failed:', e);
+                        console.log('Fallback API also failed:', e);
                     }
                 }
                 
@@ -991,9 +999,11 @@
             }
             try {
                 console.log('Loading dashboard for store:', storeId);
-                let response = await fetch(`/api/stores/mock-dashboard?storeId=${storeId}`).catch(async () => {
-                    console.log('Mock dashboard failed, trying real API...');
-                    return await fetch(`/api/stores/dashboard?storeId=${storeId}`).catch(() => null);
+                const mockParam = USE_MOCK_DATA ? '&mock=true' : '';
+                let response = await fetch(`/api/stores/dashboard?storeId=${storeId}${mockParam}`).catch(async () => {
+                    console.log('Primary dashboard failed, trying fallback...');
+                    const fallbackParam = USE_MOCK_DATA ? '' : '&mock=true';
+                    return await fetch(`/api/stores/dashboard?storeId=${storeId}${fallbackParam}`).catch(() => null);
                 });
                 
                 if (!response || !response.ok) {
@@ -1029,9 +1039,11 @@
 
             try {
                 console.log('Loading tab data:', { storeId, tab });
-                let response = await fetch(`/api/stores/mock-data?storeId=${storeId}&type=${tab}`).catch(async () => {
-                    console.log('Mock data failed, trying real API...');
-                    return await fetch(`/api/stores/data?storeId=${storeId}&type=${tab}`).catch(() => null);
+                const mockParam = USE_MOCK_DATA ? '&mock=true' : '';
+                let response = await fetch(`/api/stores/data?storeId=${storeId}&type=${tab}${mockParam}`).catch(async () => {
+                    console.log('Primary data failed, trying fallback...');
+                    const fallbackParam = USE_MOCK_DATA ? '' : '&mock=true';
+                    return await fetch(`/api/stores/data?storeId=${storeId}&type=${tab}${fallbackParam}`).catch(() => null);
                 });
                 
                 if (!response || !response.ok) {
@@ -1168,8 +1180,10 @@
             logActivity('Detail viewed', `Viewed ${type} detail: ${id}`);
             
             try {
-                let response = await fetch(`/api/stores/mock-detail?storeId=${currentStoreId}&type=${type}&id=${id}`).catch(async () => {
-                    return await fetch(`/api/stores/detail?storeId=${currentStoreId}&type=${type}&id=${id}`).catch(() => null);
+                const mockParam = USE_MOCK_DATA ? '&mock=true' : '';
+                let response = await fetch(`/api/stores/detail?storeId=${currentStoreId}&type=${type}&id=${id}${mockParam}`).catch(async () => {
+                    const fallbackParam = USE_MOCK_DATA ? '' : '&mock=true';
+                    return await fetch(`/api/stores/detail?storeId=${currentStoreId}&type=${type}&id=${id}${fallbackParam}`).catch(() => null);
                 });
                 
                 if (!response || !response.ok) {
@@ -1420,8 +1434,10 @@
             container.innerHTML = '<div class="loading">Loading...</div>';
             
             try {
-                let response = await fetch(`/api/stores/mock-data?storeId=${currentStoreId}&type=${page}`).catch(async () => {
-                    return await fetch(`/api/stores/data?storeId=${currentStoreId}&type=${page}`).catch(() => null);
+                const mockParam = USE_MOCK_DATA ? '&mock=true' : '';
+                let response = await fetch(`/api/stores/data?storeId=${currentStoreId}&type=${page}${mockParam}`).catch(async () => {
+                    const fallbackParam = USE_MOCK_DATA ? '' : '&mock=true';
+                    return await fetch(`/api/stores/data?storeId=${currentStoreId}&type=${page}${fallbackParam}`).catch(() => null);
                 });
                 
                 if (!response || !response.ok) {

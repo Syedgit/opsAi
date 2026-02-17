@@ -1,7 +1,14 @@
-node_modules
-.env
-.env.local
-*.log
-dist
-.git
+# Test functions excluded from production
+api/test/
 
+# Old mock files (deleted, but keeping here for reference)
+# api/stores/mock.ts
+# api/stores/mock-dashboard.ts
+# api/stores/mock-data.ts
+# api/stores/mock-detail.ts
+
+# Old HTML server functions (now using static files)
+# api/index.ts
+# api/dashboard.ts
+# api/privacy-policy.ts
+# api/terms-of-service.ts
