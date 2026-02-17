@@ -24,7 +24,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     ).catch(() => null);
 
     if (response && response.ok) {
-      const data = await response.json();
+      const data = await response.json() as { item: any };
       res.json(data);
       return;
     }
@@ -36,8 +36,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
     let items: any[] = [];
     if (fallbackResponse && fallbackResponse.ok) {
-      const data = await fallbackResponse.json();
-      items = data[type] || [];
+      const responseData = await fallbackResponse.json() as Record<string, any[]>;
+      items = responseData[type] || [];
     }
 
     // Find the specific item
