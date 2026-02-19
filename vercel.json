@@ -15,7 +15,39 @@
     },
     {
       "source": "/api/auth/google/callback",
-      "destination": "/api/auth/google/callback.ts"
+      "destination": "/api/auth/google.ts"
+    },
+    {
+      "source": "/api/auth/google/initiate",
+      "destination": "/api/auth/google.ts"
+    },
+    {
+      "source": "/api/auth/login",
+      "destination": "/api/auth/index.ts"
+    },
+    {
+      "source": "/api/auth/signup",
+      "destination": "/api/auth/index.ts"
+    },
+    {
+      "source": "/api/auth/me",
+      "destination": "/api/auth/index.ts"
+    },
+    {
+      "source": "/api/stores/dashboard",
+      "destination": "/api/stores/index.ts"
+    },
+    {
+      "source": "/api/stores/data",
+      "destination": "/api/stores/index.ts"
+    },
+    {
+      "source": "/api/stores/detail",
+      "destination": "/api/stores/index.ts"
+    },
+    {
+      "source": "/api/stores",
+      "destination": "/api/stores/index.ts"
     }
   ],
   "headers": [
