@@ -4,6 +4,18 @@
     {
       "source": "/dashboard",
       "destination": "/dashboard.html"
+    },
+    {
+      "source": "/login",
+      "destination": "/login.html"
+    },
+    {
+      "source": "/signup",
+      "destination": "/signup.html"
+    },
+    {
+      "source": "/api/auth/google/callback",
+      "destination": "/api/auth/google/callback.ts"
     }
   ],
   "headers": [

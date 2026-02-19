@@ -6,6 +6,7 @@ import { join } from 'path';
 import { logger } from './utils/logger';
 import { whatsappRouter } from './routes/whatsapp';
 import { storesRouter } from './routes/stores';
+import { testRouter } from './routes/test';
 import { errorHandler } from './middleware/errorHandler';
 
 dotenv.config();
@@ -28,6 +29,9 @@ app.use(
 );
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Serve static files from public directory (for CSS, JS, images, etc.)
+app.use(express.static(join(__dirname, '..', 'public')));
 
 // Health check
 app.get('/health', (_req, res) => {
@@ -79,12 +83,36 @@ app.get('/dashboard', (_req, res) => {
   }
 });
 
+app.get('/login', (_req, res) => {
+  try {
+    const html = readFileSync(join(__dirname, '..', 'public', 'login.html'), 'utf8');
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  } catch (error) {
+    logger.error('Error serving login.html', error);
+    res.status(500).send('Error loading login page');
+  }
+});
+
+app.get('/signup', (_req, res) => {
+  try {
+    const html = readFileSync(join(__dirname, '..', 'public', 'signup.html'), 'utf8');
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  } catch (error) {
+    logger.error('Error serving signup.html', error);
+    res.status(500).send('Error loading signup page');
+  }
+});
+
 // Routes
 app.use('/api/webhook', whatsappRouter);
 // Also support /whatsapp for backward compatibility
 app.use('/whatsapp', whatsappRouter);
 // Stores API routes (for dashboard)
 app.use('/api/stores', storesRouter);
+// Test routes (for local testing)
+app.use('/api/test', testRouter);
 
 // Error handling
 app.use(errorHandler);

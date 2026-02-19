@@ -744,6 +744,8 @@
                 </a>
             </div>
         </nav>
+        
+        <div id="userInfo"></div>
     </aside>
     
     <!-- Mobile Menu Toggle -->
@@ -891,6 +893,80 @@
         // Configuration: Set to false when Facebook verification is complete and you want real data
         const USE_MOCK_DATA = true; // Currently using mock data until Facebook verification
         
+        // Authentication
+        // Check for token in URL (from OAuth callback)
+        const urlParams = new URLSearchParams(window.location.search);
+        const tokenFromUrl = urlParams.get('token');
+        if (tokenFromUrl) {
+            localStorage.setItem('authToken', tokenFromUrl);
+            window.history.replaceState({}, document.title, '/dashboard');
+        }
+        
+        const authToken = localStorage.getItem('authToken');
+        let currentUser = null;
+        
+        // Check authentication on page load
+        (async function checkAuth() {
+            if (!authToken) {
+                window.location.href = '/login';
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/auth/me', {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+                
+                if (!response.ok) {
+                    localStorage.removeItem('authToken');
+                    localStorage.removeItem('user');
+                    window.location.href = '/login';
+                    return;
+                }
+                
+                const data = await response.json();
+                if (data.success) {
+                    currentUser = data.user;
+                    localStorage.setItem('user', JSON.stringify(data.user));
+                    updateUserMenu(data.user);
+                }
+            } catch (error) {
+                console.error('Auth check failed:', error);
+                localStorage.removeItem('authToken');
+                localStorage.removeItem('user');
+                window.location.href = '/login';
+            }
+        })();
+        
+        // Update user menu in sidebar
+        function updateUserMenu(user) {
+            const userInfo = document.getElementById('userInfo');
+            if (userInfo && user.name) {
+                userInfo.innerHTML = `
+                    <div style="padding: 16px; border-top: 1px solid var(--border);">
+                        <div style="font-weight: 600; margin-bottom: 4px;">${user.name || user.email}</div>
+                        <div style="font-size: 12px; color: var(--text-light);">${user.email}</div>
+                        <button onclick="logout()" style="margin-top: 12px; width: 100%; padding: 8px; background: #fee; color: #c33; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">Logout</button>
+                    </div>
+                `;
+            }
+        }
+        
+        // Logout function
+        function logout() {
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('user');
+            window.location.href = '/login';
+        }
+        
+        // Helper function to get auth headers
+        function getAuthHeaders() {
+            const token = localStorage.getItem('authToken');
+            return token ? { 'Authorization': `Bearer ${token}` } : {};
+        }
+        
         let currentStoreId = '';
         let currentTab = 'sales';
         let currentPage = 'dashboard';
@@ -914,7 +990,12 @@
                 const mockParam = USE_MOCK_DATA ? '?mock=true' : '';
                 
                 try {
-                    response = await fetch(`/api/stores${mockParam}`);
+                    response = await fetch(`/api/stores${mockParam}`, {
+                        headers: {
+                            ...getAuthHeaders(),
+                            'Content-Type': 'application/json'
+                        }
+                    });
                     if (response && response.ok) {
                         data = await response.json();
                         console.log(`Stores loaded from /api/stores${mockParam}:`, data);
@@ -927,7 +1008,12 @@
                 if (!data || !data.stores) {
                     try {
                         const fallbackParam = USE_MOCK_DATA ? '' : '?mock=true';
-                        response = await fetch(`/api/stores${fallbackParam}`);
+                        response = await fetch(`/api/stores${fallbackParam}`, {
+                            headers: {
+                                ...getAuthHeaders(),
+                                'Content-Type': 'application/json'
+                            }
+                        });
                         if (response && response.ok) {
                             data = await response.json();
                             console.log(`Stores loaded from fallback /api/stores${fallbackParam}:`, data);
@@ -1000,10 +1086,20 @@
             try {
                 console.log('Loading dashboard for store:', storeId);
                 const mockParam = USE_MOCK_DATA ? '&mock=true' : '';
-                let response = await fetch(`/api/stores/dashboard?storeId=${storeId}${mockParam}`).catch(async () => {
+                let response = await fetch(`/api/stores/dashboard?storeId=${storeId}${mockParam}`, {
+                    headers: {
+                        ...getAuthHeaders(),
+                        'Content-Type': 'application/json'
+                    }
+                }).catch(async () => {
                     console.log('Primary dashboard failed, trying fallback...');
                     const fallbackParam = USE_MOCK_DATA ? '' : '&mock=true';
-                    return await fetch(`/api/stores/dashboard?storeId=${storeId}${fallbackParam}`).catch(() => null);
+                    return await fetch(`/api/stores/dashboard?storeId=${storeId}${fallbackParam}`, {
+                        headers: {
+                            ...getAuthHeaders(),
+                            'Content-Type': 'application/json'
+                        }
+                    }).catch(() => null);
                 });
                 
                 if (!response || !response.ok) {
@@ -1038,12 +1134,29 @@
             contentArea.innerHTML = '<div class="loading">Loading...</div>';
 
             try {
-                console.log('Loading tab data:', { storeId, tab });
+                console.log('Loading tab data:', { storeId, tab, USE_MOCK_DATA });
                 const mockParam = USE_MOCK_DATA ? '&mock=true' : '';
-                let response = await fetch(`/api/stores/data?storeId=${storeId}&type=${tab}${mockParam}`).catch(async () => {
-                    console.log('Primary data failed, trying fallback...');
+                const url = `/api/stores/data?storeId=${encodeURIComponent(storeId)}&type=${encodeURIComponent(tab)}${mockParam}`;
+                console.log('Fetching URL:', url);
+                let response = await fetch(url, {
+                    headers: {
+                        ...getAuthHeaders(),
+                        'Content-Type': 'application/json'
+                    }
+                }).catch(async (error) => {
+                    console.log('Primary data failed, trying fallback...', error);
                     const fallbackParam = USE_MOCK_DATA ? '' : '&mock=true';
-                    return await fetch(`/api/stores/data?storeId=${storeId}&type=${tab}${fallbackParam}`).catch(() => null);
+                    const fallbackUrl = `/api/stores/data?storeId=${encodeURIComponent(storeId)}&type=${encodeURIComponent(tab)}${fallbackParam}`;
+                    console.log('Trying fallback URL:', fallbackUrl);
+                    return await fetch(fallbackUrl, {
+                        headers: {
+                            ...getAuthHeaders(),
+                            'Content-Type': 'application/json'
+                        }
+                    }).catch((fallbackError) => {
+                        console.error('Fallback also failed:', fallbackError);
+                        return null;
+                    });
                 });
                 
                 if (!response || !response.ok) {
@@ -1052,7 +1165,11 @@
                 
                 const data = await response.json();
                 console.log('Tab data loaded:', data);
+                console.log('Tab type:', tab);
+                console.log('Data keys:', Object.keys(data));
                 const items = data[tab] || [];
+                console.log(`Items for ${tab}:`, items);
+                console.log(`Items count: ${items.length}`);
 
                 if (items.length === 0) {
                     contentArea.innerHTML = `
@@ -1060,12 +1177,26 @@
                             <div class="empty-state-icon">📭</div>
                             <h3>No ${tab} data found</h3>
                             <p>Data will appear here once messages are processed via WhatsApp</p>
+                            <p style="margin-top: 10px; font-size: 12px; color: #999;">Debug: Response data = ${JSON.stringify(data)}</p>
                         </div>
                     `;
                     return;
                 }
 
-                renderTable(contentArea, items, tab);
+                try {
+                    renderTable(contentArea, items, tab);
+                    console.log(`Successfully rendered ${items.length} ${tab} items`);
+                } catch (error) {
+                    console.error('Error rendering table:', error);
+                    contentArea.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">❌</div>
+                            <h3>Error rendering ${tab} data</h3>
+                            <p>${error.message}</p>
+                            <pre style="margin-top: 20px; text-align: left; background: #f5f5f5; padding: 10px; border-radius: 5px; overflow-x: auto;">${JSON.stringify(items.slice(0, 2), null, 2)}</pre>
+                        </div>
+                    `;
+                }
                 logActivity('Data loaded', `Loaded ${items.length} ${tab} records`);
             } catch (error) {
                 console.error('Error loading data:', error);
@@ -1075,99 +1206,143 @@
 
         // Render table based on type
         function renderTable(container, items, type) {
+            console.log(`renderTable called with type: ${type}, items count: ${items.length}`);
+            if (!items || items.length === 0) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><h3>No data available</h3></div>';
+                return;
+            }
+            
             let tableHTML = '<table class="data-table"><thead><tr>';
             
             if (type === 'sales') {
                 tableHTML += '<th>Date</th><th>Cash</th><th>Card</th><th>Tax</th><th>Total</th><th>Actions</th></tr></thead><tbody>';
-                items.forEach(item => {
-                    const d = item.data || {};
-                    tableHTML += `
-                        <tr onclick="viewDetail('sales', '${item.id}')" style="cursor: pointer;">
-                            <td>${new Date(item.date).toLocaleDateString()}</td>
-                            <td>$${d.cash || 0}</td>
-                            <td>$${d.card || 0}</td>
-                            <td>$${d.tax || 0}</td>
-                            <td><strong>$${d.total_inside || 0}</strong></td>
-                            <td><button onclick="event.stopPropagation(); viewDetail('sales', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
-                        </tr>
-                    `;
+                items.forEach((item, index) => {
+                    try {
+                        const d = item.data || {};
+                        const dateStr = item.date ? (typeof item.date === 'string' ? item.date : item.date.toISOString()) : new Date().toISOString();
+                        const displayDate = new Date(dateStr).toLocaleDateString();
+                        tableHTML += `
+                            <tr onclick="viewDetail('sales', '${item.id}')" style="cursor: pointer;">
+                                <td>${displayDate}</td>
+                                <td>$${d.cash || 0}</td>
+                                <td>$${d.card || 0}</td>
+                                <td>$${d.tax || 0}</td>
+                                <td><strong>$${d.total_inside || 0}</strong></td>
+                                <td><button onclick="event.stopPropagation(); viewDetail('sales', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
+                            </tr>
+                        `;
+                    } catch (error) {
+                        console.error(`Error rendering sales item ${index}:`, error, item);
+                    }
                 });
             } else if (type === 'invoices') {
                 tableHTML += '<th>Date</th><th>Vendor</th><th>Invoice #</th><th>Amount</th><th>Category</th><th>Due Date</th><th>Paid</th><th>Actions</th></tr></thead><tbody>';
-                items.forEach(item => {
-                    const d = item.data || {};
-                    tableHTML += `
-                        <tr onclick="viewDetail('invoices', '${item.id}')" style="cursor: pointer;">
-                            <td>${new Date(item.date).toLocaleDateString()}</td>
-                            <td><strong>${d.vendor || 'N/A'}</strong></td>
-                            <td>${d.invoice_number || 'N/A'}</td>
-                            <td>$${d.amount || 0}</td>
-                            <td>${d.category || 'N/A'}</td>
-                            <td>${d.due_date ? new Date(d.due_date).toLocaleDateString() : 'N/A'}</td>
-                            <td><span class="badge ${d.paid === 'Y' ? 'badge-success' : 'badge-pending'}">${d.paid || 'N'}</span></td>
-                            <td><button onclick="event.stopPropagation(); viewDetail('invoices', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
-                        </tr>
-                    `;
+                items.forEach((item, index) => {
+                    try {
+                        const d = item.data || {};
+                        const dateStr = item.date ? (typeof item.date === 'string' ? item.date : item.date.toISOString()) : new Date().toISOString();
+                        const displayDate = new Date(dateStr).toLocaleDateString();
+                        const dueDateStr = d.due_date ? (typeof d.due_date === 'string' ? d.due_date : new Date(d.due_date).toISOString()) : null;
+                        const displayDueDate = dueDateStr ? new Date(dueDateStr).toLocaleDateString() : 'N/A';
+                        tableHTML += `
+                            <tr onclick="viewDetail('invoices', '${item.id}')" style="cursor: pointer;">
+                                <td>${displayDate}</td>
+                                <td><strong>${d.vendor || 'N/A'}</strong></td>
+                                <td>${d.invoice_number || 'N/A'}</td>
+                                <td>$${d.amount || 0}</td>
+                                <td>${d.category || 'N/A'}</td>
+                                <td>${displayDueDate}</td>
+                                <td><span class="badge ${d.paid === 'Y' ? 'badge-success' : 'badge-pending'}">${d.paid || 'N'}</span></td>
+                                <td><button onclick="event.stopPropagation(); viewDetail('invoices', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
+                            </tr>
+                        `;
+                    } catch (error) {
+                        console.error(`Error rendering invoices item ${index}:`, error, item);
+                    }
                 });
             } else if (type === 'expenses') {
                 tableHTML += '<th>Date</th><th>Category</th><th>Description</th><th>Amount</th><th>Receipt</th><th>Paid</th><th>Actions</th></tr></thead><tbody>';
-                items.forEach(item => {
-                    const d = item.data || {};
-                    tableHTML += `
-                        <tr onclick="viewDetail('expenses', '${item.id}')" style="cursor: pointer;">
-                            <td>${new Date(item.date).toLocaleDateString()}</td>
-                            <td><strong>${d.category || 'N/A'}</strong></td>
-                            <td>${d.description || 'N/A'}</td>
-                            <td>$${d.amount || 0}</td>
-                            <td>${d.receipt || 'N/A'}</td>
-                            <td><span class="badge ${d.paid === 'Y' ? 'badge-success' : 'badge-pending'}">${d.paid || 'N'}</span></td>
-                            <td><button onclick="event.stopPropagation(); viewDetail('expenses', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
-                        </tr>
-                    `;
+                items.forEach((item, index) => {
+                    try {
+                        const d = item.data || {};
+                        const dateStr = item.date ? (typeof item.date === 'string' ? item.date : item.date.toISOString()) : new Date().toISOString();
+                        const displayDate = new Date(dateStr).toLocaleDateString();
+                        tableHTML += `
+                            <tr onclick="viewDetail('expenses', '${item.id}')" style="cursor: pointer;">
+                                <td>${displayDate}</td>
+                                <td><strong>${d.category || 'N/A'}</strong></td>
+                                <td>${d.description || 'N/A'}</td>
+                                <td>$${d.amount || 0}</td>
+                                <td>${d.receipt || 'N/A'}</td>
+                                <td><span class="badge ${d.paid === 'Y' ? 'badge-success' : 'badge-pending'}">${d.paid || 'N'}</span></td>
+                                <td><button onclick="event.stopPropagation(); viewDetail('expenses', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
+                            </tr>
+                        `;
+                    } catch (error) {
+                        console.error(`Error rendering expenses item ${index}:`, error, item);
+                    }
                 });
             } else if (type === 'fuel') {
                 tableHTML += '<th>Date</th><th>Gallons</th><th>Sales</th><th>GP</th><th>Actions</th></tr></thead><tbody>';
-                items.forEach(item => {
-                    const d = item.data || {};
-                    tableHTML += `
-                        <tr onclick="viewDetail('fuel', '${item.id}')" style="cursor: pointer;">
-                            <td>${new Date(item.date).toLocaleDateString()}</td>
-                            <td>${d.gallons || 0}</td>
-                            <td>$${d.fuel_sales || 0}</td>
-                            <td>$${d.fuel_gp || 0}</td>
-                            <td><button onclick="event.stopPropagation(); viewDetail('fuel', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
-                        </tr>
-                    `;
+                items.forEach((item, index) => {
+                    try {
+                        const d = item.data || {};
+                        const dateStr = item.date ? (typeof item.date === 'string' ? item.date : item.date.toISOString()) : new Date().toISOString();
+                        const displayDate = new Date(dateStr).toLocaleDateString();
+                        tableHTML += `
+                            <tr onclick="viewDetail('fuel', '${item.id}')" style="cursor: pointer;">
+                                <td>${displayDate}</td>
+                                <td>${d.gallons || 0}</td>
+                                <td>$${d.fuel_sales || 0}</td>
+                                <td>$${d.fuel_gp || 0}</td>
+                                <td><button onclick="event.stopPropagation(); viewDetail('fuel', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
+                            </tr>
+                        `;
+                    } catch (error) {
+                        console.error(`Error rendering fuel item ${index}:`, error, item);
+                    }
                 });
             } else if (type === 'paidouts') {
                 tableHTML += '<th>Date</th><th>Amount</th><th>Reason</th><th>Employee</th><th>Actions</th></tr></thead><tbody>';
-                items.forEach(item => {
-                    const d = item.data || {};
-                    tableHTML += `
-                        <tr onclick="viewDetail('paidouts', '${item.id}')" style="cursor: pointer;">
-                            <td>${new Date(item.date).toLocaleDateString()}</td>
-                            <td>$${d.amount || 0}</td>
-                            <td>${d.reason || 'N/A'}</td>
-                            <td>${d.employee || 'N/A'}</td>
-                            <td><button onclick="event.stopPropagation(); viewDetail('paidouts', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
-                        </tr>
-                    `;
+                items.forEach((item, index) => {
+                    try {
+                        const d = item.data || {};
+                        const dateStr = item.date ? (typeof item.date === 'string' ? item.date : item.date.toISOString()) : new Date().toISOString();
+                        const displayDate = new Date(dateStr).toLocaleDateString();
+                        tableHTML += `
+                            <tr onclick="viewDetail('paidouts', '${item.id}')" style="cursor: pointer;">
+                                <td>${displayDate}</td>
+                                <td>$${d.amount || 0}</td>
+                                <td>${d.reason || 'N/A'}</td>
+                                <td>${d.employee || 'N/A'}</td>
+                                <td><button onclick="event.stopPropagation(); viewDetail('paidouts', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
+                            </tr>
+                        `;
+                    } catch (error) {
+                        console.error(`Error rendering paidouts item ${index}:`, error, item);
+                    }
                 });
             } else if (type === 'orders') {
                 tableHTML += '<th>Date</th><th>Order ID</th><th>Vendors</th><th>Items</th><th>Actions</th></tr></thead><tbody>';
-                items.forEach(item => {
-                    const d = item.data || {};
-                    const vendors = d.vendor_groups || [];
-                    const itemCount = vendors.reduce((sum, v) => sum + (v.items?.length || 0), 0);
-                    tableHTML += `
-                        <tr onclick="viewDetail('orders', '${item.id}')" style="cursor: pointer;">
-                            <td>${new Date(item.date).toLocaleDateString()}</td>
-                            <td><strong>${d.order_batch_id || 'N/A'}</strong></td>
-                            <td>${vendors.length}</td>
-                            <td>${itemCount}</td>
-                            <td><button onclick="event.stopPropagation(); viewDetail('orders', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
-                        </tr>
-                    `;
+                items.forEach((item, index) => {
+                    try {
+                        const d = item.data || {};
+                        const vendors = d.vendor_groups || [];
+                        const itemCount = vendors.reduce((sum, v) => sum + (v.items?.length || 0), 0);
+                        const dateStr = item.date ? (typeof item.date === 'string' ? item.date : item.date.toISOString()) : new Date().toISOString();
+                        const displayDate = new Date(dateStr).toLocaleDateString();
+                        tableHTML += `
+                            <tr onclick="viewDetail('orders', '${item.id}')" style="cursor: pointer;">
+                                <td>${displayDate}</td>
+                                <td><strong>${d.order_batch_id || 'N/A'}</strong></td>
+                                <td>${vendors.length}</td>
+                                <td>${itemCount}</td>
+                                <td><button onclick="event.stopPropagation(); viewDetail('orders', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
+                            </tr>
+                        `;
+                    } catch (error) {
+                        console.error(`Error rendering orders item ${index}:`, error, item);
+                    }
                 });
             }
 
@@ -1181,9 +1356,19 @@
             
             try {
                 const mockParam = USE_MOCK_DATA ? '&mock=true' : '';
-                let response = await fetch(`/api/stores/detail?storeId=${currentStoreId}&type=${type}&id=${id}${mockParam}`).catch(async () => {
+                let response = await fetch(`/api/stores/detail?storeId=${currentStoreId}&type=${type}&id=${id}${mockParam}`, {
+                    headers: {
+                        ...getAuthHeaders(),
+                        'Content-Type': 'application/json'
+                    }
+                }).catch(async () => {
                     const fallbackParam = USE_MOCK_DATA ? '' : '&mock=true';
-                    return await fetch(`/api/stores/detail?storeId=${currentStoreId}&type=${type}&id=${id}${fallbackParam}`).catch(() => null);
+                    return await fetch(`/api/stores/detail?storeId=${currentStoreId}&type=${type}&id=${id}${fallbackParam}`, {
+                        headers: {
+                            ...getAuthHeaders(),
+                            'Content-Type': 'application/json'
+                        }
+                    }).catch(() => null);
                 });
                 
                 if (!response || !response.ok) {
@@ -1417,11 +1602,26 @@
             currentPage = page;
             logActivity('Page viewed', `Viewed ${page} page`);
             
+            // Ensure currentStoreId is set (get from dropdown if not set)
+            if (!currentStoreId) {
+                const storeSelect = document.getElementById('storeSelect');
+                if (storeSelect && storeSelect.value) {
+                    currentStoreId = storeSelect.value;
+                    console.log('Set currentStoreId from dropdown:', currentStoreId);
+                } else {
+                    currentStoreId = 'S001'; // Default fallback
+                    console.log('Set currentStoreId to default:', currentStoreId);
+                }
+            }
+            
             // Load data for detail pages
             if (currentStoreId && page !== 'dashboard' && page !== 'activity' && page !== 'settings') {
+                console.log(`Loading page data for ${page} with storeId: ${currentStoreId}`);
                 loadPageData(page);
             } else if (page === 'activity') {
                 updateActivityLog();
+            } else if (!currentStoreId) {
+                console.warn('No storeId available, cannot load page data');
             }
         }
 
@@ -1429,23 +1629,65 @@
         async function loadPageData(page) {
             const contentId = page + 'Content';
             const container = document.getElementById(contentId);
-            if (!container) return;
+            if (!container) {
+                console.error(`Container not found for page ${page} (looking for #${contentId})`);
+                return;
+            }
+            
+            // Ensure currentStoreId is set
+            if (!currentStoreId) {
+                const storeSelect = document.getElementById('storeSelect');
+                if (storeSelect && storeSelect.value) {
+                    currentStoreId = storeSelect.value;
+                } else {
+                    currentStoreId = 'S001';
+                }
+                console.log('Set currentStoreId in loadPageData:', currentStoreId);
+            }
+            
+            console.log(`loadPageData called for page: ${page}, storeId: ${currentStoreId}`);
             
             container.innerHTML = '<div class="loading">Loading...</div>';
             
             try {
+                console.log(`loadPageData: storeId=${currentStoreId}, page=${page}, USE_MOCK_DATA=${USE_MOCK_DATA}`);
                 const mockParam = USE_MOCK_DATA ? '&mock=true' : '';
-                let response = await fetch(`/api/stores/data?storeId=${currentStoreId}&type=${page}${mockParam}`).catch(async () => {
+                const url = `/api/stores/data?storeId=${encodeURIComponent(currentStoreId)}&type=${encodeURIComponent(page)}${mockParam}`;
+                console.log('Fetching URL:', url);
+                let response = await fetch(url, {
+                    headers: {
+                        ...getAuthHeaders(),
+                        'Content-Type': 'application/json'
+                    }
+                }).catch(async (error) => {
+                    console.log('Primary data failed, trying fallback...', error);
                     const fallbackParam = USE_MOCK_DATA ? '' : '&mock=true';
-                    return await fetch(`/api/stores/data?storeId=${currentStoreId}&type=${page}${fallbackParam}`).catch(() => null);
+                    const fallbackUrl = `/api/stores/data?storeId=${encodeURIComponent(currentStoreId)}&type=${encodeURIComponent(page)}${fallbackParam}`;
+                    console.log('Trying fallback URL:', fallbackUrl);
+                    return await fetch(fallbackUrl, {
+                        headers: {
+                            ...getAuthHeaders(),
+                            'Content-Type': 'application/json'
+                        }
+                    }).catch((fallbackError) => {
+                        console.error('Fallback also failed:', fallbackError);
+                        return null;
+                    });
                 });
                 
                 if (!response || !response.ok) {
-                    throw new Error('Failed to load data');
+                    const errorText = await response?.text().catch(() => 'Unknown error');
+                    console.error(`API error: ${response?.status} - ${errorText}`);
+                    throw new Error(`Failed to load data: ${response?.status || 'No response'}`);
                 }
                 
                 const data = await response.json();
+                console.log('Page data loaded:', data);
+                console.log('Page type:', page);
+                console.log('Data keys:', Object.keys(data));
                 const items = data[page] || [];
+                console.log(`Items for ${page}:`, items);
+                console.log(`Items count: ${items.length}`);
                 
                 if (items.length === 0) {
                     container.innerHTML = `
@@ -1453,13 +1695,27 @@
                             <div class="empty-state-icon">📭</div>
                             <h3>No ${page} data found</h3>
                             <p>Data will appear here once messages are processed via WhatsApp</p>
+                            <p style="margin-top: 10px; font-size: 12px; color: #999;">Debug: Response data = ${JSON.stringify(data)}</p>
                         </div>
                     `;
                     return;
                 }
                 
-                renderTable(container, items, page);
-                logActivity('Page data loaded', `Loaded ${items.length} ${page} records`);
+                try {
+                    renderTable(container, items, page);
+                    console.log(`Successfully rendered ${items.length} ${page} items`);
+                    logActivity('Page data loaded', `Loaded ${items.length} ${page} records`);
+                } catch (error) {
+                    console.error('Error rendering table:', error);
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">❌</div>
+                            <h3>Error rendering ${page} data</h3>
+                            <p>${error.message}</p>
+                            <pre style="margin-top: 20px; text-align: left; background: #f5f5f5; padding: 10px; border-radius: 5px; overflow-x: auto;">${JSON.stringify(items.slice(0, 2), null, 2)}</pre>
+                        </div>
+                    `;
+                }
             } catch (error) {
                 container.innerHTML = '<div class="empty-state">Error loading data. Please try again.</div>';
             }

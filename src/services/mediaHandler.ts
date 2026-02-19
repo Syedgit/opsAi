@@ -3,7 +3,7 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { logger } from '../utils/logger';
 import { format } from 'date-fns';
 
-const WHATSAPP_API_URL = 'https://graph.facebook.com/v18.0';
+const WHATSAPP_API_URL = 'https://graph.facebook.com/v22.0';
 const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 
 let s3Client: S3Client | null = null;

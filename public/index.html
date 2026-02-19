@@ -72,6 +72,12 @@
             gap: 30px;
             align-items: center;
         }
+
+        .nav-links span {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
         
         .nav-links a {
             color: var(--text);
@@ -638,11 +644,17 @@
         <a href="/" style="text-decoration: none; color: inherit;">
             <div class="logo">opsAi</div>
         </a>
-        <div class="nav-links">
+        <div class="nav-links" id="navLinks">
             <a href="#features">Features</a>
             <a href="#how-it-works">How It Works</a>
             <a href="#benefits">Benefits</a>
-            <a href="/dashboard" class="btn-primary">Dashboard</a>
+            <span id="authButtons">
+                <a href="/login" style="color: var(--text); text-decoration: none; font-weight: 500;">Login</a>
+                <a href="/signup" class="btn-primary">Sign Up</a>
+            </span>
+            <span id="userMenu" style="display: none;">
+                <a href="/dashboard" class="btn-primary">Dashboard</a>
+            </span>
         </div>
     </nav>
     
@@ -1016,6 +1028,28 @@
             el.style.transition = 'opacity 0.6s ease-out, transform 0.6s ease-out';
             observer.observe(el);
         });
+
+        // Check if user is logged in
+        (async function checkAuth() {
+            const token = localStorage.getItem('authToken');
+            if (token) {
+                try {
+                    const response = await fetch('/api/auth/me', {
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+                    if (response.ok) {
+                        document.getElementById('authButtons').style.display = 'none';
+                        document.getElementById('userMenu').style.display = 'inline-flex';
+                    } else {
+                        localStorage.removeItem('authToken');
+                    }
+                } catch (error) {
+                    console.error('Auth check failed:', error);
+                }
+            }
+        })();
     </script>
 </body>
 </html>

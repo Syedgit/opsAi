@@ -11,6 +11,49 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+// Web application user (supports OAuth 2.0 and email/password)
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String?  // Hashed password (nullable for OAuth users)
+  name      String?
+  picture   String?  // Profile picture URL (from OAuth)
+  
+  // OAuth provider info
+  provider        String?  @default("email") // 'google', 'github', 'email', etc.
+  providerId     String?  @map("provider_id") // OAuth provider's user ID
+  providerData    Json?    @map("provider_data") // Additional OAuth data
+  
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Many-to-many relationship with stores
+  stores UserStore[]
+
+  @@map("users")
+  @@index([email])
+  @@index([provider, providerId])
+}
+
+// Junction table for User-Store many-to-many relationship
+model UserStore {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  storeId   String   @map("store_id")
+  role      UserRole @default(OWNER) // OWNER, MANAGER, STAFF
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  store StoreConfig  @relation(fields: [storeId], references: [storeId], onDelete: Cascade)
+
+  @@unique([userId, storeId])
+  @@map("user_stores")
+  @@index([userId])
+  @@index([storeId])
+}
+
+// WhatsApp phone directory (for WhatsApp integration)
 model UserDirectory {
   id          String   @id @default(uuid())
   phoneE164   String   @unique @map("phone_e164")
@@ -35,6 +78,9 @@ model StoreConfig {
   active    Boolean  @default(true)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Many-to-many relationship with users
+  users UserStore[]
 
   @@map("store_config")
   @@index([storeId])

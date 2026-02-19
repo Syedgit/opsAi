@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Up - opsAi</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        :root {
+            --primary: #25D366;
+            --primary-dark: #128C7E;
+            --secondary: #075E54;
+            --text: #1a1a1a;
+            --text-light: #666;
+            --bg: #ffffff;
+            --bg-light: #f8f9fa;
+            --border: #e0e0e0;
+            --error: #e74c3c;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, var(--bg-light) 0%, #ffffff 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .auth-container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+            width: 100%;
+            max-width: 420px;
+        }
+        
+        .auth-header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        
+        .auth-header h1 {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 8px;
+        }
+        
+        .auth-header p {
+            color: var(--text-light);
+            font-size: 16px;
+        }
+        
+        .logo-link {
+            display: inline-block;
+            margin-bottom: 24px;
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-decoration: none;
+        }
+        
+        .form-group {
+            margin-bottom: 24px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text);
+            font-weight: 500;
+            font-size: 14px;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+        
+        .btn-primary {
+            width: 100%;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            padding: 14px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(37, 211, 102, 0.3);
+        }
+        
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .error-message {
+            background: #fee;
+            color: var(--error);
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+        }
+        
+        .error-message.show {
+            display: block;
+        }
+        
+        .auth-footer {
+            text-align: center;
+            margin-top: 24px;
+            color: var(--text-light);
+            font-size: 14px;
+        }
+        
+        .auth-footer a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        .auth-footer a:hover {
+            text-decoration: underline;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 16px;
+        }
+        
+        .loading.show {
+            display: block;
+        }
+        
+        .password-hint {
+            font-size: 12px;
+            color: var(--text-light);
+            margin-top: 4px;
+        }
+        
+        .btn-google {
+            width: 100%;
+            background: white;
+            color: #4285F4;
+            padding: 14px;
+            border: 2px solid #dadce0;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+        }
+        
+        .btn-google:hover {
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-color: #c0c0c0;
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-container">
+        <a href="/" class="logo-link">opsAi</a>
+        
+        <div class="auth-header">
+            <h1>Create Account</h1>
+            <p>Start managing your stores today</p>
+        </div>
+        
+        <div class="error-message" id="errorMessage"></div>
+        
+        <div style="margin-bottom: 24px;">
+            <button onclick="window.location.href='/api/auth/google/initiate'" class="btn-google" id="googleBtn">
+                <svg width="18" height="18" viewBox="0 0 18 18" style="margin-right: 8px;">
+                    <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/>
+                    <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z"/>
+                    <path fill="#FBBC05" d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.951H.957C.348 6.174 0 7.55 0 9s.348 2.826.957 4.049l3.007-2.342z"/>
+                    <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.951L3.964 7.293C4.672 5.156 6.656 3.58 9 3.58z"/>
+                </svg>
+                Continue with Google
+            </button>
+        </div>
+        
+        <div style="text-align: center; margin: 24px 0; position: relative;">
+            <div style="position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: var(--border);"></div>
+            <span style="background: white; padding: 0 16px; color: var(--text-light); font-size: 14px;">or</span>
+        </div>
+        
+        <form id="signupForm">
+            <div class="form-group">
+                <label for="name">Full Name</label>
+                <input type="text" id="name" name="name" autocomplete="name" placeholder="John Doe">
+            </div>
+            
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" required autocomplete="email" placeholder="your@email.com">
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required autocomplete="new-password" placeholder="••••••••" minlength="8">
+                <div class="password-hint">Must be at least 8 characters</div>
+            </div>
+            
+            <button type="submit" class="btn-primary" id="submitBtn">Create Account</button>
+        </form>
+        
+        <div class="loading" id="loading">Creating account...</div>
+        
+        <div class="auth-footer">
+            Already have an account? <a href="/login">Sign in</a>
+        </div>
+    </div>
+    
+    <script>
+        const form = document.getElementById('signupForm');
+        const errorMessage = document.getElementById('errorMessage');
+        const submitBtn = document.getElementById('submitBtn');
+        const loading = document.getElementById('loading');
+        
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const name = document.getElementById('name').value;
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            if (password.length < 8) {
+                errorMessage.textContent = 'Password must be at least 8 characters';
+                errorMessage.classList.add('show');
+                return;
+            }
+            
+            // Reset UI
+            errorMessage.classList.remove('show');
+            submitBtn.disabled = true;
+            loading.classList.add('show');
+            
+            try {
+                const response = await fetch('/api/auth/signup', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ name, email, password }),
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    // Show success and redirect to login
+                    errorMessage.style.background = '#efe';
+                    errorMessage.style.color = '#2e7d32';
+                    errorMessage.textContent = 'Account created! Redirecting to login...';
+                    errorMessage.classList.add('show');
+                    
+                    setTimeout(() => {
+                        window.location.href = '/login';
+                    }, 1500);
+                } else {
+                    errorMessage.style.background = '#fee';
+                    errorMessage.style.color = '#e74c3c';
+                    errorMessage.textContent = data.error || 'Signup failed. Please try again.';
+                    errorMessage.classList.add('show');
+                }
+            } catch (error) {
+                errorMessage.style.background = '#fee';
+                errorMessage.style.color = '#e74c3c';
+                errorMessage.textContent = 'Network error. Please check your connection and try again.';
+                errorMessage.classList.add('show');
+            } finally {
+                submitBtn.disabled = false;
+                loading.classList.remove('show');
+            }
+        });
+        
+        // Check if already logged in
+        const token = localStorage.getItem('authToken');
+        if (token) {
+            fetch('/api/auth/me', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            }).then(res => {
+                if (res.ok) {
+                    window.location.href = '/dashboard';
+                }
+            });
+        }
+    </script>
+</body>
+</html>

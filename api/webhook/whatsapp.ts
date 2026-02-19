@@ -2,17 +2,35 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 // Webhook verification (Meta challenge)
 function verifyWebhook(req: VercelRequest, res: VercelResponse) {
-  const mode = req.query['hub.mode'];
-  const token = req.query['hub.verify_token'];
-  const challenge = req.query['hub.challenge'];
+  const mode = req.query['hub.mode'] as string;
+  const token = req.query['hub.verify_token'] as string;
+  const challenge = req.query['hub.challenge'] as string;
 
   const verifyToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
 
+  // Log for debugging (remove sensitive data in production)
+  console.log('🔍 Webhook verification attempt', {
+    mode,
+    tokenReceived: token ? '***' : 'missing',
+    tokenExpected: verifyToken ? '***' : 'missing',
+    challenge: challenge ? 'present' : 'missing',
+  });
+
+  if (!verifyToken) {
+    console.error('❌ WHATSAPP_WEBHOOK_VERIFY_TOKEN not set in environment variables');
+    res.status(500).send('Server configuration error');
+    return;
+  }
+
   if (mode === 'subscribe' && token === verifyToken) {
-    console.log('✅ Webhook verified');
+    console.log('✅ Webhook verified successfully');
     res.status(200).send(challenge);
   } else {
-    console.warn('❌ Webhook verification failed', { mode, token, expected: verifyToken });
+    console.warn('❌ Webhook verification failed', {
+      mode,
+      tokenMatch: token === verifyToken,
+      modeMatch: mode === 'subscribe',
+    });
     res.status(403).send('Forbidden');
   }
 }

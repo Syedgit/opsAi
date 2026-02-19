@@ -1,16 +1,18 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
+import { getAuthUser } from './utils/auth';
 
 const prisma = new PrismaClient();
 
 /**
  * Unified stores endpoint - handles both real and mock data
  * Use ?mock=true to get mock data
+ * Filters stores by authenticated user if logged in
  */
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   const useMock = req.query.mock === 'true';
 
-  // Mock data
+  // Mock data (for testing before auth is set up)
   if (useMock) {
     res.json({
       stores: [
@@ -47,19 +49,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
-  // Real data from database
+  // Real data from database - filter by user if authenticated
   try {
-    const stores = await prisma.storeConfig.findMany({
-      where: { active: true },
-      select: {
-        storeId: true,
-        storeName: true,
-        timezone: true,
-        active: true,
-      },
-    });
+    const authUser = getAuthUser(req);
 
-    res.json({ stores });
+    if (authUser) {
+      // User is authenticated - return only their stores
+      const userStores = await prisma.userStore.findMany({
+        where: {
+          userId: authUser.userId,
+        },
+        include: {
+          store: {
+            select: {
+              storeId: true,
+              storeName: true,
+              timezone: true,
+              active: true,
+            },
+          },
+        },
+      });
+
+      const stores = userStores
+        .filter((us) => us.store.active)
+        .map((us) => ({
+          storeId: us.store.storeId,
+          storeName: us.store.storeName,
+          timezone: us.store.timezone,
+          active: us.store.active,
+          role: us.role,
+        }));
+
+      res.json({ stores });
+    } else {
+      // Not authenticated - return empty array (or you could require auth)
+      res.json({ stores: [] });
+    }
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     res.status(500).json({ error: errorMessage });
