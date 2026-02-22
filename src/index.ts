@@ -6,6 +6,7 @@ import { join } from 'path';
 import { logger } from './utils/logger';
 import { whatsappRouter } from './routes/whatsapp';
 import { storesRouter } from './routes/stores';
+import { authRouter } from './routes/auth';
 import { testRouter } from './routes/test';
 import { errorHandler } from './middleware/errorHandler';
 
@@ -109,6 +110,8 @@ app.get('/signup', (_req, res) => {
 app.use('/api/webhook', whatsappRouter);
 // Also support /whatsapp for backward compatibility
 app.use('/whatsapp', whatsappRouter);
+// Auth routes (for local development)
+app.use('/api/auth', authRouter);
 // Stores API routes (for dashboard)
 app.use('/api/stores', storesRouter);
 // Test routes (for local testing)

@@ -3,7 +3,7 @@ import { prisma } from '../config/database';
 import { logger } from '../utils/logger';
 import { sendWhatsAppMessage } from './whatsappBot';
 import { writeToGoogleSheets } from './googleSheets';
-import { format, startOfDay, endOfDay, startOfMonth, endOfMonth } from 'date-fns';
+import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
 import { parse } from 'date-fns';
 
 export interface CommandResult {
@@ -34,6 +34,8 @@ export async function handleCommand(
       return await handleStatus(phoneE164);
     case 'TODAY':
       return await handleToday(phoneE164);
+    case 'WEEK':
+      return await handleWeek(phoneE164);
     case 'MONTH':
       return await handleMonth(phoneE164, parts[1]);
     case 'HELP':
@@ -195,7 +197,7 @@ async function handleStatus(phoneE164: string): Promise<CommandResult> {
 }
 
 /**
- * Get today's summary
+ * Get today's summary with AI insights
  */
 async function handleToday(phoneE164: string): Promise<CommandResult> {
   const user = await prisma.userDirectory.findUnique({
@@ -209,29 +211,79 @@ async function handleToday(phoneE164: string): Promise<CommandResult> {
     };
   }
 
-  const today = startOfDay(new Date());
-  const tomorrow = endOfDay(new Date());
-
-  // Count confirmed actions today
-  const count = await prisma.pendingActions.count({
-    where: {
-      storeId: user.storeId,
-      status: PendingStatus.CONFIRMED,
-      createdAt: {
-        gte: today,
-        lte: tomorrow,
+  try {
+    const { generateWhatsAppSummary } = await import('./aiSummarization');
+    const summary = await generateWhatsAppSummary(user.storeId, 'today');
+    return {
+      success: true,
+      message: summary,
+    };
+  } catch (error: any) {
+    logger.error('AI summary failed, using basic summary', { error: error.message });
+    // Fallback to basic summary
+    const today = startOfDay(new Date());
+    const count = await prisma.pendingActions.count({
+      where: {
+        storeId: user.storeId,
+        status: PendingStatus.CONFIRMED,
+        createdAt: {
+          gte: today,
+          lte: endOfDay(new Date()),
+        },
       },
-    },
-  });
-
-  return {
-    success: true,
-    message: `📊 Today (${format(today, 'MMM dd, yyyy')}):\n${count} entries confirmed\n\nReply MONTH YYYY-MM for monthly summary.`,
-  };
+    });
+    return {
+      success: true,
+      message: `📊 Today (${format(today, 'MMM dd, yyyy')}):\n${count} entries confirmed\n\nReply MONTH YYYY-MM for monthly summary.`,
+    };
+  }
 }
 
 /**
- * Get monthly summary
+ * Get weekly summary with AI insights
+ */
+async function handleWeek(phoneE164: string): Promise<CommandResult> {
+  const user = await prisma.userDirectory.findUnique({
+    where: { phoneE164 },
+  });
+
+  if (!user || !user.storeId) {
+    return {
+      success: false,
+      message: 'Store not linked. Reply STORE S001 to link.',
+    };
+  }
+
+  try {
+    const { generateWhatsAppSummary } = await import('./aiSummarization');
+    const summary = await generateWhatsAppSummary(user.storeId, 'week');
+    return {
+      success: true,
+      message: summary,
+    };
+  } catch (error: any) {
+    logger.error('AI summary failed, using basic summary', { error: error.message });
+    // Fallback to basic summary
+    const start = startOfWeek(new Date());
+    const count = await prisma.pendingActions.count({
+      where: {
+        storeId: user.storeId,
+        status: PendingStatus.CONFIRMED,
+        createdAt: {
+          gte: start,
+          lte: endOfWeek(new Date()),
+        },
+      },
+    });
+    return {
+      success: true,
+      message: `📊 This Week:\n${count} entries confirmed`,
+    };
+  }
+}
+
+/**
+ * Get monthly summary with AI insights
  */
 async function handleMonth(phoneE164: string, monthStr?: string): Promise<CommandResult> {
   const user = await prisma.userDirectory.findUnique({
@@ -259,24 +311,32 @@ async function handleMonth(phoneE164: string, monthStr?: string): Promise<Comman
     targetMonth = new Date();
   }
 
-  const start = startOfMonth(targetMonth);
-  const end = endOfMonth(targetMonth);
-
-  const count = await prisma.pendingActions.count({
-    where: {
-      storeId: user.storeId,
-      status: PendingStatus.CONFIRMED,
-      createdAt: {
-        gte: start,
-        lte: end,
+  try {
+    const { generateWhatsAppSummary } = await import('./aiSummarization');
+    const message = await generateWhatsAppSummary(user.storeId, 'month');
+    return {
+      success: true,
+      message,
+    };
+  } catch (error: any) {
+    logger.error('AI summary failed, using basic summary', { error: error.message });
+    // Fallback to basic summary
+    const start = startOfMonth(targetMonth);
+    const count = await prisma.pendingActions.count({
+      where: {
+        storeId: user.storeId,
+        status: PendingStatus.CONFIRMED,
+        createdAt: {
+          gte: start,
+          lte: endOfMonth(targetMonth),
+        },
       },
-    },
-  });
-
-  return {
-    success: true,
-    message: `📊 ${format(start, 'MMMM yyyy')}:\n${count} entries confirmed`,
-  };
+    });
+    return {
+      success: true,
+      message: `📊 ${format(start, 'MMMM yyyy')}:\n${count} entries confirmed`,
+    };
+  }
 }
 
 /**
@@ -289,8 +349,9 @@ async function handleHelp(): Promise<CommandResult> {
 ❌ CANCEL - Cancel latest entry
 🔧 FIX <field> <value> - Correct a field
 📋 STATUS - View latest entry status
-📊 TODAY - Today's summary
-📅 MONTH YYYY-MM - Monthly summary
+📊 TODAY - Today's AI summary
+📅 WEEK - This week's AI summary
+📆 MONTH YYYY-MM - Monthly AI summary
 📤 SEND <vendor> - Send order to vendor
 🏪 STORE S001 - Link to store
 ❓ HELP - Show this help
@@ -298,7 +359,9 @@ async function handleHelp(): Promise<CommandResult> {
 Examples:
 FIX amount 1260
 FIX vendor Pepsi
-MONTH 2026-01`;
+MONTH 2026-01
+
+💡 AI summaries include insights and recommendations!`;
 
   return {
     success: true,
