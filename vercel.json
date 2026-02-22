@@ -48,6 +48,14 @@
     {
       "source": "/api/stores",
       "destination": "/api/stores/index.ts"
+    },
+    {
+      "source": "/api/admin/phone-numbers",
+      "destination": "/api/admin/phone-numbers.ts"
+    },
+    {
+      "source": "/api/admin/stores/:storeId/phone-number",
+      "destination": "/api/admin/stores/[storeId]/phone-number.ts"
     }
   ],
   "headers": [

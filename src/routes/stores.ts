@@ -546,4 +546,126 @@ router.get('/summary', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * Link current user to a store
+ * POST /api/stores/:storeId/link
+ * Requires: Authentication (JWT token)
+ */
+router.post('/:storeId/link', async (req: Request, res: Response) => {
+  try {
+    const { storeId } = req.params;
+    const { role = 'OWNER' } = req.body;
+
+    const authUser = getAuthUser(req as any);
+    if (!authUser) {
+      return res.status(401).json({
+        error: 'Authentication required',
+      });
+    }
+
+    // Verify store exists
+    const store = await prisma.storeConfig.findUnique({
+      where: { storeId: storeId.toUpperCase() },
+    });
+
+    if (!store) {
+      return res.status(404).json({
+        error: 'Store not found',
+      });
+    }
+
+    // Check if already linked
+    const existingLink = await prisma.userStore.findUnique({
+      where: {
+        userId_storeId: {
+          userId: authUser.userId,
+          storeId: store.storeId,
+        },
+      },
+    });
+
+    if (existingLink) {
+      return res.status(400).json({
+        error: 'Already linked',
+        message: `You are already linked to store ${store.storeId} as ${existingLink.role}`,
+      });
+    }
+
+    // Create link
+    await prisma.userStore.create({
+      data: {
+        userId: authUser.userId,
+        storeId: store.storeId,
+        role: role as any,
+      },
+    });
+
+    res.json({
+      success: true,
+      message: `Successfully linked to store ${store.storeName}`,
+      store: {
+        storeId: store.storeId,
+        storeName: store.storeName,
+        role,
+      },
+    });
+    return;
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({
+      error: 'Failed to link store',
+      details: errorMessage,
+    });
+    return;
+  }
+});
+
+/**
+ * Unlink current user from a store
+ * DELETE /api/stores/:storeId/link
+ * Requires: Authentication (JWT token)
+ */
+router.delete('/:storeId/link', async (req: Request, res: Response) => {
+  try {
+    const { storeId } = req.params;
+
+    const authUser = getAuthUser(req as any);
+    if (!authUser) {
+      return res.status(401).json({
+        error: 'Authentication required',
+      });
+    }
+
+    // Remove link
+    await prisma.userStore.delete({
+      where: {
+        userId_storeId: {
+          userId: authUser.userId,
+          storeId: storeId.toUpperCase(),
+        },
+      },
+    });
+
+    res.json({
+      success: true,
+      message: `Successfully unlinked from store ${storeId.toUpperCase()}`,
+    });
+    return;
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const { storeId } = req.params;
+    if (errorMessage.includes('Record to delete does not exist')) {
+      return res.status(404).json({
+        error: 'Link not found',
+        message: `You are not linked to store ${storeId.toUpperCase()}`,
+      });
+    }
+    res.status(500).json({
+      error: 'Failed to unlink store',
+      details: errorMessage,
+    });
+    return;
+  }
+});
+
 export { router as storesRouter };

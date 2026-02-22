@@ -174,6 +174,196 @@
             border-color: var(--primary);
             box-shadow: 0 0 0 3px rgba(37, 211, 102, 0.1);
         }
+
+        .add-store-btn {
+            padding: 10px 16px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .add-store-btn:hover {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(37, 211, 102, 0.3);
+        }
+
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            font-size: 20px;
+            color: var(--text);
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--text-light);
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.2s;
+        }
+
+        .modal-close:hover {
+            background: var(--bg);
+            color: var(--text);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37, 211, 102, 0.1);
+        }
+
+        .form-group select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 14px;
+            background: white;
+            cursor: pointer;
+        }
+
+        .form-group .help-text {
+            font-size: 12px;
+            color: var(--text-light);
+            margin-top: 4px;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 24px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+        }
+
+        .btn-secondary {
+            background: var(--bg);
+            color: var(--text);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .error-message {
+            background: #fee;
+            color: var(--danger);
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .error-message.active {
+            display: block;
+        }
+
+        .success-message {
+            background: #efe;
+            color: var(--success);
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .success-message.active {
+            display: block;
+        }
         
         .user-info {
             display: flex;
@@ -767,6 +957,7 @@
                 <select id="storeSelect">
                     <option value="">Select Store...</option>
                 </select>
+                <button class="add-store-btn" id="addStoreBtn">+ Add Store</button>
             </div>
             <div class="user-info">
                 <div class="user-avatar">U</div>
@@ -774,6 +965,45 @@
                     <div style="font-weight: 600; font-size: 14px;">User</div>
                     <div style="font-size: 12px; color: var(--text-light);">Admin</div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Add Store Modal -->
+        <div class="modal" id="addStoreModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Add Store</h3>
+                    <button class="modal-close" id="closeModal">&times;</button>
+                </div>
+                <div class="error-message" id="errorMessage"></div>
+                <div class="success-message" id="successMessage"></div>
+                <form id="addStoreForm">
+                    <div class="form-group">
+                        <label for="storeIdInput">Store ID</label>
+                        <input 
+                            type="text" 
+                            id="storeIdInput" 
+                            placeholder="e.g., S001" 
+                            pattern="S\d{3}"
+                            required
+                            style="text-transform: uppercase;"
+                        />
+                        <div class="help-text">Enter the store ID (format: S001, S002, etc.)</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="roleSelect">Your Role</label>
+                        <select id="roleSelect">
+                            <option value="OWNER">Owner</option>
+                            <option value="MANAGER">Manager</option>
+                            <option value="STAFF">Staff</option>
+                        </select>
+                        <div class="help-text">Select your role for this store</div>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
+                        <button type="submit" class="btn btn-primary" id="submitBtn">Add Store</button>
+                    </div>
+                </form>
             </div>
         </div>
         
@@ -1971,6 +2201,111 @@
             } else {
                 document.getElementById('contentArea').innerHTML = '<div class="loading">Select a store to view data...</div>';
             }
+        });
+
+        // Add Store Modal functionality
+        const addStoreModal = document.getElementById('addStoreModal');
+        const addStoreBtn = document.getElementById('addStoreBtn');
+        const closeModalBtn = document.getElementById('closeModal');
+        const cancelBtn = document.getElementById('cancelBtn');
+        const addStoreForm = document.getElementById('addStoreForm');
+        const errorMessage = document.getElementById('errorMessage');
+        const successMessage = document.getElementById('successMessage');
+        const storeIdInput = document.getElementById('storeIdInput');
+        const roleSelect = document.getElementById('roleSelect');
+        const submitBtn = document.getElementById('submitBtn');
+
+        function openAddStoreModal() {
+            addStoreModal.classList.add('active');
+            storeIdInput.value = '';
+            roleSelect.value = 'OWNER';
+            errorMessage.classList.remove('active');
+            successMessage.classList.remove('active');
+            storeIdInput.focus();
+        }
+
+        function closeAddStoreModal() {
+            addStoreModal.classList.remove('active');
+            errorMessage.classList.remove('active');
+            successMessage.classList.remove('active');
+        }
+
+        addStoreBtn.addEventListener('click', openAddStoreModal);
+        closeModalBtn.addEventListener('click', closeAddStoreModal);
+        cancelBtn.addEventListener('click', closeAddStoreModal);
+
+        // Close modal when clicking outside
+        addStoreModal.addEventListener('click', (e) => {
+            if (e.target === addStoreModal) {
+                closeAddStoreModal();
+            }
+        });
+
+        // Handle form submission
+        addStoreForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const storeId = storeIdInput.value.toUpperCase().trim();
+            const role = roleSelect.value;
+
+            // Validate store ID format
+            if (!/^S\d{3}$/.test(storeId)) {
+                errorMessage.textContent = 'Invalid store ID format. Please use format: S001, S002, etc.';
+                errorMessage.classList.add('active');
+                return;
+            }
+
+            // Disable submit button
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Adding...';
+            errorMessage.classList.remove('active');
+            successMessage.classList.remove('active');
+
+            try {
+                const response = await fetch(`/api/stores/${storeId}/link`, {
+                    method: 'POST',
+                    headers: {
+                        ...getAuthHeaders(),
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ role })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    successMessage.textContent = `Successfully added store ${storeId}!`;
+                    successMessage.classList.add('active');
+                    logActivity('Store added', `Added store ${storeId} as ${role}`);
+                    
+                    // Reload stores list
+                    await loadStores();
+                    
+                    // Close modal after 1.5 seconds
+                    setTimeout(() => {
+                        closeAddStoreModal();
+                        // Auto-select the newly added store
+                        const select = document.getElementById('storeSelect');
+                        select.value = storeId;
+                        select.dispatchEvent(new Event('change'));
+                    }, 1500);
+                } else {
+                    errorMessage.textContent = data.error || data.message || 'Failed to add store';
+                    errorMessage.classList.add('active');
+                }
+            } catch (error) {
+                console.error('Error adding store:', error);
+                errorMessage.textContent = 'Network error. Please check your connection and try again.';
+                errorMessage.classList.add('active');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Add Store';
+            }
+        });
+
+        // Auto-uppercase store ID input
+        storeIdInput.addEventListener('input', (e) => {
+            e.target.value = e.target.value.toUpperCase();
         });
 
         // Tab switching (for dashboard)

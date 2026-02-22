@@ -257,4 +257,86 @@ router.get('/stores/:storeId/phone-number', async (req: Request, res: Response) 
   }
 });
 
+/**
+ * Create a new store (with optional auto-link to user)
+ * POST /api/admin/stores
+ * Body: { storeId, storeName, sheetId, timezone?, userId?, role? }
+ */
+router.post('/stores', async (req: Request, res: Response) => {
+  try {
+    const { storeId, storeName, sheetId, timezone = 'America/New_York', userId, role = 'OWNER' } = req.body;
+
+    if (!storeId || !storeName || !sheetId) {
+      return res.status(400).json({
+        error: 'Missing required fields',
+        required: ['storeId', 'storeName', 'sheetId'],
+      });
+    }
+
+    // Create store
+    const store = await prisma.storeConfig.create({
+      data: {
+        storeId: storeId.toUpperCase(),
+        storeName,
+        sheetId,
+        timezone,
+        active: true,
+      },
+    });
+
+    // Auto-link to user if userId provided (onboarding flow)
+    if (userId) {
+      try {
+        await prisma.userStore.create({
+          data: {
+            userId,
+            storeId: store.storeId,
+            role: role as any, // OWNER, MANAGER, or STAFF
+          },
+        });
+        logger.info('Store created and linked to user', {
+          storeId: store.storeId,
+          userId,
+          role,
+        });
+      } catch (linkError: any) {
+        // If link fails, store is still created
+        logger.warn('Failed to auto-link store to user', {
+          error: linkError.message,
+          storeId: store.storeId,
+          userId,
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      store: {
+        storeId: store.storeId,
+        storeName: store.storeName,
+        sheetId: store.sheetId,
+        timezone: store.timezone,
+        linkedToUser: !!userId,
+      },
+    });
+    return;
+  } catch (error: any) {
+    if (error.code === 'P2002') {
+      // Unique constraint violation
+      return res.status(400).json({
+        error: 'Store ID already exists',
+        details: `Store ${req.body.storeId} is already registered`,
+      });
+    }
+    logger.error('Failed to create store', {
+      error: error.message,
+    });
+    res.status(500).json({
+      error: 'Failed to create store',
+      details: error.message,
+    });
+    return;
+  }
+});
+
 export default router;
