@@ -38,14 +38,18 @@ export const handleWebhook = async (req: Request, res: Response) => {
       const changes = entry?.changes?.[0];
       const value = changes?.value;
 
+      // Extract phone number ID from webhook metadata (identifies which store's number)
+      const phoneNumberId = value?.metadata?.phone_number_id || null;
+
       // Log messages
       if (value?.messages) {
         logger.info('Messages received', {
           messageCount: value.messages.length,
+          phoneNumberId,
         });
 
         for (const message of value.messages) {
-          await processIncomingMessage(message);
+          await processIncomingMessage(message, phoneNumberId);
         }
       }
 
@@ -53,6 +57,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
       if (value?.statuses) {
         logger.info('Status updates received', {
           statusCount: value.statuses.length,
+          phoneNumberId,
         });
       }
     }
@@ -65,27 +70,61 @@ export const handleWebhook = async (req: Request, res: Response) => {
 
 /**
  * Process incoming WhatsApp message
- * Simplified for Step 1 - just log the message for testing
+ * @param message - WhatsApp message object
+ * @param phoneNumberId - Phone number ID from webhook (identifies which store's number)
  */
-async function processIncomingMessage(message: any) {
+async function processIncomingMessage(message: any, phoneNumberId: string | null) {
   const messageId = message.id;
   const phoneE164 = `+${message.from}`;
   const messageType = message.type;
   const text = message.text?.body || '';
   const imageId = message.image?.id || null;
 
+  // Resolve store from phone number ID (shared Meta account)
+  let storeId: string | null = null;
+  if (phoneNumberId) {
+    try {
+      const { prisma } = await import('../config/database');
+      const store = await prisma.storeConfig.findFirst({
+        where: { whatsappPhoneNumberId: phoneNumberId },
+        select: { storeId: true },
+      });
+      storeId = store?.storeId || null;
+    } catch (error: any) {
+      logger.error('Failed to resolve store from phone number ID', {
+        phoneNumberId,
+        error: error.message,
+      });
+    }
+  }
+
   logger.info('📱 WhatsApp Message Received', {
     messageId,
     phoneE164,
+    phoneNumberId,
+    storeId,
     messageType,
     text: text.substring(0, 100), // Log first 100 chars
     imageId,
     timestamp: new Date().toISOString(),
-    fullMessage: JSON.stringify(message, null, 2), // Log full message for debugging
   });
 
-  // For Step 1, we're just logging - no processing yet
-  // This confirms webhook is working correctly
-  // TODO: Add message processing logic in next steps
+  // Queue message for processing (existing logic)
+  try {
+    const { addToMessageQueue } = await import('../queues/messageQueue');
+    await addToMessageQueue({
+      messageId,
+      phoneE164,
+      messageText: text || undefined,
+      mediaId: imageId || undefined,
+      mediaType: messageType === 'image' ? 'image/jpeg' : undefined,
+      storeId: storeId || undefined, // Pass storeId if resolved from phone number
+    });
+  } catch (error: any) {
+    logger.error('Failed to queue message', {
+      error: error.message,
+      messageId,
+    });
+  }
 }
 

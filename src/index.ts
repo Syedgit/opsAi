@@ -8,6 +8,7 @@ import { whatsappRouter } from './routes/whatsapp';
 import { storesRouter } from './routes/stores';
 import { authRouter } from './routes/auth';
 import { testRouter } from './routes/test';
+import adminRouter from './routes/admin';
 import { errorHandler } from './middleware/errorHandler';
 
 dotenv.config();
@@ -114,6 +115,8 @@ app.use('/whatsapp', whatsappRouter);
 app.use('/api/auth', authRouter);
 // Stores API routes (for dashboard)
 app.use('/api/stores', storesRouter);
+// Admin routes (for phone number provisioning)
+app.use('/api/admin', adminRouter);
 // Test routes (for local testing)
 app.use('/api/test', testRouter);
 

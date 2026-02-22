@@ -187,7 +187,7 @@ router.get('/get-phone-info', async (_req, res) => {
  * Body: { phone: "+1234567890", message: "Test message" }
  */
 router.post('/mock-webhook', async (req, res) => {
-  const { phone, message, type = 'text' } = req.body;
+  const { phone, message, type = 'text', phoneNumberId, storeId } = req.body;
 
   if (!phone || !message) {
     res.status(400).json({
@@ -197,9 +197,28 @@ router.post('/mock-webhook', async (req, res) => {
         phone: '+17329397703',
         message: 'Sales today: Cash $2100, Card $5400',
         type: 'text',
+        phoneNumberId: '933263666546131', // Optional: use specific phone number ID
+        storeId: 'S001', // Optional: will lookup phone number ID if provided
       },
     });
     return;
+  }
+
+  // Lookup phone number ID from store if storeId provided
+  let finalPhoneNumberId = phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID || '869870982886772';
+  if (storeId && !phoneNumberId) {
+    try {
+      const { prisma } = await import('../config/database');
+      const store = await prisma.storeConfig.findUnique({
+        where: { storeId },
+        select: { whatsappPhoneNumberId: true, whatsappDisplayNumber: true },
+      });
+      if (store?.whatsappPhoneNumberId) {
+        finalPhoneNumberId = store.whatsappPhoneNumberId;
+      }
+    } catch (error) {
+      // Fallback to default if lookup fails
+    }
   }
 
   // Simulate WhatsApp webhook payload
@@ -214,7 +233,7 @@ router.post('/mock-webhook', async (req, res) => {
               messaging_product: 'whatsapp',
               metadata: {
                 display_phone_number: '15558608667',
-                phone_number_id: process.env.WHATSAPP_PHONE_NUMBER_ID || '869870982886772',
+                phone_number_id: finalPhoneNumberId,
               },
               messages: [
                 {

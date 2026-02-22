@@ -76,6 +76,12 @@ model StoreConfig {
   sheetId   String   @map("sheet_id")
   timezone  String   @default("America/New_York")
   active    Boolean  @default(true)
+  
+  // WhatsApp phone number ID (for shared Meta account)
+  // Each store gets its own phone number under our Meta Business Account
+  whatsappPhoneNumberId String? @map("whatsapp_phone_number_id")
+  whatsappDisplayNumber String? @map("whatsapp_display_number") // Human-readable number
+  
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -84,6 +90,7 @@ model StoreConfig {
 
   @@map("store_config")
   @@index([storeId])
+  @@index([whatsappPhoneNumberId])
 }
 
 model PendingActions {

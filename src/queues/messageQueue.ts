@@ -89,10 +89,14 @@ export async function queueMessage(data: {
   messageText?: string;
   mediaId?: string;
   mediaType?: string;
+  storeId?: string; // Optional: pre-resolved store ID
 }): Promise<void> {
   await messageQueue.add('process-message', data, {
     jobId: data.messageId, // Use messageId as jobId for idempotency
   });
-  logger.info('Message queued', { messageId: data.messageId });
+  logger.info('Message queued', { messageId: data.messageId, storeId: data.storeId });
 }
+
+// Alias for backward compatibility
+export const addToMessageQueue = queueMessage;
 

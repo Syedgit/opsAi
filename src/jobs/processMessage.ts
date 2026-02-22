@@ -14,13 +14,14 @@ export interface ProcessMessageJobData {
   messageText?: string;
   mediaId?: string;
   mediaType?: string;
+  storeId?: string; // Optional: pre-resolved store ID from phone number
 }
 
 /**
  * Main message processing job
  */
 export async function processMessageJob(data: ProcessMessageJobData): Promise<void> {
-  const { messageId, phoneE164, messageText, mediaId, mediaType } = data;
+  const { messageId, phoneE164, messageText, mediaId, mediaType, storeId: preResolvedStoreId } = data;
 
   try {
     // Check idempotency
@@ -39,19 +40,23 @@ export async function processMessageJob(data: ProcessMessageJobData): Promise<vo
     });
 
     // Step 2: Resolve store
-    const storeResolution = await resolveStore(phoneE164, messageText);
-
-    if (storeResolution.isUnlinked) {
-      await sendConfirmationMessage(
-        phoneE164,
-        '📱 Store not linked.\n\nReply STORE S001 to link your number to a store.',
-        ''
-      );
-      await updateMessageLog(messageId, { processed: true });
-      return;
+    // If storeId was pre-resolved from phone number ID, use it; otherwise resolve from phone/user
+    let storeId: string | null = preResolvedStoreId || null;
+    
+    if (!storeId) {
+      const storeResolution = await resolveStore(phoneE164, messageText);
+      if (storeResolution.isUnlinked) {
+        await sendConfirmationMessage(
+          phoneE164,
+          '📱 Store not linked.\n\nReply STORE S001 to link your number to a store.',
+          '',
+          undefined // No storeId yet
+        );
+        await updateMessageLog(messageId, { processed: true });
+        return;
+      }
+      storeId = storeResolution.storeId!;
     }
-
-    const storeId = storeResolution.storeId!;
 
     // Step 3: Handle media if present
     let imageBuffer: Buffer | undefined;
@@ -80,7 +85,8 @@ export async function processMessageJob(data: ProcessMessageJobData): Promise<vo
       await sendConfirmationMessage(
         phoneE164,
         '❓ Could not classify message. Please try again with clearer details.',
-        ''
+        '',
+        storeId
       );
       await updateMessageLog(messageId, {
         classification: ClassificationType.UNKNOWN,
@@ -114,7 +120,7 @@ export async function processMessageJob(data: ProcessMessageJobData): Promise<vo
 
     // Step 7: Send confirmation message
     const summary = formatExtractionSummary(classification.type, extraction.fields);
-    await sendConfirmationMessage(phoneE164, summary, actionId);
+    await sendConfirmationMessage(phoneE164, summary, actionId, storeId);
 
     // Mark as processed
     await updateMessageLog(messageId, { processed: true });

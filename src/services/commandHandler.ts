@@ -164,7 +164,8 @@ async function handleFix(phoneE164: string, args: string[]): Promise<CommandResu
   const summary = formatPendingSummary(pending.type, payload);
   await sendWhatsAppMessage(
     phoneE164,
-    `🔧 Updated:\n\n${summary}\n\nReply OK to confirm or FIX to change more.`
+    `🔧 Updated:\n\n${summary}\n\nReply OK to confirm or FIX to change more.`,
+    pending.storeId
   );
 
   return {
