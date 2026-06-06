@@ -11,7 +11,11 @@ export const verifySignature = (
   const appSecret = process.env.WHATSAPP_APP_SECRET;
 
   if (!appSecret) {
-    logger.warn('WHATSAPP_APP_SECRET not configured');
+    if (process.env.NODE_ENV === 'production') {
+      logger.error('WHATSAPP_APP_SECRET is required in production');
+      return res.status(500).json({ error: 'Webhook verification not configured' });
+    }
+    logger.warn('WHATSAPP_APP_SECRET not configured (dev only)');
     return next();
   }
 
@@ -28,7 +32,12 @@ export const verifySignature = (
 
   const providedSignature = signature.replace('sha256=', '');
 
-  if (providedSignature !== expectedSignature) {
+  const expectedBuf = Buffer.from(expectedSignature, 'utf8');
+  const providedBuf = Buffer.from(providedSignature, 'utf8');
+  if (
+    expectedBuf.length !== providedBuf.length ||
+    !crypto.timingSafeEqual(expectedBuf, providedBuf)
+  ) {
     logger.warn('Invalid webhook signature');
     return res.status(401).json({ error: 'Invalid signature' });
   }

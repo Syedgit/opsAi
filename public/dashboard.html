@@ -114,6 +114,61 @@
             border-top: 1px solid rgba(255,255,255,0.1);
         }
         
+        .whatsapp-setup-card {
+            background: linear-gradient(135deg, #e8f8ef 0%, #ffffff 100%);
+            border: 1px solid #b8e6c8;
+            border-radius: 12px;
+            padding: 20px 24px;
+            margin-bottom: 24px;
+        }
+        .whatsapp-setup-card h3 {
+            font-size: 18px;
+            margin-bottom: 8px;
+            color: var(--secondary);
+        }
+        .whatsapp-setup-card p {
+            color: var(--text-light);
+            font-size: 14px;
+            line-height: 1.5;
+            margin-bottom: 12px;
+        }
+        .whatsapp-status {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+        .whatsapp-status.pending { background: #fef3c7; color: #92400e; }
+        .whatsapp-status.linked { background: #d1fae5; color: #065f46; }
+        .whatsapp-status.failed { background: #fee2e2; color: #991b1b; }
+        .whatsapp-status.none { background: #f3f4f6; color: #4b5563; }
+        .invite-link-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+            margin-top: 8px;
+        }
+        .invite-link-row input {
+            flex: 1;
+            min-width: 200px;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 13px;
+        }
+        .btn-copy {
+            padding: 10px 16px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
         .menu-section-title {
             padding: 0 20px 12px;
             font-size: 11px;
@@ -991,13 +1046,17 @@
                         <div class="help-text">Enter the store ID (format: S001, S002, etc.)</div>
                     </div>
                     <div class="form-group">
+                        <label for="inviteCodeInput">Invite Code</label>
+                        <input type="text" id="inviteCodeInput" placeholder="From your store owner" required />
+                        <div class="help-text">Ask your store owner for the team invite code</div>
+                    </div>
+                    <div class="form-group">
                         <label for="roleSelect">Your Role</label>
                         <select id="roleSelect">
-                            <option value="OWNER">Owner</option>
-                            <option value="MANAGER">Manager</option>
                             <option value="STAFF">Staff</option>
+                            <option value="MANAGER">Manager</option>
                         </select>
-                        <div class="help-text">Select your role for this store</div>
+                        <div class="help-text">New stores are created during signup — use this to join an existing team</div>
                     </div>
                     <div class="modal-actions">
                         <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
@@ -1056,6 +1115,16 @@
                             </div>
                             <div class="stat-card-icon pending">⚠️</div>
                         </div>
+                    </div>
+                </div>
+
+                <div class="whatsapp-setup-card" id="whatsappSetupCard">
+                    <h3>WhatsApp ops group</h3>
+                    <p>One opsAi number for all stores. Create your own group, add our business number, and message from your registered phone to connect.</p>
+                    <div id="whatsappProvisionStatus" class="whatsapp-status none">Checking…</div>
+                    <div id="whatsappProvisionBody">
+                        <p id="whatsappProvisionMessage">Loading group status…</p>
+                        <ol id="whatsappManualSteps" class="steps-list" style="display:none; margin-top:12px; padding-left:20px; font-size:14px; line-height:1.6; color: var(--text-light);"></ol>
                     </div>
                 </div>
                 
@@ -1152,7 +1221,7 @@
 
     <script>
         // Configuration: Set to false when Facebook verification is complete and you want real data
-        const USE_MOCK_DATA = true; // Currently using mock data until Facebook verification
+        const USE_MOCK_DATA = false;
         
         // Authentication
         // Check for token in URL (from OAuth callback)
@@ -1163,70 +1232,30 @@
             window.history.replaceState({}, document.title, '/dashboard');
         }
         
-        const authToken = localStorage.getItem('authToken');
         let currentUser = null;
         
-        // Check authentication on page load
-        (async function checkAuth() {
-            if (!authToken) {
-                window.location.href = '/login';
-                return;
-            }
-            
-            try {
-                const response = await fetch('/api/auth/me', {
-                    headers: {
-                        'Authorization': `Bearer ${authToken}`
-                    }
-                });
-                
-                if (!response.ok) {
-                    localStorage.removeItem('authToken');
-                    localStorage.removeItem('user');
-                    window.location.href = '/login';
-                    return;
-                }
-                
-                const data = await response.json();
-                if (data.success) {
-                    currentUser = data.user;
-                    localStorage.setItem('user', JSON.stringify(data.user));
-                    updateUserMenu(data.user);
-                }
-            } catch (error) {
-                console.error('Auth check failed:', error);
-                localStorage.removeItem('authToken');
-                localStorage.removeItem('user');
-                window.location.href = '/login';
-            }
-        })();
-        
-        // Update user menu in sidebar
-        function updateUserMenu(user) {
-            const userInfo = document.getElementById('userInfo');
-            if (userInfo && user.name) {
-                userInfo.innerHTML = `
-                    <div style="padding: 16px; border-top: 1px solid var(--border);">
-                        <div style="font-weight: 600; margin-bottom: 4px;">${user.name || user.email}</div>
-                        <div style="font-size: 12px; color: var(--text-light);">${user.email}</div>
-                        <button onclick="logout()" style="margin-top: 12px; width: 100%; padding: 8px; background: #fee; color: #c33; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">Logout</button>
-                    </div>
-                `;
-            }
-        }
-        
-        // Logout function
-        function logout() {
-            localStorage.removeItem('authToken');
-            localStorage.removeItem('user');
-            window.location.href = '/login';
-        }
-        
-        // Helper function to get auth headers
         function getAuthHeaders() {
             const token = localStorage.getItem('authToken');
-            return token ? { 'Authorization': `Bearer ${token}` } : {};
+            if (token) {
+                return { Authorization: 'Bearer ' + token };
+            }
+            return {};
         }
+
+        (async function redirectIfNeedsOnboarding() {
+            const token = localStorage.getItem('authToken');
+            if (!token) return;
+            if (localStorage.getItem('skipOwnerOnboarding') === '1') return;
+            try {
+                const r = await fetch('/api/onboarding/status', {
+                    headers: { Authorization: 'Bearer ' + token },
+                });
+                const d = await r.json();
+                if (d.success && d.needsOnboarding) {
+                    window.location.replace('/onboarding');
+                }
+            } catch (_) {}
+        })();
         
         let currentStoreId = '';
         let currentTab = 'sales';
@@ -1338,6 +1367,90 @@
             }
         }
 
+        async function loadWhatsAppProvision(storeId) {
+            const statusEl = document.getElementById('whatsappProvisionStatus');
+            const messageEl = document.getElementById('whatsappProvisionMessage');
+            const stepsEl = document.getElementById('whatsappManualSteps');
+            const bodyEl = document.getElementById('whatsappProvisionBody');
+            if (!storeId || !statusEl || !messageEl) return;
+
+            const oldLink = document.getElementById('whatsappInviteRow');
+            if (oldLink) oldLink.remove();
+            if (stepsEl) stepsEl.style.display = 'none';
+
+            if (USE_MOCK_DATA) {
+                statusEl.textContent = 'Demo mode';
+                statusEl.className = 'whatsapp-status none';
+                messageEl.textContent = 'WhatsApp group status is available when using live data.';
+                return;
+            }
+
+            try {
+                const r = await fetch(`/api/stores/${encodeURIComponent(storeId)}/whatsapp-group-provision`, {
+                    headers: getAuthHeaders(),
+                });
+                const data = await r.json();
+                if (!r.ok) {
+                    statusEl.textContent = 'Unavailable';
+                    statusEl.className = 'whatsapp-status none';
+                    messageEl.textContent = data.error || 'Could not load WhatsApp group status.';
+                    return;
+                }
+
+                const linked = data.activeGroups && data.activeGroups.length > 0;
+                const isAuto = data.autoProvisionEnabled === true;
+
+                if (linked) {
+                    statusEl.textContent = 'Connected';
+                    statusEl.className = 'whatsapp-status linked';
+                    messageEl.textContent = 'Your WhatsApp ops group is linked to this store. Send sales, invoices, or photos in the group and reply OK to confirm.';
+                    return;
+                }
+
+                if (isAuto && data.provision) {
+                    const prov = data.provision;
+                    const statusMap = {
+                        PENDING_WEBHOOK: { label: 'Creating group…', cls: 'pending', msg: 'Your ops group is being created. This usually takes under a minute.' },
+                        LINKED: { label: 'Ready', cls: 'linked', msg: 'Your group is ready. Share the invite link with your team.' },
+                        FAILED: { label: 'Failed', cls: 'failed', msg: prov.lastError || 'Group creation failed.' },
+                    };
+                    const info = statusMap[prov.status] || { label: prov.status, cls: 'none', msg: '' };
+                    statusEl.textContent = info.label;
+                    statusEl.className = 'whatsapp-status ' + info.cls;
+                    messageEl.textContent = info.msg;
+                    if (prov.status === 'LINKED' && prov.inviteLink) {
+                        const row = document.createElement('div');
+                        row.id = 'whatsappInviteRow';
+                        row.className = 'invite-link-row';
+                        row.innerHTML = '<input type="text" readonly id="whatsappInviteLink" /><button type="button" class="btn-copy" id="copyInviteBtn">Copy invite link</button>';
+                        bodyEl.appendChild(row);
+                        document.getElementById('whatsappInviteLink').value = prov.inviteLink;
+                        document.getElementById('copyInviteBtn').addEventListener('click', () => {
+                            navigator.clipboard.writeText(prov.inviteLink);
+                        });
+                    }
+                    return;
+                }
+
+                statusEl.textContent = 'Not connected';
+                statusEl.className = 'whatsapp-status pending';
+                messageEl.textContent = 'Connect your ops group manually:';
+                if (stepsEl) {
+                    stepsEl.style.display = 'block';
+                    stepsEl.innerHTML = [
+                        '<li>Create a WhatsApp group and add the opsAi business number.</li>',
+                        '<li>From your registered owner phone, send any message in that group.</li>',
+                        '<li>opsAi will confirm when the group is linked.</li>',
+                        '<li>Invite staff to the group — they message from phones you register later.</li>',
+                    ].join('');
+                }
+            } catch (e) {
+                statusEl.textContent = 'Error';
+                statusEl.className = 'whatsapp-status failed';
+                messageEl.textContent = 'Failed to load WhatsApp group status.';
+            }
+        }
+
         // Load dashboard stats
         async function loadDashboard(storeId) {
             if (!storeId) {
@@ -1376,6 +1489,7 @@
                 document.getElementById('pendingCount').textContent = data.pending || 0;
                 
                 logActivity('Dashboard loaded', `Loaded dashboard for store ${storeId}`);
+                await loadWhatsAppProvision(storeId);
             } catch (error) {
                 console.error('Error loading dashboard:', error);
                 document.getElementById('todaySales').textContent = '3';
@@ -2218,7 +2332,8 @@
         function openAddStoreModal() {
             addStoreModal.classList.add('active');
             storeIdInput.value = '';
-            roleSelect.value = 'OWNER';
+            roleSelect.value = 'STAFF';
+            document.getElementById('inviteCodeInput').value = '';
             errorMessage.classList.remove('active');
             successMessage.classList.remove('active');
             storeIdInput.focus();
@@ -2247,6 +2362,15 @@
             
             const storeId = storeIdInput.value.toUpperCase().trim();
             const role = roleSelect.value;
+            const inviteCode = document.getElementById('inviteCodeInput').value.trim();
+
+            if (!inviteCode) {
+                errorMessage.textContent = 'Invite code is required to join a store.';
+                errorMessage.classList.add('active');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Add Store';
+                return;
+            }
 
             // Validate store ID format
             if (!/^S\d{3}$/.test(storeId)) {
@@ -2268,7 +2392,7 @@
                         ...getAuthHeaders(),
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ role })
+                    body: JSON.stringify({ role, inviteCode })
                 });
 
                 const data = await response.json();

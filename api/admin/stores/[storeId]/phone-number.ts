@@ -1,12 +1,15 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
 import axios from 'axios';
+import { requireAdmin } from '../../../utils/auth';
 
 const prisma = new PrismaClient();
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v22.0';
 const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (!requireAdmin(req, res)) return;
+
   const { storeId } = req.query;
 
   if (req.method === 'POST') {

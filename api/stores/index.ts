@@ -1,7 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
 import { startOfDay, endOfDay, startOfMonth, endOfMonth } from 'date-fns';
-import { getAuthUser } from '../utils/auth';
+import { requireAuthUser } from '../utils/auth';
+import { requireStoreAccess } from '../utils/storeAccess';
 
 const prisma = new PrismaClient();
 
@@ -34,25 +35,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
 
     try {
-      const authUser = getAuthUser(req);
-      if (authUser) {
-        const userStores = await prisma.userStore.findMany({
-          where: { userId: authUser.userId },
-          include: { store: { select: { storeId: true, storeName: true, timezone: true, active: true } } },
-        });
-        const stores = userStores
-          .filter((us) => us.store.active)
-          .map((us) => ({
-            storeId: us.store.storeId,
-            storeName: us.store.storeName,
-            timezone: us.store.timezone,
-            active: us.store.active,
-            role: us.role,
-          }));
-        res.json({ stores });
-      } else {
-        res.json({ stores: [] });
-      }
+      const authUser = requireAuthUser(req, res);
+      if (!authUser) return;
+
+      const userStores = await prisma.userStore.findMany({
+        where: { userId: authUser.userId },
+        include: { store: { select: { storeId: true, storeName: true, timezone: true, active: true } } },
+      });
+      const stores = userStores
+        .filter((us) => us.store.active)
+        .map((us) => ({
+          storeId: us.store.storeId,
+          storeName: us.store.storeName,
+          timezone: us.store.timezone,
+          active: us.store.active,
+          role: us.role,
+        }));
+      res.json({ stores });
     } catch (error: unknown) {
       res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
     }
@@ -73,6 +72,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
 
     try {
+      const access = await requireStoreAccess(req, res, prisma, storeId, useMock);
+      if (!useMock && !access) return;
+
       const today = new Date();
       const todayStart = startOfDay(today);
       const todayEnd = endOfDay(today);
@@ -114,6 +116,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
 
     try {
+      const access = await requireStoreAccess(req, res, prisma, storeId, useMock);
+      if (!useMock && !access) return;
+
       const dbTypeMap: Record<string, string> = {
         sales: 'STORE_SALES',
         invoices: 'INVOICE_EXPENSE',
@@ -150,11 +155,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
-  // Data by type (sales, invoices, fuel, etc.)
+  // Data by type — handled by api/stores/data.ts (see vercel.json rewrite)
   if (path.includes('/data')) {
-    // Import logic from data.ts - for now return 501, will be handled by data.ts file
-    // Actually, let's keep data.ts separate since it has complex mock data
-    res.status(404).json({ error: 'Use /api/stores/data.ts directly' });
+    res.status(404).json({ error: 'Not found' });
     return;
   }
 

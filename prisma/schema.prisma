@@ -79,7 +79,7 @@ model StoreConfig {
   
   // WhatsApp phone number ID (for shared Meta account)
   // Each store gets its own phone number under our Meta Business Account
-  whatsappPhoneNumberId String? @map("whatsapp_phone_number_id")
+  whatsappPhoneNumberId String? @unique @map("whatsapp_phone_number_id")
   whatsappDisplayNumber String? @map("whatsapp_display_number") // Human-readable number
   
   createdAt DateTime @default(now()) @map("created_at")
@@ -88,9 +88,61 @@ model StoreConfig {
   // Many-to-many relationship with users
   users UserStore[]
 
+  // Optional: one business number, many groups — Meta group_id → store
+  whatsappGroups StoreWhatsAppGroup[]
+
+  /// Meta Groups API: async create tracked until group_lifecycle webhook links group_id
+  whatsappGroupProvisions WhatsAppGroupProvision[]
+
   @@map("store_config")
   @@index([storeId])
   @@index([whatsappPhoneNumberId])
+}
+
+// Maps Meta WhatsApp group_id (from Cloud API / Groups) to a store (when using group-based routing)
+model StoreWhatsAppGroup {
+  id              String   @id @default(uuid())
+  whatsappGroupId String   @unique @map("whatsapp_group_id")
+  storeId         String   @map("store_id")
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  store StoreConfig @relation(fields: [storeId], references: [storeId], onDelete: Cascade)
+
+  @@map("store_whatsapp_groups")
+  @@index([storeId])
+  @@index([whatsappGroupId])
+}
+
+enum WhatsAppGroupProvisionStatus {
+  PENDING_WEBHOOK
+  LINKED
+  FAILED
+}
+
+/// Tracks POST /phone_number_id/groups until Meta sends group_lifecycle_update (request_id correlation).
+model WhatsAppGroupProvision {
+  id               String                       @id @default(uuid())
+  storeId          String                       @map("store_id")
+  createdByUserId  String?                      @map("created_by_user_id")
+  status           WhatsAppGroupProvisionStatus @default(PENDING_WEBHOOK)
+  subject          String
+  description      String?
+  joinApprovalMode String                       @default("auto_approve") @map("join_approval_mode")
+  /// Meta Groups API request_id from create response + webhook
+  metaRequestId    String?                      @unique @map("meta_request_id")
+  whatsappGroupId  String?                      @map("whatsapp_group_id")
+  inviteLink       String?                      @map("invite_link")
+  lastError        String?                      @map("last_error")
+  createdAt        DateTime                     @default(now()) @map("created_at")
+  updatedAt        DateTime                     @updatedAt @map("updated_at")
+
+  store StoreConfig @relation(fields: [storeId], references: [storeId], onDelete: Cascade)
+
+  @@map("whatsapp_group_provisions")
+  @@index([storeId])
+  @@index([status])
 }
 
 model PendingActions {

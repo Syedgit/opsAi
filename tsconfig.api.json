@@ -2,8 +2,8 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "./dist-api",
-    "rootDir": "./api"
+    "rootDir": "."
   },
-  "include": ["api/**/*"],
+  "include": ["api/**/*", "lib/**/*"],
   "exclude": ["node_modules", "dist", "**/*.test.ts"]
 }

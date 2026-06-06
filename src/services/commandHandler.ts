@@ -449,9 +449,10 @@ async function handleStoreLink(phoneE164: string, storeId?: string): Promise<Com
  */
 function formatPendingSummary(type: string, payload: any): string {
   switch (type) {
-    case 'ORDER_REQUEST':
+    case 'ORDER_REQUEST': {
       const vendors = payload.vendor_groups || [];
       return `Order Request\n${vendors.map((v: any) => `- ${v.vendor}: ${v.items?.length || 0} items`).join('\n')}`;
+    }
 
     case 'INVOICE_EXPENSE':
       return `Invoice/Expense\nVendor: ${payload.vendor || 'N/A'}\nAmount: $${payload.amount || 0}\nDate: ${payload.invoice_date || 'N/A'}`;

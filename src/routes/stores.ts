@@ -1,8 +1,10 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, UserRole } from '@prisma/client';
 import { getAuthUser } from '../../api/utils/auth';
 import { generateBusinessSummary, BusinessSummary } from '../services/aiSummarization';
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, format } from 'date-fns';
+import { isGroupAutoProvisionEnabled } from '../../lib/whatsappGroupConfig';
+import { startWhatsAppGroupProvision } from '../../lib/whatsappGroupProvision';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -285,7 +287,7 @@ function generateMockSummary(
  * GET /api/stores?mock=true
  */
 router.get('/', async (req: Request, res: Response) => {
-  const useMock = req.query.mock === 'true';
+  const useMock = req.query.mock === 'true' || req.query.mock === undefined; // Default to mock mode
 
   if (useMock) {
     res.json({
@@ -331,7 +333,7 @@ router.get('/', async (req: Request, res: Response) => {
  */
 router.get('/dashboard', async (req: Request, res: Response) => {
   const storeId = (req.query.storeId as string) || 'S001';
-  const useMock = req.query.mock === 'true';
+  const useMock = req.query.mock === 'true' || req.query.mock === undefined; // Default to mock mode
 
   if (useMock) {
     const storeStats: Record<string, any> = {
@@ -379,7 +381,7 @@ router.get('/dashboard', async (req: Request, res: Response) => {
 router.get('/data', async (req: Request, res: Response) => {
   const storeId = (req.query.storeId as string) || 'S001';
   const type = (req.query.type as string) || 'sales';
-  const useMock = req.query.mock === 'true';
+  const useMock = req.query.mock === 'true' || req.query.mock === undefined; // Default to mock mode
 
   if (useMock) {
     // Import mock data helper from data.ts logic
@@ -508,7 +510,7 @@ router.get('/detail', async (req: Request, res: Response) => {
 router.get('/summary', async (req: Request, res: Response) => {
   const storeId = req.query.storeId as string;
   const period = (req.query.period as 'today' | 'week' | 'month') || 'today';
-  const useMock = req.query.mock === 'true';
+  const useMock = req.query.mock === 'true' || req.query.mock === undefined; // Default to mock mode
 
   if (!storeId) {
     res.status(400).json({ error: 'Store ID required (?storeId=S001)' });
@@ -543,6 +545,157 @@ router.get('/summary', async (req: Request, res: Response) => {
       error: 'Failed to generate summary',
       details: errorMessage,
     });
+  }
+});
+
+const MANAGE_GROUP_ROLES: UserRole[] = [UserRole.OWNER, UserRole.MANAGER];
+
+/**
+ * Start Meta Groups API group creation for this store (completes via group_lifecycle webhook).
+ * POST /api/stores/:storeId/whatsapp-group/provision
+ * Body: { subject: string, description?: string, joinApprovalMode?: "auto_approve" | "approval_required" }
+ */
+router.post('/:storeId/whatsapp-group/provision', async (req: Request, res: Response) => {
+  try {
+    const storeId = req.params.storeId?.toUpperCase();
+    const authUser = getAuthUser(req as any);
+    if (!authUser) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+
+    const membership = await prisma.userStore.findFirst({
+      where: { userId: authUser.userId, storeId, role: { in: MANAGE_GROUP_ROLES } },
+    });
+    if (!membership) {
+      res.status(403).json({ error: 'Only store owners or managers can provision a WhatsApp group' });
+      return;
+    }
+
+    if (!isGroupAutoProvisionEnabled()) {
+      res.status(400).json({
+        error: 'Automatic group creation is disabled. Create a WhatsApp group manually and message from your registered phone to connect it.',
+        groupSetupMode: 'manual',
+      });
+      return;
+    }
+
+    const body = req.body as {
+      subject?: string;
+      description?: string;
+      joinApprovalMode?: 'auto_approve' | 'approval_required';
+    };
+    const subject = typeof body.subject === 'string' ? body.subject.trim() : '';
+    if (!subject || subject.length > 128) {
+      res.status(400).json({ error: 'subject is required (max 128 characters)' });
+      return;
+    }
+
+    const store = await prisma.storeConfig.findUnique({ where: { storeId } });
+    if (!store) {
+      res.status(404).json({ error: 'Store not found' });
+      return;
+    }
+
+    const existingGroup = await prisma.storeWhatsAppGroup.findFirst({
+      where: { storeId, active: true },
+    });
+    if (existingGroup) {
+      res.status(409).json({
+        error: 'This store already has an active WhatsApp group mapping',
+        whatsappGroupId: existingGroup.whatsappGroupId,
+      });
+      return;
+    }
+
+    const prov = await startWhatsAppGroupProvision(prisma, {
+      storeId,
+      userId: authUser.userId,
+      subject,
+      description: typeof body.description === 'string' ? body.description : undefined,
+      joinApprovalMode: body.joinApprovalMode,
+    });
+
+    if (!prov.ok) {
+      res.status(prov.status).json({
+        error: prov.error,
+        ...(prov.details !== undefined ? { details: prov.details } : {}),
+      });
+      return;
+    }
+
+    const provision = prov.provision;
+
+    res.status(202).json({
+      success: true,
+      message:
+        'Group creation started. Subscribe to Meta webhooks (group_lifecycle_update). When Meta confirms, invite_link and group_id will be saved.',
+      provision: {
+        id: provision.id,
+        storeId: provision.storeId,
+        status: provision.status,
+        subject: provision.subject,
+        metaRequestId: provision.metaRequestId,
+      },
+    });
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('WhatsApp group provision failed', errorMessage);
+    res.status(500).json({ error: 'Failed to start group provisioning', details: errorMessage });
+  }
+});
+
+/**
+ * Latest provision + active group mappings for a store
+ * GET /api/stores/:storeId/whatsapp-group/provision
+ */
+router.get('/:storeId/whatsapp-group/provision', async (req: Request, res: Response) => {
+  try {
+    const storeId = req.params.storeId?.toUpperCase();
+    const authUser = getAuthUser(req as any);
+    if (!authUser) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+
+    const membership = await prisma.userStore.findFirst({
+      where: { userId: authUser.userId, storeId },
+    });
+    if (!membership) {
+      res.status(403).json({ error: 'Not a member of this store' });
+      return;
+    }
+
+    const provision = await prisma.whatsAppGroupProvision.findFirst({
+      where: { storeId },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    const groups = await prisma.storeWhatsAppGroup.findMany({
+      where: { storeId, active: true },
+      select: { id: true, whatsappGroupId: true, createdAt: true },
+    });
+
+    res.json({
+      success: true,
+      provision: provision
+        ? {
+            id: provision.id,
+            status: provision.status,
+            subject: provision.subject,
+            description: provision.description,
+            metaRequestId: provision.metaRequestId,
+            whatsappGroupId: provision.whatsappGroupId,
+            inviteLink: provision.inviteLink,
+            lastError: provision.lastError,
+            updatedAt: provision.updatedAt,
+          }
+        : null,
+      activeGroups: groups,
+    });
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: 'Failed to load provision status', details: errorMessage });
   }
 });
 

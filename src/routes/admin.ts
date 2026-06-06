@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../config/database';
 import { logger } from '../utils/logger';
+import { getWhatsAppStoreRoutingMode } from '../../lib/whatsappStoreResolution';
 import axios from 'axios';
 
 const router = Router();
@@ -10,16 +11,170 @@ const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const BUSINESS_ACCOUNT_ID = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
 
 /**
- * List available phone numbers from Meta Business Account
+ * Current WhatsApp store routing mode (from WHATSAPP_STORE_ROUTING)
+ * GET /api/admin/setup/whatsapp-routing
+ */
+router.get('/setup/whatsapp-routing', (_req: Request, res: Response) => {
+  const mode = getWhatsAppStoreRoutingMode();
+  res.json({
+    success: true,
+    WHATSAPP_STORE_ROUTING: mode,
+    description: {
+      phone_number: 'Resolve store by business phone number ID only (per-store numbers on WABA).',
+      group: 'Resolve store by Meta group_id only (map rows in store_whatsapp_groups).',
+      both: 'Try group_id first, then phone number ID (recommended when using two patterns).',
+    }[mode],
+  });
+  return;
+});
+
+/**
+ * Link a Meta WhatsApp group_id to a store (for group / both routing)
+ * POST /api/admin/stores/:storeId/whatsapp-group
+ * Body: { whatsappGroupId: string }
+ */
+router.post('/stores/:storeId/whatsapp-group', async (req: Request, res: Response) => {
+  try {
+    const { storeId } = req.params;
+    const { whatsappGroupId } = req.body;
+    if (!whatsappGroupId || typeof whatsappGroupId !== 'string') {
+      res.status(400).json({ error: 'whatsappGroupId is required' });
+      return;
+    }
+    const trimmed = whatsappGroupId.trim();
+    const store = await prisma.storeConfig.findUnique({ where: { storeId } });
+    if (!store) {
+      res.status(404).json({ error: 'Store not found' });
+      return;
+    }
+    const existing = await prisma.storeWhatsAppGroup.findFirst({
+      where: { whatsappGroupId: trimmed, active: true },
+    });
+    if (existing && existing.storeId !== storeId) {
+      res.status(400).json({
+        error: 'This WhatsApp group is already linked to another store',
+        otherStoreId: existing.storeId,
+      });
+      return;
+    }
+    const row = await prisma.storeWhatsAppGroup.upsert({
+      where: { whatsappGroupId: trimmed },
+      create: { whatsappGroupId: trimmed, storeId },
+      update: { storeId, active: true },
+    });
+    res.json({
+      success: true,
+      mapping: { id: row.id, storeId: row.storeId, whatsappGroupId: row.whatsappGroupId, active: row.active },
+    });
+    return;
+  } catch (error: any) {
+    logger.error('Failed to link WhatsApp group', { error: error.message });
+    res.status(500).json({ error: 'Failed to link WhatsApp group', details: error.message });
+    return;
+  }
+});
+
+/**
+ * GET /api/admin/stores/:storeId/whatsapp-group
+ */
+router.get('/stores/:storeId/whatsapp-group', async (req: Request, res: Response) => {
+  try {
+    const { storeId } = req.params;
+    const list = await prisma.storeWhatsAppGroup.findMany({
+      where: { storeId, active: true },
+      select: { id: true, whatsappGroupId: true, storeId: true, createdAt: true },
+    });
+    res.json({ success: true, groups: list });
+    return;
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to list groups', details: error.message });
+    return;
+  }
+});
+
+/**
+ * Unlink a group mapping
+ * DELETE /api/admin/stores/:storeId/whatsapp-group/:whatsappGroupId
+ */
+router.delete('/stores/:storeId/whatsapp-group/:whatsappGroupId', async (req: Request, res: Response) => {
+  try {
+    const { storeId, whatsappGroupId } = req.params;
+    const decoded = decodeURIComponent(whatsappGroupId);
+    const row = await prisma.storeWhatsAppGroup.findFirst({
+      where: { storeId, whatsappGroupId: decoded },
+    });
+    if (!row) {
+      res.status(404).json({ error: 'Mapping not found' });
+      return;
+    }
+    await prisma.storeWhatsAppGroup.update({
+      where: { id: row.id },
+      data: { active: false },
+    });
+    res.json({ success: true, message: 'Group mapping deactivated' });
+    return;
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to unlink group', details: error.message });
+    return;
+  }
+});
+
+/**
+ * List available phone numbers from Meta Business Account, or the single line in WHATSAPP_PHONE_NUMBER_ID if WABA is unset.
  * GET /api/admin/phone-numbers
  */
 router.get('/phone-numbers', async (_req: Request, res: Response) => {
   try {
-    if (!ACCESS_TOKEN || !BUSINESS_ACCOUNT_ID) {
+    if (!ACCESS_TOKEN) {
       return res.status(400).json({
         error: 'WhatsApp configuration missing',
-        details: 'WHATSAPP_ACCESS_TOKEN and WHATSAPP_BUSINESS_ACCOUNT_ID must be set',
+        details: 'WHATSAPP_ACCESS_TOKEN must be set',
       });
+    }
+
+    if (!BUSINESS_ACCOUNT_ID) {
+      const pid = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim();
+      if (!pid) {
+        return res.status(400).json({
+          error: 'WhatsApp configuration missing',
+          details:
+            'Set WHATSAPP_BUSINESS_ACCOUNT_ID for full WABA listing, or WHATSAPP_PHONE_NUMBER_ID for the configured line only',
+        });
+      }
+      try {
+        const response = await axios.get(`${WHATSAPP_API_URL}/${pid}`, {
+          headers: {
+            Authorization: `Bearer ${ACCESS_TOKEN}`,
+          },
+          params: {
+            fields: 'id,display_phone_number,verified_name,code_verification_status',
+          },
+        });
+        const pn = response.data;
+        res.json({
+          success: true,
+          phoneNumbers: [
+            {
+              phoneNumberId: pn.id,
+              displayNumber: pn.display_phone_number,
+              verifiedName: pn.verified_name,
+              verificationStatus: pn.code_verification_status,
+            },
+          ],
+          note: 'WHATSAPP_BUSINESS_ACCOUNT_ID not set; returning WHATSAPP_PHONE_NUMBER_ID only.',
+        });
+        return;
+      } catch (error: any) {
+        logger.error('Failed to fetch single phone number from Meta', {
+          error: error.message,
+          response: error.response?.data,
+        });
+        res.status(500).json({
+          error: 'Failed to fetch phone number',
+          details: error.response?.data?.error?.message || error.message,
+        });
+        return;
+      }
     }
 
     const response = await axios.get(

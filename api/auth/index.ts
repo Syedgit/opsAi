@@ -2,9 +2,9 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { sign, verify } from 'jsonwebtoken';
+import { getJwtSecret } from '../utils/auth';
 
 const prisma = new PrismaClient();
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
 /**
  * Unified auth endpoint
@@ -55,7 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
       const token = sign(
         { userId: user.id, email: user.email },
-        JWT_SECRET,
+        getJwtSecret(),
         { expiresIn: '7d' }
       );
 
@@ -144,7 +144,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       let decoded: { userId: string; email: string };
       
       try {
-        decoded = verify(token, JWT_SECRET) as { userId: string; email: string };
+        decoded = verify(token, getJwtSecret()) as { userId: string; email: string };
       } catch (error) {
         res.status(401).json({ error: 'Invalid or expired token' });
         return;

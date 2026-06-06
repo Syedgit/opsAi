@@ -38,6 +38,68 @@ export interface BusinessSummary {
   };
 }
 
+type FallbackInsightsDataSummary = {
+  sales: { total: number; cash: number; card: number; count: number };
+  expenses: { total: number; topCategories: Array<{ category: string; amount: number }> };
+  fuel: { totalSales: number; averageGp: number };
+};
+
+function generateFallbackInsights(
+  dataSummary: FallbackInsightsDataSummary,
+  salesTrend: 'up' | 'down' | 'stable',
+  expenseTrend: 'up' | 'down' | 'stable'
+): { insights: string[]; recommendations: string[] } {
+  const insights: string[] = [];
+  const recommendations: string[] = [];
+
+  if (dataSummary.sales.count > 0) {
+    const avgSale = dataSummary.sales.total / dataSummary.sales.count;
+    if (avgSale > 100) {
+      insights.push(`Average transaction value is $${avgSale.toFixed(2)}, indicating strong customer spending`);
+    }
+
+    const cardRatio = dataSummary.sales.card / dataSummary.sales.total;
+    if (cardRatio > 0.6) {
+      insights.push(`Card payments represent ${(cardRatio * 100).toFixed(0)}% of sales, showing modern payment preferences`);
+    }
+  }
+
+  if (salesTrend === 'up') {
+    insights.push('Sales are trending upward compared to the previous period');
+    recommendations.push('Maintain current strategies that are driving growth');
+  } else if (salesTrend === 'down') {
+    insights.push('Sales have decreased compared to the previous period');
+    recommendations.push('Review marketing and promotional strategies to boost sales');
+  }
+
+  if (dataSummary.expenses.topCategories.length > 0) {
+    const topCategory = dataSummary.expenses.topCategories[0];
+    insights.push(`Top expense category is ${topCategory.category} at $${topCategory.amount.toFixed(2)}`);
+    recommendations.push(`Review ${topCategory.category} expenses for potential cost optimization`);
+  }
+
+  if (expenseTrend === 'up') {
+    recommendations.push('Monitor expense increases and identify areas for cost control');
+  }
+
+  if (dataSummary.fuel.totalSales > 0 && dataSummary.fuel.averageGp > 0) {
+    insights.push(`Fuel operations show an average GP of $${dataSummary.fuel.averageGp.toFixed(2)} per transaction`);
+    if (dataSummary.fuel.averageGp < 0.15) {
+      recommendations.push('Consider reviewing fuel pricing strategy to improve margins');
+    }
+  }
+
+  if (insights.length === 0) {
+    insights.push('Review sales patterns for optimization opportunities');
+  }
+  if (recommendations.length === 0) {
+    recommendations.push('Continue monitoring daily performance metrics');
+    recommendations.push('Focus on maintaining consistent operations');
+  }
+
+  return { insights, recommendations };
+}
+
 /**
  * Generate AI-powered business summary for a store
  */
@@ -175,72 +237,6 @@ export async function generateBusinessSummary(
       totalSales > prevSalesTotal * 1.05 ? 'up' : totalSales < prevSalesTotal * 0.95 ? 'down' : 'stable';
     const expenseTrend =
       totalExpenses > prevExpensesTotal * 1.05 ? 'up' : totalExpenses < prevExpensesTotal * 0.95 ? 'down' : 'stable';
-
-    // Helper function to generate fallback insights
-    function generateFallbackInsights(
-      dataSummary: {
-        sales: { total: number; cash: number; card: number; count: number };
-        expenses: { total: number; topCategories: Array<{ category: string; amount: number }> };
-        fuel: { totalSales: number; averageGp: number };
-      },
-      salesTrend: 'up' | 'down' | 'stable',
-      expenseTrend: 'up' | 'down' | 'stable'
-    ): { insights: string[]; recommendations: string[] } {
-      const insights: string[] = [];
-      const recommendations: string[] = [];
-
-      // Sales insights
-      if (dataSummary.sales.count > 0) {
-        const avgSale = dataSummary.sales.total / dataSummary.sales.count;
-        if (avgSale > 100) {
-          insights.push(`Average transaction value is $${avgSale.toFixed(2)}, indicating strong customer spending`);
-        }
-        
-        const cardRatio = dataSummary.sales.card / dataSummary.sales.total;
-        if (cardRatio > 0.6) {
-          insights.push(`Card payments represent ${(cardRatio * 100).toFixed(0)}% of sales, showing modern payment preferences`);
-        }
-      }
-
-      // Trend insights
-      if (salesTrend === 'up') {
-        insights.push('Sales are trending upward compared to the previous period');
-        recommendations.push('Maintain current strategies that are driving growth');
-      } else if (salesTrend === 'down') {
-        insights.push('Sales have decreased compared to the previous period');
-        recommendations.push('Review marketing and promotional strategies to boost sales');
-      }
-
-      // Expense insights
-      if (dataSummary.expenses.topCategories.length > 0) {
-        const topCategory = dataSummary.expenses.topCategories[0];
-        insights.push(`Top expense category is ${topCategory.category} at $${topCategory.amount.toFixed(2)}`);
-        recommendations.push(`Review ${topCategory.category} expenses for potential cost optimization`);
-      }
-
-      if (expenseTrend === 'up') {
-        recommendations.push('Monitor expense increases and identify areas for cost control');
-      }
-
-      // Fuel insights
-      if (dataSummary.fuel.totalSales > 0 && dataSummary.fuel.averageGp > 0) {
-        insights.push(`Fuel operations show an average GP of $${dataSummary.fuel.averageGp.toFixed(2)} per transaction`);
-        if (dataSummary.fuel.averageGp < 0.15) {
-          recommendations.push('Consider reviewing fuel pricing strategy to improve margins');
-        }
-      }
-
-      // Default insights if none generated
-      if (insights.length === 0) {
-        insights.push('Review sales patterns for optimization opportunities');
-      }
-      if (recommendations.length === 0) {
-        recommendations.push('Continue monitoring daily performance metrics');
-        recommendations.push('Focus on maintaining consistent operations');
-      }
-
-      return { insights, recommendations };
-    }
 
     // Prepare data summary for fallback
     const dataSummary = {

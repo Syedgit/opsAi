@@ -283,11 +283,26 @@
                 const data = await response.json();
                 
                 if (response.ok && data.success) {
-                    // Store token
                     localStorage.setItem('authToken', data.token);
                     localStorage.setItem('user', JSON.stringify(data.user));
-                    
-                    // Redirect to dashboard
+
+                    const next = new URLSearchParams(window.location.search).get('next');
+                    if (next && next.startsWith('/') && !next.startsWith('//')) {
+                        window.location.href = next;
+                        return;
+                    }
+
+                    try {
+                        const st = await fetch('/api/onboarding/status', {
+                            headers: { Authorization: 'Bearer ' + data.token },
+                        });
+                        const od = await st.json();
+                        if (od.success && od.needsOnboarding) {
+                            window.location.href = '/onboarding';
+                            return;
+                        }
+                    } catch (_) {}
+
                     window.location.href = '/dashboard';
                 } else {
                     errorMessage.textContent = data.error || 'Login failed. Please try again.';

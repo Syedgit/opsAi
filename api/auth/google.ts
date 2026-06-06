@@ -2,9 +2,9 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
 import { sign } from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
+import { getJwtSecret } from '../utils/auth';
 
 const prisma = new PrismaClient();
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 
@@ -145,7 +145,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         userId: user.id,
         email: user.email,
       },
-      JWT_SECRET,
+      getJwtSecret(),
       { expiresIn: '7d' }
     );
 
@@ -170,7 +170,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
                 role: us.role,
               })),
             })}));
-            window.location.href = '/dashboard';
+            window.location.href = ${JSON.stringify(user.stores.length === 0 ? '/onboarding' : '/dashboard')};
           </script>
         </body>
       </html>

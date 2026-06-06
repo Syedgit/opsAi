@@ -89,7 +89,9 @@ export async function queueMessage(data: {
   messageText?: string;
   mediaId?: string;
   mediaType?: string;
-  storeId?: string; // Optional: pre-resolved store ID
+  storeId?: string;
+  groupId?: string | null;
+  phoneNumberId?: string | null;
 }): Promise<void> {
   await messageQueue.add('process-message', data, {
     jobId: data.messageId, // Use messageId as jobId for idempotency

@@ -9,6 +9,8 @@ import { storesRouter } from './routes/stores';
 import { authRouter } from './routes/auth';
 import { testRouter } from './routes/test';
 import adminRouter from './routes/admin';
+import onboardingRouter from './routes/onboarding';
+import twilioRouter from './routes/twilio';
 import { errorHandler } from './middleware/errorHandler';
 
 dotenv.config();
@@ -42,14 +44,8 @@ app.get('/health', (_req, res) => {
 
 // Serve HTML pages
 app.get('/', (_req, res) => {
-  try {
-    const html = readFileSync(join(__dirname, '..', 'public', 'index.html'), 'utf8');
-    res.setHeader('Content-Type', 'text/html');
-    res.send(html);
-  } catch (error) {
-    logger.error('Error serving index.html', error);
-    res.status(500).send('Error loading page');
-  }
+  // Redirect to dashboard
+  res.redirect('/dashboard');
 });
 
 app.get('/privacy-policy.html', (_req, res) => {
@@ -92,7 +88,7 @@ app.get('/login', (_req, res) => {
     res.send(html);
   } catch (error) {
     logger.error('Error serving login.html', error);
-    res.status(500).send('Error loading login page');
+    res.status(500).send('Error loading login');
   }
 });
 
@@ -103,16 +99,34 @@ app.get('/signup', (_req, res) => {
     res.send(html);
   } catch (error) {
     logger.error('Error serving signup.html', error);
-    res.status(500).send('Error loading signup page');
+    res.status(500).send('Error loading signup');
+  }
+});
+
+app.get('/onboarding', (_req, res) => {
+  try {
+    const html = readFileSync(join(__dirname, '..', 'public', 'onboarding.html'), 'utf8');
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  } catch (error) {
+    logger.error('Error serving onboarding.html', error);
+    res.status(500).send('Error loading onboarding');
   }
 });
 
 // Routes
 app.use('/api/webhook', whatsappRouter);
+// Twilio SMS webhook (for receiving SMS verification codes)
+// Test: Mount at separate path first to verify it works
+console.log('🔧 Registering Twilio SMS webhook');
+app.use('/api/twilio', twilioRouter); // Temporary: test at /api/twilio/twilio-sms
+app.use('/api/webhook', twilioRouter); // Also mount at /api/webhook for Twilio
+console.log('✅ Twilio SMS webhook registered');
 // Also support /whatsapp for backward compatibility
 app.use('/whatsapp', whatsappRouter);
 // Auth routes (for local development)
 app.use('/api/auth', authRouter);
+app.use('/api/onboarding', onboardingRouter);
 // Stores API routes (for dashboard)
 app.use('/api/stores', storesRouter);
 // Admin routes (for phone number provisioning)
@@ -137,8 +151,9 @@ process.on('SIGINT', () => {
 // Start server
 app.listen(PORT, () => {
   logger.info(`🚀 Server running on port ${PORT}`);
-  logger.info(`📱 Webhook endpoint: http://localhost:${PORT}/api/webhook/whatsapp`);
-  logger.info(`✅ Ready to receive WhatsApp webhooks!`);
+  logger.info(`📱 WhatsApp webhook: http://localhost:${PORT}/api/webhook/whatsapp`);
+  logger.info(`📨 Twilio SMS webhook: http://localhost:${PORT}/api/webhook/twilio-sms`);
+  logger.info(`✅ Ready to receive webhooks!`);
 });
 
 export default app;

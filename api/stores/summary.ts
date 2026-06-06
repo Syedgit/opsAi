@@ -1,6 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getAuthUser } from '../utils/auth';
+import { PrismaClient } from '@prisma/client';
 import { generateBusinessSummary } from '../services/aiSummarization';
+import { requireStoreAccess } from '../utils/storeAccess';
+
+const prisma = new PrismaClient();
 
 /**
  * Get AI-powered business summary
@@ -15,11 +18,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
-  // Optional: Verify user has access to this store
-  const authUser = getAuthUser(req);
-  if (authUser) {
-    // Could add store access check here
-  }
+  const useMock = req.query.mock === 'true';
+  const access = await requireStoreAccess(req, res, prisma, storeId, useMock);
+  if (!useMock && !access) return;
 
   try {
     const summary = await generateBusinessSummary(storeId, period);

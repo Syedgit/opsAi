@@ -14,6 +14,22 @@
       "destination": "/signup.html"
     },
     {
+      "source": "/onboarding",
+      "destination": "/onboarding.html"
+    },
+    {
+      "source": "/api/setup/readiness",
+      "destination": "/api/setup/readiness.ts"
+    },
+    {
+      "source": "/api/onboarding/status",
+      "destination": "/api/onboarding/index.ts"
+    },
+    {
+      "source": "/api/onboarding/complete-store",
+      "destination": "/api/onboarding/index.ts"
+    },
+    {
       "source": "/api/auth/google/callback",
       "destination": "/api/auth/google.ts"
     },
@@ -39,11 +55,23 @@
     },
     {
       "source": "/api/stores/data",
-      "destination": "/api/stores/index.ts"
+      "destination": "/api/stores/data.ts"
+    },
+    {
+      "source": "/api/stores/summary",
+      "destination": "/api/stores/summary.ts"
+    },
+    {
+      "source": "/api/stores/:storeId/link",
+      "destination": "/api/stores/[storeId]/link.ts"
     },
     {
       "source": "/api/stores/detail",
       "destination": "/api/stores/index.ts"
+    },
+    {
+      "source": "/api/stores/:storeId/whatsapp-group-provision",
+      "destination": "/api/stores/[storeId]/whatsapp-group-provision.ts"
     },
     {
       "source": "/api/stores",
@@ -56,6 +84,14 @@
     {
       "source": "/api/admin/stores/:storeId/phone-number",
       "destination": "/api/admin/stores/[storeId]/phone-number.ts"
+    },
+    {
+      "source": "/api/admin/setup/whatsapp-routing",
+      "destination": "/api/admin/setup/whatsapp-routing.ts"
+    },
+    {
+      "source": "/api/admin/stores/:storeId/whatsapp-group",
+      "destination": "/api/admin/stores/[storeId]/whatsapp-group.ts"
     }
   ],
   "headers": [

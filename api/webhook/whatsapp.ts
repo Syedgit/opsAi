@@ -1,4 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { PrismaClient } from '@prisma/client';
+import { applyGroupLifecycleEvent } from '../lib/whatsappGroupLifecycle';
+import { verifyWhatsAppWebhookSignature } from '../utils/whatsappSignature';
+import { processWhatsAppMessage } from '../../lib/processWhatsAppMessage';
+
+const prisma = new PrismaClient();
 
 // Webhook verification (Meta challenge)
 function verifyWebhook(req: VercelRequest, res: VercelResponse) {
@@ -8,7 +14,6 @@ function verifyWebhook(req: VercelRequest, res: VercelResponse) {
 
   const verifyToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
 
-  // Log for debugging (remove sensitive data in production)
   console.log('🔍 Webhook verification attempt', {
     mode,
     tokenReceived: token ? '***' : 'missing',
@@ -35,7 +40,6 @@ function verifyWebhook(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-// Webhook message handler
 async function handleWebhook(req: VercelRequest, res: VercelResponse) {
   try {
     const body = req.body;
@@ -45,48 +49,69 @@ async function handleWebhook(req: VercelRequest, res: VercelResponse) {
       entryCount: body.entry?.length || 0,
     });
 
-    // Respond immediately to WhatsApp (200 OK) - IMPORTANT!
     res.status(200).send('OK');
 
-    // Process webhook asynchronously
-    if (body.object === 'whatsapp_business_account') {
-      const entry = body.entry?.[0];
-      const changes = entry?.changes?.[0];
-      const value = changes?.value;
+    if (body.object === 'whatsapp_business_account' && Array.isArray(body.entry)) {
+      for (const entry of body.entry) {
+        const changes = Array.isArray(entry.changes) ? entry.changes : [];
+        for (const change of changes) {
+          const value = change.value;
+          const phoneNumberId = (value?.metadata?.phone_number_id as string) || null;
 
-      // Log messages
-      if (value?.messages) {
-        console.log('📱 Messages received', {
-          messageCount: value.messages.length,
-        });
+          if (change.field === 'group_lifecycle_update' && Array.isArray(value?.groups)) {
+            try {
+              for (const g of value.groups) {
+                await applyGroupLifecycleEvent(prisma, g as Record<string, unknown>);
+              }
+            } catch (e) {
+              console.error('group_lifecycle_update handling failed', e);
+            }
+          }
 
-        for (const message of value.messages) {
-          const messageId = message.id;
-          const phoneE164 = `+${message.from}`;
-          const messageType = message.type;
-          const text = message.text?.body || '';
+          if (value?.messages) {
+            console.log('📱 Messages received', {
+              messageCount: value.messages.length,
+              phoneNumberId,
+            });
 
-          console.log('📱 WhatsApp Message Received', {
-            messageId,
-            phoneE164,
-            messageType,
-            text: text.substring(0, 100),
-            timestamp: new Date().toISOString(),
-          });
+            for (const message of value.messages) {
+              const messageId = message.id as string;
+              const phoneE164 = `+${message.from}`;
+              const messageType = message.type as string;
+              const text = (message.text as { body?: string } | undefined)?.body || '';
+              const groupId = (message as { group_id?: string }).group_id ?? null;
+              const imageId = (message.image as { id?: string } | undefined)?.id;
+
+              try {
+                await processWhatsAppMessage(prisma, {
+                  messageId,
+                  phoneE164,
+                  messageText: text || undefined,
+                  mediaId: imageId || undefined,
+                  mediaType: messageType === 'image' ? 'image/jpeg' : messageType,
+                  groupId,
+                  phoneNumberId,
+                });
+              } catch (err) {
+                console.error('Message processing failed', {
+                  messageId,
+                  error: err instanceof Error ? err.message : err,
+                });
+              }
+            }
+          }
+
+          if (value?.statuses) {
+            console.log('📊 Status updates received', {
+              statusCount: value.statuses.length,
+            });
+          }
         }
-      }
-
-      // Log status updates (optional)
-      if (value?.statuses) {
-        console.log('📊 Status updates received', {
-          statusCount: value.statuses.length,
-        });
       }
     }
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('❌ Error handling webhook:', errorMessage);
-    // Still return 200 to WhatsApp even on error
     res.status(200).send('OK');
   }
 }
@@ -96,12 +121,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     verifyWebhook(req, res);
     return;
   }
-  
+
   if (req.method === 'POST') {
+    if (!verifyWhatsAppWebhookSignature(req, res)) return;
     await handleWebhook(req, res);
     return;
   }
-  
+
   res.status(405).json({ error: 'Method not allowed' });
 }
-

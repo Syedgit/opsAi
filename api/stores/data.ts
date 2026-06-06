@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
+import { requireStoreAccess } from '../utils/storeAccess';
 
 const prisma = new PrismaClient();
 
@@ -193,6 +194,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   }
 
   try {
+    const access = await requireStoreAccess(req, res, prisma, storeId, useMock);
+    if (!useMock && !access) return;
+
     let dbType: string;
     switch (type) {
       case 'sales':
