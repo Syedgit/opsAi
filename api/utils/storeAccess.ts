@@ -23,7 +23,15 @@ export async function assertStoreMember(
   return { ok: true, role: membership.role };
 }
 
-/** Require auth + store membership unless mock mode (demo data only). */
+/**
+ * Demo data (?mock=true) skips authentication, so it must never be reachable in production.
+ */
+export function isMockRequested(req: VercelRequest, env: NodeJS.ProcessEnv = process.env): boolean {
+  const production = env.NODE_ENV === 'production' || env.VERCEL_ENV === 'production';
+  return !production && req.query.mock === 'true';
+}
+
+/** Require auth + store membership unless mock mode (demo data only, never in production). */
 export async function requireStoreAccess(
   req: VercelRequest,
   res: VercelResponse,

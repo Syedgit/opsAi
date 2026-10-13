@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
 import { startOfDay, endOfDay, startOfMonth, endOfMonth } from 'date-fns';
 import { requireAuthUser } from '../utils/auth';
-import { requireStoreAccess } from '../utils/storeAccess';
+import { requireStoreAccess, isMockRequested } from '../utils/storeAccess';
 
 const prisma = new PrismaClient();
 
@@ -18,7 +18,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   const storeId = (req.query.storeId as string) || 'S001';
   const type = (req.query.type as string) || 'sales';
   const id = req.query.id as string;
-  const useMock = req.query.mock === 'true';
+  const useMock = isMockRequested(req);
 
   // List stores
   if (path.endsWith('/stores') && !path.includes('/dashboard') && !path.includes('/data') && !path.includes('/detail')) {

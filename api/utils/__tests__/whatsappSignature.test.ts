@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { verifyWhatsAppWebhookSignature } from '../whatsappSignature';
+import { checkWhatsAppSignature, verifyWhatsAppWebhookSignature } from '../whatsappSignature';
 
 function mockRes(): VercelResponse {
   const res = {
@@ -49,5 +49,43 @@ describe('verifyWhatsAppWebhookSignature', () => {
     const res = mockRes();
     expect(verifyWhatsAppWebhookSignature(req, res)).toBe(false);
     expect(res.statusCode).toBe(401);
+  });
+});
+
+describe('checkWhatsAppSignature (raw body)', () => {
+  const sign = (raw: string, secret = 'meta-secret') => `sha256=${crypto.createHmac('sha256', secret).update(raw, 'utf8').digest('hex')}`;
+
+  // Meta escapes non-ASCII as \uXXXX in the bytes it signs; JSON.stringify of the parsed body does not.
+  const rawWithAccent = '{"text":{"body":"caf\\u00e9 sales \\ud83d\\udc4d"}}';
+
+  it('accepts a payload with accents and emoji when checked against the raw bytes', () => {
+    expect(checkWhatsAppSignature(rawWithAccent, sign(rawWithAccent), 'meta-secret', true)).toEqual({ ok: true });
+  });
+
+  it('would have rejected that same genuine payload when re-serialising the parsed JSON', () => {
+    const reserialised = JSON.stringify(JSON.parse(rawWithAccent));
+    expect(reserialised).not.toBe(rawWithAccent);
+    expect(checkWhatsAppSignature(reserialised, sign(rawWithAccent), 'meta-secret', true)).toMatchObject({ ok: false, status: 401 });
+  });
+
+  it('rejects a tampered body', () => {
+    expect(checkWhatsAppSignature('{"a":2}', sign('{"a":1}'), 'meta-secret', true)).toMatchObject({ ok: false, status: 401 });
+  });
+
+  it('rejects a missing signature', () => {
+    expect(checkWhatsAppSignature('{}', undefined, 'meta-secret', true)).toMatchObject({ ok: false, status: 401 });
+  });
+
+  it('rejects a signature made with the wrong secret', () => {
+    expect(checkWhatsAppSignature('{}', sign('{}', 'other'), 'meta-secret', true)).toMatchObject({ ok: false, status: 401 });
+  });
+
+  it('refuses unsigned traffic in production when no secret is configured', () => {
+    expect(checkWhatsAppSignature('{}', undefined, '', true)).toMatchObject({ ok: false, status: 500 });
+    expect(checkWhatsAppSignature('{}', undefined, undefined, true)).toMatchObject({ ok: false, status: 500 });
+  });
+
+  it('allows unsigned traffic only outside production (local development)', () => {
+    expect(checkWhatsAppSignature('{}', undefined, '', false)).toEqual({ ok: true });
   });
 });

@@ -1,9 +1,11 @@
+import { blockInProduction } from '../utils/devOnly';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 /**
  * Test endpoint to verify mock data endpoints are working
  */
 export default function handler(_req: VercelRequest, res: VercelResponse): void {
+  if (blockInProduction(_req, res)) return;
   res.json({
     message: 'Mock data endpoints are available',
     endpoints: {

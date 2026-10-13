@@ -1,10 +1,17 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
 import { applyGroupLifecycleEvent } from '../lib/whatsappGroupLifecycle';
-import { verifyWhatsAppWebhookSignature } from '../utils/whatsappSignature';
+import { waitUntil } from '@vercel/functions';
+import { readRawBody, verifyRawWhatsAppSignature } from '../utils/whatsappSignature';
 import { processWhatsAppMessage } from '../../lib/processWhatsAppMessage';
 
 const prisma = new PrismaClient();
+
+/**
+ * Meta signs the raw bytes of the request, so the body must not be parsed before the signature is checked.
+ * Vercel's body parser is switched off and the handler reads the stream itself.
+ */
+export const config = { api: { bodyParser: false } };
 
 // Webhook verification (Meta challenge)
 function verifyWebhook(req: VercelRequest, res: VercelResponse) {
@@ -40,16 +47,13 @@ function verifyWebhook(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-async function handleWebhook(req: VercelRequest, res: VercelResponse) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function processWebhookBody(body: any) {
   try {
-    const body = req.body;
-
     console.log('📨 Webhook received', {
       object: body.object,
       entryCount: body.entry?.length || 0,
     });
-
-    res.status(200).send('OK');
 
     if (body.object === 'whatsapp_business_account' && Array.isArray(body.entry)) {
       for (const entry of body.entry) {
@@ -80,14 +84,18 @@ async function handleWebhook(req: VercelRequest, res: VercelResponse) {
               const messageType = message.type as string;
               const text = (message.text as { body?: string } | undefined)?.body || '';
               const groupId = (message as { group_id?: string }).group_id ?? null;
-              const imageId = (message.image as { id?: string } | undefined)?.id;
+              const image = message.image as { id?: string; caption?: string } | undefined;
+              const audio = message.audio as { id?: string } | undefined;
+              const mediaId = image?.id || audio?.id;
+              // A photo's caption is the sender's own description of it.
+              const messageText = text || image?.caption || '';
 
               try {
                 await processWhatsAppMessage(prisma, {
                   messageId,
                   phoneE164,
-                  messageText: text || undefined,
-                  mediaId: imageId || undefined,
+                  messageText: messageText || undefined,
+                  mediaId: mediaId || undefined,
                   mediaType: messageType === 'image' ? 'image/jpeg' : messageType,
                   groupId,
                   phoneNumberId,
@@ -112,7 +120,6 @@ async function handleWebhook(req: VercelRequest, res: VercelResponse) {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('❌ Error handling webhook:', errorMessage);
-    res.status(200).send('OK');
   }
 }
 
@@ -123,8 +130,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   }
 
   if (req.method === 'POST') {
-    if (!verifyWhatsAppWebhookSignature(req, res)) return;
-    await handleWebhook(req, res);
+    const raw = await readRawBody(req);
+    if (!verifyRawWhatsAppSignature(req, raw, res)) return;
+
+    let body: unknown;
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      res.status(400).json({ error: 'Invalid JSON' });
+      return;
+    }
+
+    // Answer Meta straight away (it retries slow webhooks), and keep the function alive until
+    // processing finishes. Duplicate deliveries are filtered by the per-message claim.
+    res.status(200).send('OK');
+    const work = processWebhookBody(body);
+    waitUntil(work);
+    await work;
     return;
   }
 

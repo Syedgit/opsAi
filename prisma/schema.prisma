@@ -81,6 +81,10 @@ model StoreConfig {
   // Each store gets its own phone number under our Meta Business Account
   whatsappPhoneNumberId String? @unique @map("whatsapp_phone_number_id")
   whatsappDisplayNumber String? @map("whatsapp_display_number") // Human-readable number
+
+  /// Per-store settings learned from the owner: deposit rule, label dictionary, vendor nicknames, store aliases.
+  /// Shape is validated in lib/understanding/profileStore.ts. Null until the owner teaches the store something.
+  profileJson Json? @map("profile_json")
   
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
-import { requireStoreAccess } from '../utils/storeAccess';
+import { requireStoreAccess, isMockRequested } from '../utils/storeAccess';
 
 const prisma = new PrismaClient();
 
@@ -172,7 +172,7 @@ function serializeMockData(data: any[]): any[] {
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   const storeId = (req.query.storeId as string) || 'S001';
   const type = (req.query.type as string) || 'sales';
-  const useMock = req.query.mock === 'true';
+  const useMock = isMockRequested(req);
 
   // Mock data
   if (useMock) {

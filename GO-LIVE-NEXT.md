@@ -1,65 +1,53 @@
-# opsAi — Go-live notes & next to-do
+# opsAi — Go-live checklist
 
-_Last updated: session wrap-up. Path A (manual WhatsApp groups, one shared number)._
+Phase 1: private 1:1 chats with one shared opsAi WhatsApp number. Staff and owners message it; owners review the dashboard.
 
-## Done this session
+## Do these in order
 
-- [x] Path A: manual groups (`WHATSAPP_GROUP_AUTO_PROVISION=false`)
-- [x] Store routing default: `WHATSAPP_STORE_ROUTING=group`
-- [x] Security: JWT, admin API key, store access, webhook signature
-- [x] Auto-link group on first message from registered owner phone
-- [x] Onboarding + dashboard manual setup UI
-- [x] Local `.env`: JWT_SECRET, ADMIN_API_KEY, STORE_LINK_INVITE_CODE, OPS display number
-- [x] 27 unit tests passing
+### 1. Rotate the invite code (security)
+`STORE_LINK_INVITE_CODE` was committed in an earlier version of this file, so it is in git history.
+Generate a new one (`openssl rand -hex 12`), put it in `.env` and Vercel, and never write its value in a doc.
 
-## Next to-do (priority order)
+### 2. Database (Supabase)
+- [ ] Make sure the app can connect (refresh `DATABASE_URL` and `DIRECT_URL`; the old project returned `tenant/user not found`).
+- [ ] Run `scripts/add-store-profile.sql` in the Supabase SQL editor. **Do this before deploying.** The new code reads `store_config.profile_json`, and store lookups fail without the column.
 
-### P0 — before real go-live test
+### 3. Environment variables (local `.env` and Vercel)
+| Variable | Notes |
+|----------|-------|
+| `JWT_SECRET`, `ADMIN_API_KEY`, `STORE_LINK_INVITE_CODE` | Required. Long random values. |
+| `WHATSAPP_APP_SECRET` | **Required in production.** Meta → App settings → Basic → App secret. Webhooks are rejected without it. |
+| `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_WEBHOOK_VERIFY_TOKEN` | Required. Use a permanent system-user token, not the 24h test token. |
+| `DATABASE_URL`, `DIRECT_URL` | Required. |
+| `OPENAI_API_KEY`, `OPENAI_EXTRACTION_MODEL` | Turns on photo and text understanding. Needs billing credits. |
+| `OPENAI_TRANSCRIPTION_MODEL` | Turns on voice notes. |
+| `AI_UNDERSTANDING=off` | Emergency switch: back to the built-in text rules. |
+| `MAX_MESSAGES_PER_HOUR` | Per-phone cap, default 60. |
+| `MAX_STORES_PER_OWNER` | Default 50. |
+| `OPS_WHATSAPP_DISPLAY_NUMBER` | Shown to owners. |
 
-- [ ] **Facebook password** → Meta → App settings → Basic → Show **App secret** → add `WHATSAPP_APP_SECRET` to `.env` + Vercel → redeploy
-- [ ] **Fix Supabase DB** — project `ebwfscbotapifxeqzhxu` not connecting (`tenant/user not found`). Refresh `DATABASE_URL` + `DIRECT_URL`, run SQL scripts if new DB
-- [ ] **Sync all env vars to Vercel** (local `.env` is not deployed automatically)
-- [ ] **Meta webhook**: URL → `/api/webhook/whatsapp`, verify token matches, subscribe to **messages** only (Path A)
-- [ ] **Deploy** latest code to Vercel (many uncommitted changes)
-- [ ] Hit `GET /api/setup/readiness` → `readyForProduction: true` + `database.connected: true`
+### 4. Meta
+- [ ] Webhook URL `https://<your-domain>/api/webhook/whatsapp`, verify token matches, subscribed to **messages**.
+- [ ] Production number (not the test number), Business Verification, display name approved.
+- [ ] Message templates for anything sent outside the 24-hour window (reminders, summaries).
 
-### P1 — first live test (Path A)
+### 5. Deploy and verify
+- [ ] Vercel plan allows `maxDuration` of 60 s (set for the webhook in `vercel.json`; AI calls on photos can take 10-20 s).
+- [ ] Deploy, then open `GET /api/setup/readiness`. You want `readyForProduction: true`, `database.connected: true`, `schema.profileJsonColumn: true`, `ai.understanding: true`.
+- [ ] Send yourself a real close report, a photo and a voice note. Reply OK. Check the dashboard.
+- [ ] `npm run simulate -- photos` (needs OpenAI credits) to measure real model accuracy on the sample photos.
 
-1. Signup → create store with owner WhatsApp number
-2. Create WhatsApp group on phone → add opsAi number `+1 415-523-8886`
-3. Message `hello` from registered phone → expect “group connected”
-4. Message `Sales cash 100 card 200` → reply `OK` → confirmed
-5. Dashboard → WhatsApp card shows **Connected**
+## What protects production now
+- Webhook signature is checked against the raw request body (production refuses unsigned traffic).
+- Each WhatsApp message is claimed atomically, so Meta retries and duplicate deliveries are processed once.
+- Replies go out after the webhook has answered Meta, and the function stays alive until processing finishes.
+- Strangers get one "not linked" reply per day; each phone is capped per hour.
+- `?mock=true` and `/api/test/*` are disabled in production. The dashboard never shows made-up data.
+- All message-derived text on the dashboard is HTML-escaped (guarded by a test).
+- CI (`.github/workflows/ci.yml`) runs type-check, lint and tests on every push.
 
-### P2 — later / phase 2
-
-- [ ] Meta Groups API + OBA → set `WHATSAPP_GROUP_AUTO_PROVISION=true`
-- [ ] Per-store invite codes (instead of one global `STORE_LINK_INVITE_CODE`)
-- [ ] Staff phone registration from dashboard
-- [ ] Receipt OCR / AI extraction on Vercel pipeline
-- [ ] Google Sheets on OK (optional — `GOOGLE_SHEETS_*`)
-
-## Env reference (one-time per deployment)
-
-| Variable | Purpose |
-|----------|---------|
-| `JWT_SECRET` | User login tokens |
-| `ADMIN_API_KEY` | Your admin API only (`/api/admin/*`) |
-| `STORE_LINK_INVITE_CODE` | Staff joining existing store (`opsAi-59fa916816cf1e9f` locally) |
-| `WHATSAPP_*` | Cloud API + webhook |
-| `DATABASE_URL` / `DIRECT_URL` | PostgreSQL (Supabase) |
-| `OPS_WHATSAPP_DISPLAY_NUMBER` | Shown to owners: `+14155238886` |
-
-## Optional (not blocking launch)
-
-- OpenAI → dashboard AI Summary only
-- Google OAuth → Sign in with Google
-- Redis → local Express only, not Vercel
-
-## Useful commands
-
-```bash
-npm test
-npm run type-check
-curl https://YOUR-DOMAIN/api/setup/readiness
-```
+## Later
+- Reminders and an obligations calendar (next-day deposit, bills, invoices due, licences, inspections).
+- START/JOIN invite flow for staff, per-store invite codes.
+- Groups (needs an Official Business Account).
+- Rotate any secret that has ever been pasted into chat or committed.

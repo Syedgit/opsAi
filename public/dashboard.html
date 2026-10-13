@@ -1030,6 +1030,11 @@
                     <h3>Add Store</h3>
                     <button class="modal-close" id="closeModal">&times;</button>
                 </div>
+                <div style="margin-bottom: 20px;">
+                    <p style="margin: 0 0 10px; font-size: 14px; color: var(--text-light);">Own another location? Add it to your account. Each store keeps its own sales, invoices and deposits.</p>
+                    <a href="/onboarding?add=1" class="btn btn-primary" style="display: block; text-align: center; text-decoration: none;">Add a store I own</a>
+                </div>
+                <div style="text-align: center; margin: 0 0 16px; font-size: 13px; color: var(--text-light);">or join a team that already exists</div>
                 <div class="error-message" id="errorMessage"></div>
                 <div class="success-message" id="successMessage"></div>
                 <form id="addStoreForm">
@@ -1056,7 +1061,7 @@
                             <option value="STAFF">Staff</option>
                             <option value="MANAGER">Manager</option>
                         </select>
-                        <div class="help-text">New stores are created during signup — use this to join an existing team</div>
+                        <div class="help-text">Use this to join a team that already exists</div>
                     </div>
                     <div class="modal-actions">
                         <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
@@ -1190,10 +1195,6 @@
                             <option value="week">This Week</option>
                             <option value="month">This Month</option>
                         </select>
-                        <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; white-space: nowrap;">
-                            <input type="checkbox" id="useMockData" style="width: 18px; height: 18px; cursor: pointer;">
-                            <span>Use Mock Data</span>
-                        </label>
                     </div>
                 </div>
                 <div class="content-area" id="summaryContent">
@@ -1220,8 +1221,6 @@
     </main>
 
     <script>
-        // Configuration: Set to false when Facebook verification is complete and you want real data
-        const USE_MOCK_DATA = false;
         
         // Authentication
         // Check for token in URL (from OAuth callback)
@@ -1258,6 +1257,45 @@
         })();
         
         let currentStoreId = '';
+
+        // Everything that came from a WhatsApp message or a photo is untrusted text: always escape it before using innerHTML.
+        function esc(value) {
+            return String(value === null || value === undefined ? '' : value)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+        function money(value) {
+            const n = Number(value);
+            return '$' + (Number.isFinite(n) ? n.toFixed(2) : '0.00');
+        }
+        // 'YYYY-MM-DD' is a calendar day, not a moment in time: do not let the timezone move it.
+        function fmtDay(value) {
+            const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || ''));
+            if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).toLocaleDateString();
+            const t = new Date(value);
+            return Number.isNaN(t.getTime()) ? '\u2014' : t.toLocaleDateString();
+        }
+        function checkIssues(d) {
+            const checks = Array.isArray(d.checks) ? d.checks : [];
+            return checks.filter(c => c.status === 'warn' || c.status === 'fail');
+        }
+        function statCell(label, valueHtml, size, color) {
+            return '<div><div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">' + label +
+                '</div><div style="font-size: ' + size + 'px; font-weight: 700; color: ' + color + ';">' + valueHtml + '</div></div>';
+        }
+
+        // A visible, dismissible message at the top of the page (never silently show made-up data).
+        function showBanner(html) {
+            let el = document.getElementById('appBanner');
+            if (!el) {
+                el = document.createElement('div');
+                el.id = 'appBanner';
+                el.setAttribute('role', 'alert');
+                el.style.cssText = 'position:sticky;top:0;z-index:3000;background:#fff3cd;color:#664d03;border-bottom:1px solid #ffecb5;padding:12px 16px;font-size:14px;display:flex;gap:12px;align-items:center;justify-content:space-between;';
+                document.body.prepend(el);
+            }
+            el.innerHTML = '<span>' + html + '</span><button type="button" aria-label="Dismiss" style="background:none;border:none;font-size:20px;cursor:pointer;color:inherit;" onclick="this.parentElement.remove()">&times;</button>';
+        }
         let currentTab = 'sales';
         let currentPage = 'dashboard';
         let activityLog = [];
@@ -1276,11 +1314,9 @@
                 let response = null;
                 let data = null;
                 
-                // Use mock data by default (until Facebook verification is complete)
-                const mockParam = USE_MOCK_DATA ? '?mock=true' : '';
                 
                 try {
-                    response = await fetch(`/api/stores${mockParam}`, {
+                    response = await fetch(`/api/stores`, {
                         headers: {
                             ...getAuthHeaders(),
                             'Content-Type': 'application/json'
@@ -1288,43 +1324,21 @@
                     });
                     if (response && response.ok) {
                         data = await response.json();
-                        console.log(`Stores loaded from /api/stores${mockParam}:`, data);
+                        console.log(`Stores loaded from /api/stores:`, data);
                     }
                 } catch (e) {
                     console.log('API failed, trying fallback...', e);
                 }
                 
-                // Fallback: Try opposite mode if primary fails
-                if (!data || !data.stores) {
-                    try {
-                        const fallbackParam = USE_MOCK_DATA ? '' : '?mock=true';
-                        response = await fetch(`/api/stores${fallbackParam}`, {
-                            headers: {
-                                ...getAuthHeaders(),
-                                'Content-Type': 'application/json'
-                            }
-                        });
-                        if (response && response.ok) {
-                            data = await response.json();
-                            console.log(`Stores loaded from fallback /api/stores${fallbackParam}:`, data);
-                        }
-                    } catch (e) {
-                        console.log('Fallback API also failed:', e);
-                    }
+                if (!data || !Array.isArray(data.stores)) {
+                    throw new Error(response ? `The server returned ${response.status}` : 'Could not reach the server');
                 }
-                
-                if (!data || !data.stores || data.stores.length === 0) {
-                    console.log('No API data, using hardcoded stores');
-                    data = {
-                        stores: [
-                            { storeId: 'S001', storeName: 'Main Street Store' },
-                            { storeId: 'S002', storeName: 'Highway 101 Store' },
-                            { storeId: 'S003', storeName: 'Downtown Plaza Store' },
-                            { storeId: 'S004', storeName: 'Riverside Convenience' },
-                        ]
-                    };
+
+                if (data.stores.length === 0) {
+                    showBanner('You do not have a store yet. <a href="/onboarding">Set up your store</a>.');
+                    return;
                 }
-                
+
                 while (select.options.length > 1) {
                     select.remove(1);
                 }
@@ -1332,38 +1346,26 @@
                 data.stores.forEach(store => {
                     const option = document.createElement('option');
                     option.value = store.storeId;
-                    option.textContent = `${store.storeId} - ${store.storeName}`;
+                    option.textContent = `${esc(store.storeId)} - ${esc(store.storeName)}`;
                     select.appendChild(option);
                 });
                 
                 console.log(`Added ${data.stores.length} stores to dropdown`);
                 
                 if (data.stores.length > 0) {
-                    select.value = data.stores[0].storeId;
-                    currentStoreId = data.stores[0].storeId;
+                    // After adding a store, open on it; otherwise start with the first one.
+                    const preferredId = sessionStorage.getItem('selectStoreId');
+                    sessionStorage.removeItem('selectStoreId');
+                    const initial = data.stores.find(s => s.storeId === preferredId) || data.stores[0];
+                    select.value = initial.storeId;
+                    currentStoreId = initial.storeId;
                     console.log('Auto-selected store:', currentStoreId);
                     select.dispatchEvent(new Event('change'));
-                    logActivity('Store selected', `Selected store: ${data.stores[0].storeName}`);
+                    logActivity('Store selected', `Selected store: ${initial.storeName}`);
                 }
             } catch (error) {
                 console.error('Error loading stores:', error);
-                const fallbackStores = [
-                    { storeId: 'S001', storeName: 'Main Street Store' },
-                    { storeId: 'S002', storeName: 'Highway 101 Store' },
-                    { storeId: 'S003', storeName: 'Downtown Plaza Store' },
-                    { storeId: 'S004', storeName: 'Riverside Convenience' },
-                ];
-                
-                fallbackStores.forEach(store => {
-                    const option = document.createElement('option');
-                    option.value = store.storeId;
-                    option.textContent = `${store.storeId} - ${store.storeName}`;
-                    select.appendChild(option);
-                });
-                
-                select.value = 'S001';
-                currentStoreId = 'S001';
-                select.dispatchEvent(new Event('change'));
+                showBanner('We could not load your stores. ' + (error && error.message ? error.message + '. ' : '') + '<a href="#" onclick="location.reload(); return false;">Try again</a>');
             }
         }
 
@@ -1378,12 +1380,6 @@
             if (oldLink) oldLink.remove();
             if (stepsEl) stepsEl.style.display = 'none';
 
-            if (USE_MOCK_DATA) {
-                statusEl.textContent = 'Demo mode';
-                statusEl.className = 'whatsapp-status none';
-                messageEl.textContent = 'WhatsApp group status is available when using live data.';
-                return;
-            }
 
             try {
                 const r = await fetch(`/api/stores/${encodeURIComponent(storeId)}/whatsapp-group-provision`, {
@@ -1459,22 +1455,12 @@
             }
             try {
                 console.log('Loading dashboard for store:', storeId);
-                const mockParam = USE_MOCK_DATA ? '&mock=true' : '';
-                let response = await fetch(`/api/stores/dashboard?storeId=${storeId}${mockParam}`, {
+                let response = await fetch(`/api/stores/dashboard?storeId=${storeId}`, {
                     headers: {
                         ...getAuthHeaders(),
                         'Content-Type': 'application/json'
                     }
-                }).catch(async () => {
-                    console.log('Primary dashboard failed, trying fallback...');
-                    const fallbackParam = USE_MOCK_DATA ? '' : '&mock=true';
-                    return await fetch(`/api/stores/dashboard?storeId=${storeId}${fallbackParam}`, {
-                        headers: {
-                            ...getAuthHeaders(),
-                            'Content-Type': 'application/json'
-                        }
-                    }).catch(() => null);
-                });
+                }).catch(() => null);
                 
                 if (!response || !response.ok) {
                     throw new Error(`API returned ${response?.status || 'no response'}`);
@@ -1492,10 +1478,10 @@
                 await loadWhatsAppProvision(storeId);
             } catch (error) {
                 console.error('Error loading dashboard:', error);
-                document.getElementById('todaySales').textContent = '3';
-                document.getElementById('todayInvoices').textContent = '2';
-                document.getElementById('todayOrders').textContent = '1';
-                document.getElementById('pendingCount').textContent = '1';
+                ['todaySales', 'todayInvoices', 'todayOrders', 'pendingCount'].forEach(id => {
+                    document.getElementById(id).textContent = '–';
+                });
+                showBanner('We could not load this store\'s numbers. <a href="#" onclick="loadDashboard(currentStoreId); return false;">Try again</a>');
             }
         }
 
@@ -1509,30 +1495,15 @@
             contentArea.innerHTML = '<div class="loading">Loading...</div>';
 
             try {
-                console.log('Loading tab data:', { storeId, tab, USE_MOCK_DATA });
-                const mockParam = USE_MOCK_DATA ? '&mock=true' : '';
-                const url = `/api/stores/data?storeId=${encodeURIComponent(storeId)}&type=${encodeURIComponent(tab)}${mockParam}`;
+                console.log('Loading tab data:', { storeId, tab });
+                const url = `/api/stores/data?storeId=${encodeURIComponent(storeId)}&type=${encodeURIComponent(tab)}`;
                 console.log('Fetching URL:', url);
                 let response = await fetch(url, {
                     headers: {
                         ...getAuthHeaders(),
                         'Content-Type': 'application/json'
                     }
-                }).catch(async (error) => {
-                    console.log('Primary data failed, trying fallback...', error);
-                    const fallbackParam = USE_MOCK_DATA ? '' : '&mock=true';
-                    const fallbackUrl = `/api/stores/data?storeId=${encodeURIComponent(storeId)}&type=${encodeURIComponent(tab)}${fallbackParam}`;
-                    console.log('Trying fallback URL:', fallbackUrl);
-                    return await fetch(fallbackUrl, {
-                        headers: {
-                            ...getAuthHeaders(),
-                            'Content-Type': 'application/json'
-                        }
-                    }).catch((fallbackError) => {
-                        console.error('Fallback also failed:', fallbackError);
-                        return null;
-                    });
-                });
+                }).catch(() => null);
                 
                 if (!response || !response.ok) {
                     throw new Error(`API returned ${response?.status || 'no response'}`);
@@ -1552,7 +1523,6 @@
                             <div class="empty-state-icon">📭</div>
                             <h3>No ${tab} data found</h3>
                             <p>Data will appear here once messages are processed via WhatsApp</p>
-                            <p style="margin-top: 10px; font-size: 12px; color: #999;">Debug: Response data = ${JSON.stringify(data)}</p>
                         </div>
                     `;
                     return;
@@ -1567,8 +1537,8 @@
                         <div class="empty-state">
                             <div class="empty-state-icon">❌</div>
                             <h3>Error rendering ${tab} data</h3>
-                            <p>${error.message}</p>
-                            <pre style="margin-top: 20px; text-align: left; background: #f5f5f5; padding: 10px; border-radius: 5px; overflow-x: auto;">${JSON.stringify(items.slice(0, 2), null, 2)}</pre>
+                            <p>${esc(error.message)}</p>
+                            <pre style="margin-top: 20px; text-align: left; background: #f5f5f5; padding: 10px; border-radius: 5px; overflow-x: auto;">${esc(JSON.stringify(items.slice(0, 2), null, 2))}</pre>
                         </div>
                     `;
                 }
@@ -1590,20 +1560,26 @@
             let tableHTML = '<table class="data-table"><thead><tr>';
             
             if (type === 'sales') {
-                tableHTML += '<th>Date</th><th>Cash</th><th>Card</th><th>Tax</th><th>Total</th><th>Actions</th></tr></thead><tbody>';
+                tableHTML += '<th>Day</th><th>Cash</th><th>Card</th><th>Inside total</th><th>Gas</th><th>Deposit</th><th>Checks</th><th>Actions</th></tr></thead><tbody>';
                 items.forEach((item, index) => {
                     try {
                         const d = item.data || {};
-                        const dateStr = item.date ? (typeof item.date === 'string' ? item.date : item.date.toISOString()) : new Date().toISOString();
-                        const displayDate = new Date(dateStr).toLocaleDateString();
+                        const day = d.report_date ? fmtDay(d.report_date) : fmtDay(item.date);
+                        const issues = checkIssues(d);
+                        const hasChecks = Array.isArray(d.checks) && d.checks.length > 0;
+                        const checkBadge = issues.length > 0
+                            ? `<span class="badge badge-pending" title="${esc(issues.map(c => c.message).join(' '))}">\u26a0 ${issues.length} to review</span>`
+                            : hasChecks ? '<span class="badge badge-success">\u2713 Adds up</span>' : '<span style="color:#999">\u2014</span>';
                         tableHTML += `
-                            <tr onclick="viewDetail('sales', '${item.id}')" style="cursor: pointer;">
-                                <td>${displayDate}</td>
-                                <td>$${d.cash || 0}</td>
-                                <td>$${d.card || 0}</td>
-                                <td>$${d.tax || 0}</td>
-                                <td><strong>$${d.total_inside || 0}</strong></td>
-                                <td><button onclick="event.stopPropagation(); viewDetail('sales', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
+                            <tr onclick="viewDetail('sales', '${esc(item.id)}')" style="cursor: pointer;">
+                                <td>${esc(day)}</td>
+                                <td>${money(d.cash)}</td>
+                                <td>${money(d.card)}</td>
+                                <td><strong>${money(d.total_inside)}</strong></td>
+                                <td>${d.fuel_sales ? money(d.fuel_sales) : '\u2014'}</td>
+                                <td>${d.deposit !== null && d.deposit !== undefined ? money(d.deposit) : '\u2014'}</td>
+                                <td>${checkBadge}</td>
+                                <td><button onclick="event.stopPropagation(); viewDetail('sales', '${esc(item.id)}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
                             </tr>
                         `;
                     } catch (error) {
@@ -1622,12 +1598,12 @@
                         tableHTML += `
                             <tr onclick="viewDetail('invoices', '${item.id}')" style="cursor: pointer;">
                                 <td>${displayDate}</td>
-                                <td><strong>${d.vendor || 'N/A'}</strong></td>
-                                <td>${d.invoice_number || 'N/A'}</td>
-                                <td>$${d.amount || 0}</td>
-                                <td>${d.category || 'N/A'}</td>
+                                <td><strong>${esc(d.vendor || 'N/A')}</strong></td>
+                                <td>${esc(d.invoice_number || 'N/A')}</td>
+                                <td>$${esc(d.amount || 0)}</td>
+                                <td>${esc(d.category || 'N/A')}</td>
                                 <td>${displayDueDate}</td>
-                                <td><span class="badge ${d.paid === 'Y' ? 'badge-success' : 'badge-pending'}">${d.paid || 'N'}</span></td>
+                                <td><span class="badge ${d.paid === 'Y' ? 'badge-success' : 'badge-pending'}">${esc(d.paid || 'N')}</span></td>
                                 <td><button onclick="event.stopPropagation(); viewDetail('invoices', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
                             </tr>
                         `;
@@ -1645,11 +1621,11 @@
                         tableHTML += `
                             <tr onclick="viewDetail('expenses', '${item.id}')" style="cursor: pointer;">
                                 <td>${displayDate}</td>
-                                <td><strong>${d.category || 'N/A'}</strong></td>
-                                <td>${d.description || 'N/A'}</td>
-                                <td>$${d.amount || 0}</td>
-                                <td>${d.receipt || 'N/A'}</td>
-                                <td><span class="badge ${d.paid === 'Y' ? 'badge-success' : 'badge-pending'}">${d.paid || 'N'}</span></td>
+                                <td><strong>${esc(d.category || 'N/A')}</strong></td>
+                                <td>${esc(d.description || 'N/A')}</td>
+                                <td>$${esc(d.amount || 0)}</td>
+                                <td>${esc(d.receipt || 'N/A')}</td>
+                                <td><span class="badge ${d.paid === 'Y' ? 'badge-success' : 'badge-pending'}">${esc(d.paid || 'N')}</span></td>
                                 <td><button onclick="event.stopPropagation(); viewDetail('expenses', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
                             </tr>
                         `;
@@ -1667,9 +1643,9 @@
                         tableHTML += `
                             <tr onclick="viewDetail('fuel', '${item.id}')" style="cursor: pointer;">
                                 <td>${displayDate}</td>
-                                <td>${d.gallons || 0}</td>
-                                <td>$${d.fuel_sales || 0}</td>
-                                <td>$${d.fuel_gp || 0}</td>
+                                <td>${esc(d.gallons || 0)}</td>
+                                <td>$${esc(d.fuel_sales || 0)}</td>
+                                <td>$${esc(d.fuel_gp || 0)}</td>
                                 <td><button onclick="event.stopPropagation(); viewDetail('fuel', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
                             </tr>
                         `;
@@ -1687,9 +1663,9 @@
                         tableHTML += `
                             <tr onclick="viewDetail('paidouts', '${item.id}')" style="cursor: pointer;">
                                 <td>${displayDate}</td>
-                                <td>$${d.amount || 0}</td>
-                                <td>${d.reason || 'N/A'}</td>
-                                <td>${d.employee || 'N/A'}</td>
+                                <td>$${esc(d.amount || 0)}</td>
+                                <td>${esc(d.reason || 'N/A')}</td>
+                                <td>${esc(d.employee || 'N/A')}</td>
                                 <td><button onclick="event.stopPropagation(); viewDetail('paidouts', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
                             </tr>
                         `;
@@ -1709,7 +1685,7 @@
                         tableHTML += `
                             <tr onclick="viewDetail('orders', '${item.id}')" style="cursor: pointer;">
                                 <td>${displayDate}</td>
-                                <td><strong>${d.order_batch_id || 'N/A'}</strong></td>
+                                <td><strong>${esc(d.order_batch_id || 'N/A')}</strong></td>
                                 <td>${vendors.length}</td>
                                 <td>${itemCount}</td>
                                 <td><button onclick="event.stopPropagation(); viewDetail('orders', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
@@ -1730,21 +1706,12 @@
             logActivity('Detail viewed', `Viewed ${type} detail: ${id}`);
             
             try {
-                const mockParam = USE_MOCK_DATA ? '&mock=true' : '';
-                let response = await fetch(`/api/stores/detail?storeId=${currentStoreId}&type=${type}&id=${id}${mockParam}`, {
+                let response = await fetch(`/api/stores/detail?storeId=${currentStoreId}&type=${type}&id=${id}`, {
                     headers: {
                         ...getAuthHeaders(),
                         'Content-Type': 'application/json'
                     }
-                }).catch(async () => {
-                    const fallbackParam = USE_MOCK_DATA ? '' : '&mock=true';
-                    return await fetch(`/api/stores/detail?storeId=${currentStoreId}&type=${type}&id=${id}${fallbackParam}`, {
-                        headers: {
-                            ...getAuthHeaders(),
-                            'Content-Type': 'application/json'
-                        }
-                    }).catch(() => null);
-                });
+                }).catch(() => null);
                 
                 if (!response || !response.ok) {
                     throw new Error('Failed to load detail');
@@ -1756,7 +1723,7 @@
                 showDetailModal(type, item);
             } catch (error) {
                 console.error('Error loading detail:', error);
-                showDetailModal(type, { id, data: {}, date: new Date() });
+                showBanner('We could not load that record. Please try again.');
             }
         }
         
@@ -1774,49 +1741,46 @@
             `;
             
             if (type === 'sales') {
+                const payouts = (d.report && Array.isArray(d.report.payouts)) ? d.report.payouts : [];
+                const issues = checkIssues(d);
+                const passes = (Array.isArray(d.checks) ? d.checks : []).filter(c => c.status === 'pass');
+                const checkLine = (c) => `<li style="margin-bottom:6px;">${c.status === 'pass' ? '\u2705' : c.status === 'fail' ? '\u274c' : '\u26a0\ufe0f'} ${esc(c.message)}</li>`;
+                const depositText = d.deposit !== null && d.deposit !== undefined ? money(d.deposit) : '\u2014';
                 modalHTML += `
                     <div style="margin-bottom: 20px;">
-                        <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Date</div>
-                        <div style="font-size: 18px; font-weight: 600;">${new Date(item.date).toLocaleDateString()}</div>
+                        <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Day</div>
+                        <div style="font-size: 18px; font-weight: 600;">${esc(d.report_date ? fmtDay(d.report_date) : fmtDay(item.date))}</div>
                     </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
-                        <div>
-                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Cash</div>
-                            <div style="font-size: 24px; font-weight: 700; color: var(--primary);">$${d.cash || 0}</div>
-                        </div>
-                        <div>
-                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Card</div>
-                            <div style="font-size: 24px; font-weight: 700; color: var(--primary);">$${d.card || 0}</div>
-                        </div>
-                        <div>
-                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Tax</div>
-                            <div style="font-size: 20px; font-weight: 600;">$${d.tax || 0}</div>
-                        </div>
-                        <div>
-                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Total</div>
-                            <div style="font-size: 28px; font-weight: 700; color: var(--success);">$${d.total_inside || 0}</div>
-                        </div>
+                        ${statCell('Cash (inside)', money(d.cash), 24, 'var(--primary)')}
+                        ${statCell('Card (inside)', money(d.card), 24, 'var(--primary)')}
+                        ${statCell('Inside total', money(d.total_inside), 28, 'var(--success)')}
+                        ${statCell('Deposit', depositText, 24, 'var(--primary)')}
                     </div>
-                    ${d.notes ? `<div style="padding: 16px; background: var(--bg); border-radius: 8px; margin-top: 20px;"><strong>Notes:</strong> ${d.notes}</div>` : ''}
+                    ${d.fuel_sales ? `<div style="margin-bottom:20px;"><div style="font-size:12px;color:var(--text-light);margin-bottom:4px;">Gas</div><div style="font-size:20px;font-weight:600;">${money(d.fuel_sales)}${d.gallons ? ` \u00b7 ${esc(Number(d.gallons).toFixed(0))} gal` : ''}</div></div>` : ''}
+                    ${payouts.length ? `<div style="margin-bottom:20px;"><div style="font-size:12px;color:var(--text-light);margin-bottom:6px;">Paid out of the till</div>${payouts.map(p => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);"><span>${esc(p.label)}</span><strong>${money(p.amount)}</strong></div>`).join('')}</div>` : ''}
+                    ${issues.length ? `<div style="padding:16px;background:#fff3cd;border-radius:8px;margin-bottom:16px;"><strong>Worth a look</strong><ul style="margin:8px 0 0 18px;">${issues.map(checkLine).join('')}</ul></div>` : ''}
+                    ${passes.length ? `<div style="padding:16px;background:var(--bg);border-radius:8px;"><strong>Checked</strong><ul style="margin:8px 0 0 18px;list-style:none;padding:0;">${passes.map(checkLine).join('')}</ul></div>` : ''}
+                    ${d.notes ? `<div style="padding: 16px; background: var(--bg); border-radius: 8px; margin-top: 20px;"><strong>Notes:</strong> ${esc(d.notes)}</div>` : ''}
                 `;
             } else if (type === 'invoices') {
                 modalHTML += `
                     <div style="margin-bottom: 20px;">
                         <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Invoice Number</div>
-                        <div style="font-size: 20px; font-weight: 700;">${d.invoice_number || 'N/A'}</div>
+                        <div style="font-size: 20px; font-weight: 700;">${esc(d.invoice_number || 'N/A')}</div>
                     </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
                         <div>
                             <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Vendor</div>
-                            <div style="font-size: 18px; font-weight: 600;">${d.vendor || 'N/A'}</div>
+                            <div style="font-size: 18px; font-weight: 600;">${esc(d.vendor || 'N/A')}</div>
                         </div>
                         <div>
                             <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Amount</div>
-                            <div style="font-size: 24px; font-weight: 700; color: var(--primary);">$${d.amount || 0}</div>
+                            <div style="font-size: 24px; font-weight: 700; color: var(--primary);">$${esc(d.amount || 0)}</div>
                         </div>
                         <div>
                             <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Category</div>
-                            <div style="font-size: 16px; font-weight: 600;">${d.category || 'N/A'}</div>
+                            <div style="font-size: 16px; font-weight: 600;">${esc(d.category || 'N/A')}</div>
                         </div>
                         <div>
                             <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Status</div>
@@ -1831,22 +1795,22 @@
                             <div style="font-size: 16px;">${d.due_date ? new Date(d.due_date).toLocaleDateString() : 'N/A'}</div>
                         </div>
                     </div>
-                    ${d.notes ? `<div style="padding: 16px; background: var(--bg); border-radius: 8px; margin-top: 20px;"><strong>Notes:</strong> ${d.notes}</div>` : ''}
+                    ${d.notes ? `<div style="padding: 16px; background: var(--bg); border-radius: 8px; margin-top: 20px;"><strong>Notes:</strong> ${esc(d.notes)}</div>` : ''}
                 `;
             } else if (type === 'expenses') {
                 modalHTML += `
                     <div style="margin-bottom: 20px;">
                         <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Receipt Number</div>
-                        <div style="font-size: 20px; font-weight: 700;">${d.receipt || 'N/A'}</div>
+                        <div style="font-size: 20px; font-weight: 700;">${esc(d.receipt || 'N/A')}</div>
                     </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
                         <div>
                             <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Category</div>
-                            <div style="font-size: 18px; font-weight: 600;">${d.category || 'N/A'}</div>
+                            <div style="font-size: 18px; font-weight: 600;">${esc(d.category || 'N/A')}</div>
                         </div>
                         <div>
                             <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Amount</div>
-                            <div style="font-size: 24px; font-weight: 700; color: var(--primary);">$${d.amount || 0}</div>
+                            <div style="font-size: 24px; font-weight: 700; color: var(--primary);">$${esc(d.amount || 0)}</div>
                         </div>
                         <div>
                             <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Date</div>
@@ -1859,7 +1823,7 @@
                     </div>
                     <div style="margin-top: 20px;">
                         <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Description</div>
-                        <div style="font-size: 16px; padding: 12px; background: var(--bg); border-radius: 8px;">${d.description || 'N/A'}</div>
+                        <div style="font-size: 16px; padding: 12px; background: var(--bg); border-radius: 8px;">${esc(d.description || 'N/A')}</div>
                     </div>
                 `;
             } else if (type === 'orders') {
@@ -1867,7 +1831,7 @@
                 modalHTML += `
                     <div style="margin-bottom: 20px;">
                         <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Order Batch ID</div>
-                        <div style="font-size: 20px; font-weight: 700;">${d.order_batch_id || 'N/A'}</div>
+                        <div style="font-size: 20px; font-weight: 700;">${esc(d.order_batch_id || 'N/A')}</div>
                     </div>
                     <div style="margin-bottom: 20px;">
                         <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Date</div>
@@ -1879,7 +1843,7 @@
                 vendors.forEach((vg, idx) => {
                     modalHTML += `
                         <div style="margin-bottom: 24px; padding: 16px; background: var(--bg); border-radius: 8px;">
-                            <div style="font-weight: 600; font-size: 16px; margin-bottom: 12px;">${vg.vendor}</div>
+                            <div style="font-weight: 600; font-size: 16px; margin-bottom: 12px;">${esc(vg.vendor)}</div>
                             <table style="width: 100%; border-collapse: collapse;">
                                 <thead>
                                     <tr style="border-bottom: 1px solid var(--border);">
@@ -1893,9 +1857,9 @@
                     vg.items.forEach((item) => {
                         modalHTML += `
                             <tr>
-                                <td style="padding: 8px;">${item.name}</td>
-                                <td style="text-align: right; padding: 8px; font-weight: 600;">${item.qty}</td>
-                                <td style="text-align: right; padding: 8px; color: var(--text-light);">${item.unit}</td>
+                                <td style="padding: 8px;">${esc(item.name)}</td>
+                                <td style="text-align: right; padding: 8px; font-weight: 600;">${esc(item.qty)}</td>
+                                <td style="text-align: right; padding: 8px; color: var(--text-light);">${esc(item.unit)}</td>
                             </tr>
                         `;
                     });
@@ -1930,14 +1894,16 @@
             if (!container) return;
             
             const period = document.getElementById('summaryPeriod')?.value || 'today';
-            const useMock = document.getElementById('useMockData')?.checked || false;
-            const storeId = currentStoreId || 'S001';
+            const storeId = currentStoreId;
+            if (!storeId) {
+                container.innerHTML = '<div class="empty-state"><h3>Select a store first</h3></div>';
+                return;
+            }
             
             container.innerHTML = '<div class="loading">Loading summary...</div>';
             
             try {
-                const mockParam = useMock ? '&mock=true' : '';
-                const url = `/api/stores/summary?storeId=${storeId}&period=${period}${mockParam}`;
+                const url = `/api/stores/summary?storeId=${encodeURIComponent(storeId)}&period=${period}`;
                 
                 const headers = getAuthHeaders();
                 const response = await fetch(url, { headers });
@@ -1959,7 +1925,7 @@
                     <div class="empty-state">
                         <div class="empty-state-icon">⚠️</div>
                         <h3>Failed to load summary</h3>
-                        <p>${error instanceof Error ? error.message : 'Unknown error'}</p>
+                        <p>${esc(error instanceof Error ? error.message : 'Unknown error')}</p>
                         <button onclick="loadSummaryData()" style="margin-top: 16px; padding: 10px 20px; background: var(--primary); color: white; border: none; border-radius: 8px; cursor: pointer;">Retry</button>
                     </div>
                 `;
@@ -2057,7 +2023,7 @@
                             ${summary.insights.map(insight => `
                                 <li style="padding: 12px 0; border-bottom: 1px solid rgba(0,0,0,0.05); display: flex; align-items: start; gap: 12px;">
                                     <span style="color: var(--primary); font-size: 20px;">•</span>
-                                    <span style="flex: 1; line-height: 1.6;">${insight}</span>
+                                    <span style="flex: 1; line-height: 1.6;">${esc(insight)}</span>
                                 </li>
                             `).join('')}
                         </ul>
@@ -2074,7 +2040,7 @@
                             ${summary.recommendations.map(rec => `
                                 <li style="padding: 12px 0; border-bottom: 1px solid rgba(0,0,0,0.05); display: flex; align-items: start; gap: 12px;">
                                     <span style="color: var(--warning); font-size: 20px;">→</span>
-                                    <span style="flex: 1; line-height: 1.6;">${rec}</span>
+                                    <span style="flex: 1; line-height: 1.6;">${esc(rec)}</span>
                                 </li>
                             `).join('')}
                         </ul>
@@ -2090,7 +2056,7 @@
                                 <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: var(--bg); border-radius: 8px;">
                                     <div style="display: flex; align-items: center; gap: 12px;">
                                         <span style="font-size: 20px;">${idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '•'}</span>
-                                        <span style="font-weight: 600;">${cat.category}</span>
+                                        <span style="font-weight: 600;">${esc(cat.category)}</span>
                                     </div>
                                     <span style="font-size: 18px; font-weight: 700; color: var(--danger);">$${cat.amount.toFixed(2)}</span>
                                 </div>
@@ -2105,18 +2071,9 @@
         // Add event listeners for summary controls
         document.addEventListener('DOMContentLoaded', () => {
             const summaryPeriod = document.getElementById('summaryPeriod');
-            const useMockData = document.getElementById('useMockData');
             
             if (summaryPeriod) {
                 summaryPeriod.addEventListener('change', () => {
-                    if (currentPage === 'summary') {
-                        loadSummaryData();
-                    }
-                });
-            }
-            
-            if (useMockData) {
-                useMockData.addEventListener('change', () => {
                     if (currentPage === 'summary') {
                         loadSummaryData();
                     }
@@ -2183,9 +2140,6 @@
                 if (storeSelect && storeSelect.value) {
                     currentStoreId = storeSelect.value;
                     console.log('Set currentStoreId from dropdown:', currentStoreId);
-                } else {
-                    currentStoreId = 'S001'; // Default fallback
-                    console.log('Set currentStoreId to default:', currentStoreId);
                 }
             }
             
@@ -2217,9 +2171,9 @@
                 if (storeSelect && storeSelect.value) {
                     currentStoreId = storeSelect.value;
                 } else {
-                    currentStoreId = 'S001';
+                    container.innerHTML = '<div class="empty-state"><h3>Select a store first</h3></div>';
+                    return;
                 }
-                console.log('Set currentStoreId in loadPageData:', currentStoreId);
             }
             
             console.log(`loadPageData called for page: ${page}, storeId: ${currentStoreId}`);
@@ -2227,34 +2181,19 @@
             container.innerHTML = '<div class="loading">Loading...</div>';
             
             try {
-                console.log(`loadPageData: storeId=${currentStoreId}, page=${page}, USE_MOCK_DATA=${USE_MOCK_DATA}`);
-                const mockParam = USE_MOCK_DATA ? '&mock=true' : '';
-                const url = `/api/stores/data?storeId=${encodeURIComponent(currentStoreId)}&type=${encodeURIComponent(page)}${mockParam}`;
+                console.log(`loadPageData: storeId=${currentStoreId}, page=${page}`);
+                const url = `/api/stores/data?storeId=${encodeURIComponent(currentStoreId)}&type=${encodeURIComponent(page)}`;
                 console.log('Fetching URL:', url);
                 let response = await fetch(url, {
                     headers: {
                         ...getAuthHeaders(),
                         'Content-Type': 'application/json'
                     }
-                }).catch(async (error) => {
-                    console.log('Primary data failed, trying fallback...', error);
-                    const fallbackParam = USE_MOCK_DATA ? '' : '&mock=true';
-                    const fallbackUrl = `/api/stores/data?storeId=${encodeURIComponent(currentStoreId)}&type=${encodeURIComponent(page)}${fallbackParam}`;
-                    console.log('Trying fallback URL:', fallbackUrl);
-                    return await fetch(fallbackUrl, {
-                        headers: {
-                            ...getAuthHeaders(),
-                            'Content-Type': 'application/json'
-                        }
-                    }).catch((fallbackError) => {
-                        console.error('Fallback also failed:', fallbackError);
-                        return null;
-                    });
-                });
+                }).catch(() => null);
                 
                 if (!response || !response.ok) {
                     const errorText = await response?.text().catch(() => 'Unknown error');
-                    console.error(`API error: ${response?.status} - ${errorText}`);
+                    console.error(`API error: ${response?.status} - ${esc(errorText)}`);
                     throw new Error(`Failed to load data: ${response?.status || 'No response'}`);
                 }
                 
@@ -2272,7 +2211,6 @@
                             <div class="empty-state-icon">📭</div>
                             <h3>No ${page} data found</h3>
                             <p>Data will appear here once messages are processed via WhatsApp</p>
-                            <p style="margin-top: 10px; font-size: 12px; color: #999;">Debug: Response data = ${JSON.stringify(data)}</p>
                         </div>
                     `;
                     return;
@@ -2288,8 +2226,8 @@
                         <div class="empty-state">
                             <div class="empty-state-icon">❌</div>
                             <h3>Error rendering ${page} data</h3>
-                            <p>${error.message}</p>
-                            <pre style="margin-top: 20px; text-align: left; background: #f5f5f5; padding: 10px; border-radius: 5px; overflow-x: auto;">${JSON.stringify(items.slice(0, 2), null, 2)}</pre>
+                            <p>${esc(error.message)}</p>
+                            <pre style="margin-top: 20px; text-align: left; background: #f5f5f5; padding: 10px; border-radius: 5px; overflow-x: auto;">${esc(JSON.stringify(items.slice(0, 2), null, 2))}</pre>
                         </div>
                     `;
                 }
@@ -2400,7 +2338,7 @@
                 if (response.ok && data.success) {
                     successMessage.textContent = `Successfully added store ${storeId}!`;
                     successMessage.classList.add('active');
-                    logActivity('Store added', `Added store ${storeId} as ${role}`);
+                    logActivity('Store added', `Added store ${storeId} as ${esc(role)}`);
                     
                     // Reload stores list
                     await loadStores();

@@ -49,14 +49,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       await prisma.$queryRaw`SELECT 1`;
       database = { connected: true };
     } catch (e: unknown) {
+      console.error('Readiness: database check failed', e instanceof Error ? e.message : e);
       database = {
         connected: false,
-        error: e instanceof Error ? e.message : 'Database connection failed',
+        // Driver messages can include host names, so only show them outside production.
+        error: isProd ? 'Database connection failed' : e instanceof Error ? e.message : 'Database connection failed',
       };
     }
   } else {
     database = { connected: false, error: 'DATABASE_URL not set' };
   }
+
+  // The AI-understanding code reads store_config.profile_json; deploying before this column exists breaks store lookups.
+  let profileColumn = false;
+  if (database.connected) {
+    try {
+      await prisma.$queryRaw`SELECT profile_json FROM store_config LIMIT 1`;
+      profileColumn = true;
+    } catch {
+      profileColumn = false;
+    }
+  }
+  const schema = {
+    profileJsonColumn: profileColumn,
+    ...(profileColumn ? {} : { fix: 'Run scripts/add-store-profile.sql in the Supabase SQL editor' }),
+  };
+
+  const ai = {
+    understanding:
+      Boolean(process.env.OPENAI_API_KEY?.trim()) &&
+      Boolean(process.env.OPENAI_EXTRACTION_MODEL?.trim()) &&
+      process.env.AI_UNDERSTANDING?.trim().toLowerCase() !== 'off',
+    voiceNotes: Boolean(process.env.OPENAI_TRANSCRIPTION_MODEL?.trim()),
+  };
 
   const optional = {
     openaiApiKey: Boolean(process.env.OPENAI_API_KEY?.trim()),
@@ -80,15 +105,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     storeRouting: getWhatsAppStoreRoutingMode(),
     checks,
     database,
+    schema,
+    ai,
     optional,
     stackNotes: {
       redis: 'Not required on Vercel — messages process inline. Redis only for local Express + BullMQ worker.',
-      openai: 'Optional for core WhatsApp flow (rule-based). Needed for dashboard AI Summary page.',
+      openai: 'AI message understanding needs OPENAI_API_KEY + OPENAI_EXTRACTION_MODEL (photos and voice notes need it). Without it, text messages use the built-in rules.',
       googleSheets: 'Optional — OK command saves to DB; Sheets write only when credentials are set.',
       awsS3: 'Optional — receipt image storage not in simplified production pipeline yet.',
     },
     readyForProduction:
-      (!isProd || missing.length === 0) && database.connected,
+      (!isProd || missing.length === 0) && database.connected && profileColumn,
     missingIfProduction: isProd ? missing : [],
     metaChecklist: [
       'WhatsApp number registered on WABA (Cloud API)',

@@ -43,6 +43,24 @@ export async function getLatestPendingAction(prisma: PrismaClient, phoneE164: st
   });
 }
 
+/**
+ * All pending entries that came from the same inbound message as the latest one.
+ * One message can produce several entries (e.g. two stores), and OK / CANCEL apply to all of them.
+ */
+export async function getLatestPendingBatch(prisma: PrismaClient, phoneE164: string) {
+  const latest = await getLatestPendingAction(prisma, phoneE164);
+  if (!latest) return [];
+  return prisma.pendingActions.findMany({
+    where: {
+      phoneE164,
+      status: PendingStatus.PENDING,
+      expiresAt: { gt: new Date() },
+      messageIdInbound: latest.messageIdInbound,
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+}
+
 export async function confirmPendingAction(prisma: PrismaClient, actionId: string): Promise<boolean> {
   const result = await prisma.pendingActions.updateMany({
     where: { actionId, status: PendingStatus.PENDING },

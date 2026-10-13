@@ -1,8 +1,9 @@
 import type { PrismaClient } from '@prisma/client';
 import { ClassificationType } from '@prisma/client';
 import { classifyMessage } from './messageClassifier';
-import { extractDataFromText } from './messageExtraction';
-import { isMessageProcessed, logMessage, updateMessageLog } from './messageLogService';
+import { extractDataFromText, unusedNumbers } from './messageExtraction';
+import { claimMessage, logMessage, updateMessageLog } from './messageLogService';
+import { checkHourlyLimit, shouldReplyNotLinked } from './rateLimit';
 import { createPendingAction } from './pendingActionService';
 import {
   resolveStoreIdBySenderPhone,
@@ -11,6 +12,8 @@ import {
 import { resolveStoreIdForIncomingMessage } from './whatsappStoreResolution';
 import { handleWhatsAppCommand, isWhatsAppCommand } from './whatsappCommands';
 import { sendWhatsAppMessage } from './whatsappMessaging';
+import { createOpenAiUnderstander } from './understanding/extractor';
+import { understandAndRespond } from './understanding/service';
 
 export interface ProcessWhatsAppMessageInput {
   messageId: string;
@@ -49,7 +52,15 @@ export async function processWhatsAppMessage(
 ): Promise<void> {
   const { messageId, phoneE164, messageText = '', mediaId, mediaType } = input;
 
-  if (await isMessageProcessed(prisma, messageId)) {
+  // Only one worker may process a message, even if Meta delivers it twice.
+  const claimed = await claimMessage(prisma, {
+    messageId,
+    phoneE164,
+    messageType: mediaId ? mediaType || 'image' : 'text',
+    messageText: messageText.trim() || undefined,
+    mediaId,
+  });
+  if (!claimed) {
     return;
   }
 
@@ -104,13 +115,30 @@ export async function processWhatsAppMessage(
   });
 
   if (!storeId) {
-    await sendWhatsAppMessage(
-      prisma,
-      phoneE164,
-      '📱 Store not linked.\n\nComplete onboarding at opsAi, then create your ops WhatsApp group, add our business number, and message from your registered phone.',
-      undefined
-    );
-    await updateMessageLog(prisma, messageId, { processed: true });
+    // One reply per stranger per day; every reply costs money and an open number attracts spam.
+    if (await shouldReplyNotLinked(prisma, phoneE164)) {
+      await sendWhatsAppMessage(
+        prisma,
+        phoneE164,
+        '📱 Store not linked.\n\nComplete onboarding at opsAi, then create your ops WhatsApp group, add our business number, and message from your registered phone.',
+        undefined
+      );
+    }
+    await updateMessageLog(prisma, messageId, { classification: 'NOT_LINKED', processed: true });
+    return;
+  }
+
+  const limit = await checkHourlyLimit(prisma, phoneE164);
+  if (!limit.allowed) {
+    if (limit.notify) {
+      await sendWhatsAppMessage(
+        prisma,
+        phoneE164,
+        '⏳ That is a lot of messages in a short time. Please wait a little and send the rest later.',
+        storeId
+      );
+    }
+    await updateMessageLog(prisma, messageId, { classification: 'RATE_LIMITED', processed: true, storeId });
     return;
   }
 
@@ -134,6 +162,33 @@ export async function processWhatsAppMessage(
     return;
   }
 
+  const isAudio = Boolean(mediaId && mediaType?.toLowerCase().startsWith('audio'));
+
+  // AI understanding (text, photos, voice). Off unless OPENAI_API_KEY and OPENAI_EXTRACTION_MODEL are set.
+  const understander = createOpenAiUnderstander();
+  if (understander) {
+    const outcome = await understandAndRespond(prisma, {
+      messageId,
+      phoneE164,
+      storeId,
+      text,
+      mediaId,
+      mediaType,
+      understander,
+    });
+    if (outcome === 'handled') return;
+    // 'fallback': the AI was unreachable for a text message, so the rule-based path below handles it.
+  } else if (isAudio) {
+    await sendWhatsAppMessage(
+      prisma,
+      phoneE164,
+      '🎙️ Voice notes are not switched on yet. Please send a photo or type it, like: cash 298 card 1355 gas 1440.',
+      storeId
+    );
+    await updateMessageLog(prisma, messageId, { classification: 'AUDIO_UNSUPPORTED', processed: true, storeId });
+    return;
+  }
+
   const classification = classifyMessage(text || 'image receipt');
   if (classification.type === ClassificationType.UNKNOWN) {
     await sendWhatsAppMessage(
@@ -151,6 +206,23 @@ export async function processWhatsAppMessage(
   }
 
   const extraction = extractDataFromText(classification.type, text || 'image');
+
+  // The rules read very little. Never save (or show) a partial reading as if it were complete.
+  const left = unusedNumbers(classification.type, text, extraction.fields);
+  if (left.length > 0) {
+    await sendWhatsAppMessage(
+      prisma,
+      phoneE164,
+      `😕 I can't read all of that right now (I would have left out: ${left.join(', ')}). Please send it again in a minute, or send one store at a time like: cash 298 card 1355.`,
+      storeId
+    );
+    await updateMessageLog(prisma, messageId, {
+      classification: 'RULES_INCOMPLETE',
+      processed: true,
+      storeId,
+    });
+    return;
+  }
   const actionId = await createPendingAction(
     prisma,
     phoneE164,

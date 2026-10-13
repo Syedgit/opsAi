@@ -24,6 +24,10 @@ jest.mock('@prisma/client', () => ({
 }));
 
 describe('GET /api/setup/readiness', () => {
+  beforeAll(() => {
+    process.env.DATABASE_URL = 'postgresql://test';
+  });
+
   it('returns checklist without secrets', async () => {
     const req = { method: 'GET' } as VercelRequest;
     const res = mockRes();
@@ -37,6 +41,8 @@ describe('GET /api/setup/readiness', () => {
     expect(body.checks).toBeDefined();
     expect(body.database).toBeDefined();
     expect(body.optional).toBeDefined();
+    expect(body.schema).toEqual({ profileJsonColumn: true });
+    expect(body.ai).toBeDefined();
     expect(body.metaChecklist).toBeInstanceOf(Array);
     expect(JSON.stringify(body)).not.toMatch(/WHATSAPP_ACCESS_TOKEN/);
   });

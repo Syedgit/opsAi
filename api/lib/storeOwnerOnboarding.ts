@@ -33,6 +33,12 @@ export type CompleteOwnerOnboardingResult =
 
 const DEFAULT_SHEET_PLACEHOLDER = 'pending_google_sheet';
 
+/** Sanity cap so one account cannot create stores without limit (override with MAX_STORES_PER_OWNER). */
+function maxStoresPerOwner(): number {
+  const parsed = Number.parseInt(process.env.MAX_STORES_PER_OWNER ?? '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 50;
+}
+
 function defaultSheetId(): string {
   return process.env.ONBOARDING_DEFAULT_SHEET_ID?.trim() || DEFAULT_SHEET_PLACEHOLDER;
 }
@@ -41,40 +47,51 @@ export async function completeOwnerStoreOnboarding(
   prisma: PrismaClient,
   input: CompleteOwnerOnboardingInput
 ): Promise<CompleteOwnerOnboardingResult> {
-  const phone = normalizeOwnerPhoneE164(input.ownerPhoneE164);
-  if (!phone) {
-    return {
-      ok: false,
-      status: 400,
-      error: 'Invalid phone number. Use international format with country code, e.g. +15551234567',
-    };
-  }
-
   const storeName = input.storeName.trim();
   if (!storeName || storeName.length > 200) {
     return { ok: false, status: 400, error: 'storeName is required (max 200 characters)' };
   }
 
-  const existingMembership = await prisma.userStore.findFirst({
+  // An owner can come back and add more locations. Only the first store registers a phone number:
+  // the owner's number already exists, and messages that name a store are routed to it by name.
+  const memberships = await prisma.userStore.findMany({
     where: { userId: input.userId },
+    select: { role: true },
   });
-  if (existingMembership) {
-    return {
-      ok: false,
-      status: 409,
-      error: 'You already belong to a store. Open the dashboard or contact support to add another location.',
-    };
-  }
+  const isAdditionalStore = memberships.length > 0;
 
-  const phoneTaken = await prisma.userDirectory.findUnique({
-    where: { phoneE164: phone },
-  });
-  if (phoneTaken) {
-    return {
-      ok: false,
-      status: 409,
-      error: 'This WhatsApp number is already registered to another account.',
-    };
+  let phone: string | null = null;
+  if (isAdditionalStore) {
+    const ownedCount = memberships.filter((m) => m.role === UserRole.OWNER).length;
+    if (ownedCount === 0) {
+      return { ok: false, status: 403, error: 'Only a store owner can add a new store.' };
+    }
+    if (ownedCount >= maxStoresPerOwner()) {
+      return {
+        ok: false,
+        status: 409,
+        error: `You have reached the limit of ${maxStoresPerOwner()} stores. Contact support to add more.`,
+      };
+    }
+  } else {
+    phone = normalizeOwnerPhoneE164(input.ownerPhoneE164);
+    if (!phone) {
+      return {
+        ok: false,
+        status: 400,
+        error: 'Invalid phone number. Use international format with country code, e.g. +15551234567',
+      };
+    }
+    const phoneTaken = await prisma.userDirectory.findUnique({
+      where: { phoneE164: phone },
+    });
+    if (phoneTaken) {
+      return {
+        ok: false,
+        status: 409,
+        error: 'This WhatsApp number is already registered to another account.',
+      };
+    }
   }
 
   let storeId = '';
@@ -99,15 +116,17 @@ export async function completeOwnerStoreOnboarding(
             role: UserRole.OWNER,
           },
         });
-        await tx.userDirectory.create({
-          data: {
-            phoneE164: phone,
-            name: null,
-            role: UserRole.OWNER,
-            storeId,
-            isActive: true,
-          },
-        });
+        if (phone) {
+          await tx.userDirectory.create({
+            data: {
+              phoneE164: phone,
+              name: null,
+              role: UserRole.OWNER,
+              storeId,
+              isActive: true,
+            },
+          });
+        }
       });
       createdStore = true;
       break;

@@ -1,3 +1,4 @@
+import { blockInProduction } from '../utils/devOnly';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import axios from 'axios';
 
@@ -6,6 +7,7 @@ import axios from 'axios';
  * This helps verify which phone number corresponds to your Phone Number ID
  */
 export default async function handler(_req: VercelRequest, res: VercelResponse): Promise<void> {
+  if (blockInProduction(_req, res)) return;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
 

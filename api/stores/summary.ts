@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
 import { generateBusinessSummary } from '../services/aiSummarization';
-import { requireStoreAccess } from '../utils/storeAccess';
+import { requireStoreAccess, isMockRequested } from '../utils/storeAccess';
 
 const prisma = new PrismaClient();
 
@@ -18,7 +18,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
-  const useMock = req.query.mock === 'true';
+  const useMock = isMockRequested(req);
   const access = await requireStoreAccess(req, res, prisma, storeId, useMock);
   if (!useMock && !access) return;
 

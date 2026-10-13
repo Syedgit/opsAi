@@ -15,8 +15,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "seed": "ts-node scripts/seed-mock-data.ts",
-    "lint": "eslint src api --ext .ts",
-    "lint:strict": "eslint src api --ext .ts --max-warnings 0",
+    "lint": "eslint src api lib --ext .ts",
+    "lint:strict": "eslint src api lib --ext .ts --max-warnings 0",
     "lint:fix": "eslint src api --ext .ts --fix",
     "type-check": "tsc --noEmit && tsc --noEmit --project tsconfig.api.json",
     "type-check:src": "tsc --noEmit",
@@ -26,7 +26,9 @@
     "check": "npm run type-check && npm run lint && npm run format:check",
     "check:api": "npm run type-check:api",
     "prebuild": "npm run type-check",
-    "test": "jest"
+    "test": "jest",
+    "simulate": "ts-node -T scripts/simulate-whatsapp.ts",
+    "preview": "ts-node -T scripts/ui-preview.ts"
   },
   "keywords": [
     "whatsapp",
@@ -40,6 +42,7 @@
     "@aws-sdk/client-s3": "^3.450.0",
     "@google-cloud/vision": "^3.1.0",
     "@prisma/client": "^5.7.0",
+    "@vercel/functions": "^2.2.13",
     "axios": "^1.6.0",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.0.0",

@@ -137,6 +137,9 @@
                 <li>From <strong>your registered WhatsApp number</strong>, send any message in that group (e.g. “hello” or “Sales cash 100 card 200”).</li>
                 <li>opsAi will reply when the group is connected — then send real ops messages and reply <strong>OK</strong> to confirm.</li>
             </ol>
+            <div class="number-highlight" style="font-size: 15px; font-weight: 600;">
+                Try it now: send opsAi yesterday's close report in whatever form you use. A photo, typed text or a voice note all work. Check what it understood, fix anything wrong, and reply OK. That is the whole setup.
+            </div>
             <button type="button" class="btn-primary" id="goDashboardBtn">Open dashboard</button>
         </div>
     </div>
@@ -148,6 +151,19 @@
 
         let opsDisplayNumber = null;
 
+        // ?add=1: an existing owner adding another location (no phone needed, no redirect away).
+        const isAddMode = new URLSearchParams(window.location.search).get('add') === '1';
+        if (isAddMode) {
+            document.querySelector('#setupPanel h1').textContent = 'Add another store';
+            document.querySelector('#setupPanel .auth-header p').textContent =
+                'Your WhatsApp number stays the same. Each store keeps its own sales, invoices and deposits.';
+            const phoneInput = document.getElementById('ownerPhoneE164');
+            phoneInput.required = false;
+            phoneInput.closest('.form-group').style.display = 'none';
+            document.getElementById('submitBtn').textContent = 'Add store';
+            document.querySelector('#setupPanel .auth-footer').style.display = 'none';
+        }
+
         (async function checkStatus() {
             try {
                 const r = await fetch('/api/onboarding/status', {
@@ -155,7 +171,7 @@
                 });
                 const d = await r.json();
                 if (d.opsWhatsAppDisplayNumber) opsDisplayNumber = d.opsWhatsAppDisplayNumber;
-                if (d.success && !d.needsOnboarding) {
+                if (d.success && !d.needsOnboarding && !isAddMode) {
                     window.location.replace('/dashboard');
                 }
             } catch (_) {}
@@ -175,6 +191,16 @@
             document.getElementById('setupPanel').classList.remove('active');
             document.getElementById('successPanel').classList.add('active');
             document.getElementById('successStoreId').textContent = storeId;
+            // The dashboard opens on the store that was just added.
+            sessionStorage.setItem('selectStoreId', storeId);
+            if (isAddMode) {
+                document.querySelector('#successPanel h1').textContent = 'Store added';
+                document.querySelector('#successPanel .auth-header p').innerHTML =
+                    'Store <span class="store-badge">' + storeId + '</span> is ready. Keep messaging opsAi from the same WhatsApp number and include the store name, for example: <strong>' +
+                    (storeName || 'Store').replace(/[<>&"]/g, '') + ' cash 100 card 200 gas 500</strong>.';
+                document.querySelector('#successPanel .steps-list').style.display = 'none';
+                return;
+            }
             document.getElementById('groupNameHint').textContent = storeName || 'Your Store';
             document.getElementById('opsNumberDisplay').textContent =
                 opsDisplayNumber || 'Add the opsAi number from your welcome email or dashboard';
@@ -192,9 +218,11 @@
             const storeName = document.getElementById('storeName').value.trim();
             const body = {
                 storeName,
-                ownerPhoneE164: document.getElementById('ownerPhoneE164').value.trim(),
                 timezone: document.getElementById('timezone').value,
             };
+            if (!isAddMode) {
+                body.ownerPhoneE164 = document.getElementById('ownerPhoneE164').value.trim();
+            }
 
             try {
                 const response = await fetch('/api/onboarding/complete-store', {
