@@ -1,9 +1,3 @@
-# Test functions excluded from production
-api/test/
-api/**/__tests__/
-
-# Hobby plan: max 12 serverless functions per deploy. Keep only routes
-# needed for WhatsApp, login, onboarding, dashboard, and shift tasks.
-# Admin phone-assignment and auto-create groups stay in the repo for local/Pro.
-api/admin/
-api/stores/*/whatsapp-group-provision.ts
+# Helpers and extra routes were moved out of /api so Vercel Hobby
+# stays under the 12 serverless-function cap. Do not put non-route
+# files back under /api — each .ts file there becomes a function.

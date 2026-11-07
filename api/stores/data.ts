@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
-import { requireStoreAccess, isMockRequested } from '../utils/storeAccess';
+import { requireStoreAccess, isMockRequested } from '../../lib/storeAccess';
 
 const prisma = new PrismaClient();
 
@@ -189,7 +189,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   }
 
   if (!type) {
-    res.status(400).json({ error: 'Type required (?type=sales|invoices|fuel|paidouts|orders)' });
+    res.status(400).json({ error: 'Type required (?type=sales|invoices|fuel|paidouts|orders|schedules)' });
     return;
   }
 
@@ -214,6 +214,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       case 'orders':
         dbType = 'ORDER_REQUEST';
         break;
+      case 'schedules':
+        // Hours of every employee: owners and managers only. Saved as UNKNOWN entries tagged work_schedule.
+        if (access && access.role === 'STAFF') {
+          res.status(403).json({ error: 'Schedules are visible to owners and managers only' });
+          return;
+        }
+        dbType = 'UNKNOWN';
+        break;
       default:
         res.status(400).json({ error: 'Invalid type' });
         return;
@@ -222,14 +230,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const data = await prisma.pendingActions.findMany({
       where: {
         storeId,
-        type: dbType as 'STORE_SALES' | 'INVOICE_EXPENSE' | 'FUEL_SALES' | 'PAID_OUT' | 'ORDER_REQUEST',
+        type: dbType as 'STORE_SALES' | 'INVOICE_EXPENSE' | 'FUEL_SALES' | 'PAID_OUT' | 'ORDER_REQUEST' | 'UNKNOWN',
         status: 'CONFIRMED',
       },
       orderBy: { createdAt: 'desc' },
-      take: 100,
+      take: type === 'schedules' ? 300 : 100,
     });
 
-    const formatted = data.map((item) => ({
+    // UNKNOWN also holds deposit slips; the schedule list keeps only schedules (a year of weeks at most).
+    const rows =
+      type === 'schedules'
+        ? data.filter((item) => (item.payloadJson as { _kind?: string } | null)?._kind === 'work_schedule').slice(0, 52)
+        : data;
+
+    const formatted = rows.map((item) => ({
       id: item.actionId,
       date: item.createdAt,
       data: item.payloadJson,

@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { sign, verify } from 'jsonwebtoken';
-import { getJwtSecret } from '../utils/auth';
+import { getJwtSecret } from '../../lib/apiAuth';
 
 const prisma = new PrismaClient();
 

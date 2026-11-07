@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
 import { startOfDay, endOfDay, startOfMonth, endOfMonth } from 'date-fns';
-import { requireAuthUser } from '../utils/auth';
-import { requireStoreAccess, isMockRequested } from '../utils/storeAccess';
+import { requireAuthUser } from '../../lib/apiAuth';
+import { requireStoreAccess, isMockRequested } from '../../lib/storeAccess';
 
 const prisma = new PrismaClient();
 

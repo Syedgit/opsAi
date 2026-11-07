@@ -70,28 +70,8 @@
       "destination": "/api/stores/index.ts"
     },
     {
-      "source": "/api/stores/:storeId/whatsapp-group-provision",
-      "destination": "/api/stores/[storeId]/whatsapp-group-provision.ts"
-    },
-    {
       "source": "/api/stores",
       "destination": "/api/stores/index.ts"
-    },
-    {
-      "source": "/api/admin/phone-numbers",
-      "destination": "/api/admin/phone-numbers.ts"
-    },
-    {
-      "source": "/api/admin/stores/:storeId/phone-number",
-      "destination": "/api/admin/stores/[storeId]/phone-number.ts"
-    },
-    {
-      "source": "/api/admin/setup/whatsapp-routing",
-      "destination": "/api/admin/setup/whatsapp-routing.ts"
-    },
-    {
-      "source": "/api/admin/stores/:storeId/whatsapp-group",
-      "destination": "/api/admin/stores/[storeId]/whatsapp-group.ts"
     }
   ],
   "headers": [

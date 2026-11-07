@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { sign } from 'jsonwebtoken';
-import { getAuthUser, getJwtSecret, requireAdmin, requireAuthUser } from '../auth';
+import { getAuthUser, getJwtSecret, requireAdmin, requireAuthUser } from '../apiAuth';
 
 function mockRes(): VercelResponse {
   const res = {

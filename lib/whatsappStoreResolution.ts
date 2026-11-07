@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 
 /**
- * SYNC: duplicate implementation lives in api/lib/whatsappStoreResolution.ts for Vercel.
+ * Used by both Vercel functions (import from /lib) and the Express app.
  * How to resolve which store an incoming WhatsApp message belongs to.
  * Set WHATSAPP_STORE_ROUTING in .env at deploy / setup time.
  *

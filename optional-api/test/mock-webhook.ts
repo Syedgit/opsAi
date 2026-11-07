@@ -39,8 +39,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
             value: {
               messaging_product: 'whatsapp',
               metadata: {
-                display_phone_number: '15558608667',
-                phone_number_id: process.env.WHATSAPP_PHONE_NUMBER_ID || '2118921505602634',
+                display_phone_number: (process.env.OPS_WHATSAPP_DISPLAY_NUMBER || '').replace(/^\+/, '') || '15555550100',
+                phone_number_id: process.env.WHATSAPP_PHONE_NUMBER_ID || 'not-configured',
               },
               messages: [
                 {

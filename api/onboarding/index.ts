@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
-import { getAuthUser } from '../utils/auth';
+import { getAuthUser } from '../../lib/apiAuth';
 import { getGroupSetupMode } from '../../lib/whatsappGroupConfig';
-import { completeOwnerStoreOnboarding } from '../lib/storeOwnerOnboarding';
+import { completeOwnerStoreOnboarding } from '../../lib/storeOwnerOnboarding';
 
 const prisma = new PrismaClient();
 

@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
 import { sign } from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
-import { getJwtSecret } from '../utils/auth';
+import { getJwtSecret } from '../../lib/apiAuth';
 
 const prisma = new PrismaClient();
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;

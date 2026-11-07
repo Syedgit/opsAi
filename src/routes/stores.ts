@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient, UserRole } from '@prisma/client';
-import { getAuthUser } from '../../api/utils/auth';
+import { getAuthUser } from '../../lib/apiAuth';
 import { generateBusinessSummary, BusinessSummary } from '../services/aiSummarization';
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, format } from 'date-fns';
 import { isGroupAutoProvisionEnabled } from '../../lib/whatsappGroupConfig';

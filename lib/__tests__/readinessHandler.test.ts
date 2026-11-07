@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import handler from '../readiness';
+import handler from '../../api/setup/readiness';
 
 function mockRes(): VercelResponse & { statusCode: number; body: unknown } {
   const res = {

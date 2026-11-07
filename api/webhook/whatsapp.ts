@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
-import { applyGroupLifecycleEvent } from '../lib/whatsappGroupLifecycle';
+import { applyGroupLifecycleEvent } from '../../lib/whatsappGroupLifecycle';
 import { waitUntil } from '@vercel/functions';
-import { readRawBody, verifyRawWhatsAppSignature } from '../utils/whatsappSignature';
+import { readRawBody, verifyRawWhatsAppSignature } from '../../lib/whatsappSignature';
 import { processWhatsAppMessage } from '../../lib/processWhatsAppMessage';
 
 const prisma = new PrismaClient();

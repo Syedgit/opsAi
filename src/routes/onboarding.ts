@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { getAuthUser } from '../../api/utils/auth';
+import { getAuthUser } from '../../lib/apiAuth';
 import { completeOwnerStoreOnboarding } from '../../lib/storeOwnerOnboarding';
 
 const router = Router();

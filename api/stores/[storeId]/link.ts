@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient, UserRole } from '@prisma/client';
-import { requireAuthUser } from '../../utils/auth';
+import { requireAuthUser } from '../../../lib/apiAuth';
 
 const prisma = new PrismaClient();
 

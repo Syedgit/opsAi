@@ -1,6 +1,6 @@
 import type { PrismaClient, UserRole } from '@prisma/client';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuthUser, type AuthUser } from './auth';
+import { requireAuthUser, type AuthUser } from './apiAuth';
 
 export type StoreAccessResult =
   | { ok: true; role: UserRole }

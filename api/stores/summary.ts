@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
-import { generateBusinessSummary } from '../services/aiSummarization';
-import { requireStoreAccess, isMockRequested } from '../utils/storeAccess';
+import { generateBusinessSummary } from '../../lib/aiSummarization';
+import { requireStoreAccess, isMockRequested } from '../../lib/storeAccess';
 
 const prisma = new PrismaClient();
 
