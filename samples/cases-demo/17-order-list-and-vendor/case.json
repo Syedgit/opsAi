@@ -1,0 +1,41 @@
+{
+  "title": "An order list is read and the vendor is confirmed from the signup catalog",
+  "why": "A photo or typed restock list comes back as items plus a vendor (HLA for cigs, ABC for drinks, RPS for auto) for the owner to OK.",
+  "today": "2026-10-13T12:00:00-04:00",
+  "vendors": {
+    "Rockaway": [
+      { "name": "HLA", "category": "cigarettes" },
+      { "name": "ABC", "category": "drinks" },
+      { "name": "RPS", "category": "auto" }
+    ]
+  },
+  "steps": [
+    {
+      "name": "Owner sends a cigarette order",
+      "text": "need 10 Marlboro Red and 5 Newport from HLA",
+      "expect": {
+        "replyContains": ["Marlboro", "Newport", "HLA", "Please confirm", "send this order to HLA", "FIX vendor"],
+        "entries": [
+          {
+            "kind": "order",
+            "store": "Rockaway",
+            "vendor": "HLA",
+            "lineCount": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "Owner confirms the vendor and list",
+      "text": "OK",
+      "expect": {
+        "status": { "PENDING": 0, "CONFIRMED": 1 },
+        "dashboard": {
+          "Rockaway": {
+            "orders": { "count": 1, "first": { "vendor": "HLA" } }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "title": "Staff can report for their store but cannot change how the store is configured",
+  "why": "Staff messages are saved under their own store, and only an owner or manager can teach deposit rules.",
+  "today": "2026-10-13T12:00:00-04:00",
+  "steps": [
+    {
+      "name": "Staff reports; the deposit matches an obvious rule",
+      "from": "staff",
+      "text": "Rockaway 10/12 cash 106 card 334 gas 1355 Lays 142 deposit 1653",
+      "expect": {
+        "entries": [
+          {
+            "store": "Rockaway",
+            "cash": 106,
+            "deposit": 1653,
+            "suggestsDepositRule": false
+          }
+        ],
+        "status": {
+          "PENDING": 1
+        }
+      }
+    },
+    {
+      "name": "Staff replies OK",
+      "from": "staff",
+      "text": "OK",
+      "expect": {
+        "status": {
+          "PENDING": 0,
+          "CONFIRMED": 1
+        },
+        "savedRule": {
+          "Rockaway": false
+        },
+        "replyNotContains": [
+          "Remembered the deposit rule"
+        ],
+        "dashboard": {
+          "Rockaway": {
+            "sales": 1
+          }
+        }
+      }
+    }
+  ]
+}

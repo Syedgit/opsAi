@@ -90,6 +90,29 @@ describe('parseModelOutput', () => {
   it('turns an unrecognised kind into unknown', () => {
     expect(parseModelOutput(JSON.stringify({ kind: 'payroll' })).kind).toBe('unknown');
   });
+
+  it('keeps an invoice due date and still accepts invoices without one', () => {
+    const withDue = parseModelOutput(
+      JSON.stringify({
+        kind: 'invoice',
+        invoice: { vendorName: 'Pepsi', invoiceNumber: '88', invoiceDate: '2026-10-12', dueDate: '2026-10-28', lineItems: [], total: 850, paymentStatus: 'unpaid' },
+        confidence: 0.9,
+        needsReview: [],
+      })
+    );
+    expect(withDue.kind).toBe('invoice');
+    if (withDue.kind === 'invoice') expect(withDue.invoice.dueDate).toBe('2026-10-28');
+
+    const withoutDue = parseModelOutput(
+      JSON.stringify({
+        kind: 'invoice',
+        invoice: { vendorName: 'Pepsi', invoiceNumber: null, invoiceDate: null, lineItems: [], total: 10, paymentStatus: 'unknown' },
+        confidence: 0.8,
+        needsReview: [],
+      })
+    );
+    expect(withoutDue.kind).toBe('invoice');
+  });
 });
 
 describe('createOpenAiUnderstander', () => {
@@ -184,6 +207,26 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('Never invent numbers');
     expect(prompt).toContain('JSON');
     expect(prompt).toContain('Rockaway');
+    expect(prompt).toContain('dueDate');
+    expect(prompt).toContain('Pay by');
+    expect(prompt).toContain('"kind":"order"');
+  });
+
+  it('lists the store vendors the owner set at signup', () => {
+    const prompt = buildSystemPrompt(
+      [{ ...rockaway, vendors: [{ name: 'HLA', category: 'cigarettes' }, { name: 'ABC', category: 'drinks' }] }],
+      NOW,
+    );
+    expect(prompt).toContain('this store orders from: HLA (cigarettes), ABC (drinks)');
+  });
+
+  it('includes an owner-pasted daily close sample', () => {
+    const prompt = buildSystemPrompt(
+      [{ ...rockaway, messageSamples: { dailyClose: 'Rockaway cash 106 card 334 gas 1355 deposit 1653' } }],
+      NOW,
+    );
+    expect(prompt).toContain('typical daily close looks like');
+    expect(prompt).toContain('cash 106');
   });
 
   it('copes with no stores', () => {
@@ -198,6 +241,7 @@ describe('getAiConfig', () => {
     expect(getAiConfig({ OPENAI_API_KEY: 'k', OPENAI_EXTRACTION_MODEL: 'm' } as NodeJS.ProcessEnv)).toEqual({
       apiKey: 'k',
       extractionModel: 'm',
+      textModel: null,
       transcriptionModel: null,
     });
   });
@@ -223,5 +267,33 @@ describe('audioExtension', () => {
     expect(audioExtension('audio/ogg; codecs=opus')).toBe('ogg');
     expect(audioExtension('audio/mpeg')).toBe('mp3');
     expect(audioExtension('audio/mp4')).toBe('m4a');
+  });
+});
+
+describe('text model', () => {
+  it('uses the cheaper text model for typed text and the main model for photos', async () => {
+    const seen: string[] = [];
+    const client: ChatClientLike = {
+      chat: {
+        completions: {
+          create: async (params) => {
+            seen.push(params.model);
+            return { choices: [{ message: { content: JSON.stringify({ kind: 'unknown', reason: 'x', confidence: 0, needsReview: [] }) } }] };
+          },
+        },
+      },
+    };
+    const previous = { ...process.env };
+    process.env.OPENAI_API_KEY = 'k';
+    process.env.OPENAI_EXTRACTION_MODEL = 'big-model';
+    process.env.OPENAI_TEXT_MODEL = 'small-model';
+    try {
+      const understander = createOpenAiUnderstander({ client })!;
+      await understander.understand({ text: 'cash 100', profiles: [] });
+      await understander.understand({ image: { base64: 'abc', mimeType: 'image/jpeg' }, profiles: [] });
+    } finally {
+      process.env = previous;
+    }
+    expect(seen).toEqual(['small-model', 'big-model']);
   });
 });

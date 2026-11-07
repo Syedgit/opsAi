@@ -1,3 +1,5 @@
+import type { StoreVendor } from './vendors';
+
 /**
  * Per-store configuration that changes how messages are interpreted.
  *
@@ -26,6 +28,10 @@ export interface StoreProfile {
   labelAliases: Record<string, CanonicalLabel>;
   /** Owner's short vendor names, lower-case keys: "lays" -> "Empire Snacks LLC". */
   vendorAliases: Record<string, string>;
+  /** Owner-pasted examples of how this store actually messages on WhatsApp. */
+  messageSamples: { dailyClose?: string; invoice?: string };
+  /** Vendors this store orders from, set at signup (HLA = cigarettes, ABC = drinks, ...). */
+  vendors: StoreVendor[];
 }
 
 export type CanonicalLabel = 'card_sales' | 'cash_sales' | 'fuel_sales' | 'payout' | 'ignore';
@@ -45,5 +51,7 @@ export function buildDefaultProfile(input: {
     depositRule: null,
     labelAliases: {},
     vendorAliases: {},
+    messageSamples: {},
+    vendors: [],
   };
 }

@@ -1,0 +1,131 @@
+{
+  "title": "One store's daily report, OK, then the next day's deposit is off",
+  "why": "The core loop: read a report, check the math, save on OK, remember the deposit rule, then warn when a later deposit does not match it.",
+  "today": "2026-10-13T12:00:00-04:00",
+  "steps": [
+    {
+      "name": "Owner sends the daily numbers",
+      "text": "Rockaway 10/12 cash 106 card 334 gas 1355 Lays 142 deposit 1653",
+      "expect": {
+        "replyContains": [
+          "Rockaway",
+          "Reply OK"
+        ],
+        "replyCount": 1,
+        "status": {
+          "PENDING": 1,
+          "CONFIRMED": 0
+        },
+        "entries": [
+          {
+            "kind": "daily_close",
+            "store": "Rockaway",
+            "date": "2026-10-12",
+            "cash": 106,
+            "card": 334,
+            "insideTotal": 440,
+            "fuel": 1355,
+            "deposit": 1653,
+            "payouts": [
+              {
+                "label": "Lays",
+                "amount": 142
+              }
+            ],
+            "checks": {
+              "deposit_explained": "pass"
+            },
+            "clean": true,
+            "suggestsDepositRule": true
+          }
+        ],
+        "dashboard": {
+          "Rockaway": {
+            "sales": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "Owner replies OK",
+      "text": "OK",
+      "expect": {
+        "replyContains": [
+          "Saved",
+          "Remembered the deposit rule"
+        ],
+        "status": {
+          "PENDING": 0,
+          "CONFIRMED": 1
+        },
+        "savedRule": {
+          "Rockaway": true,
+          "Denville": false
+        },
+        "dashboard": {
+          "Rockaway": {
+            "sales": {
+              "count": 1,
+              "first": {
+                "cash": 106,
+                "card": 334,
+                "fuel_sales": 1355,
+                "total_inside": 440
+              }
+            }
+          },
+          "Denville": {
+            "sales": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "Owner asks what rules are saved",
+      "text": "RULE",
+      "expect": {
+        "replyContains": [
+          "Rockaway"
+        ]
+      }
+    },
+    {
+      "name": "Next day the deposit is $53 short",
+      "text": "Rockaway 10/13 cash 106 card 334 gas 1355 Lays 142 deposit 1600",
+      "expect": {
+        "replyContains": [
+          "Expected $1,653",
+          "found $1,600"
+        ],
+        "entries": [
+          {
+            "kind": "daily_close",
+            "store": "Rockaway",
+            "date": "2026-10-13",
+            "deposit": 1600,
+            "warnings": [
+              "deposit_rule"
+            ],
+            "suggestsDepositRule": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "Owner cancels it",
+      "text": "CANCEL",
+      "expect": {
+        "status": {
+          "PENDING": 0,
+          "CONFIRMED": 1,
+          "CANCELLED": 1
+        },
+        "dashboard": {
+          "Rockaway": {
+            "sales": 1
+          }
+        }
+      }
+    }
+  ]
+}

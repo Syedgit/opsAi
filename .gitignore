@@ -44,3 +44,9 @@ temp/
 # Real owner samples (contain business and bank details)
 samples/real-inputs/
 
+
+# Private end-to-end cases built from real samples
+samples/cases/
+
+# Inspector reports: confidential and contain names and emails
+Debrief_Report_*.pdf

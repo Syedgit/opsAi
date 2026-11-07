@@ -1,0 +1,20 @@
+{
+  "_note": "Hand-written stand-in for what the AI answers. Re-record from the real model with: npm run e2e -- --live --record",
+  "steps": {
+    "0": {
+      "reading": {
+        "kind": "order",
+        "order": {
+          "storeHint": "Rockaway",
+          "vendorHint": "HLA",
+          "items": [
+            { "description": "Marlboro Red", "quantity": 10, "unit": null },
+            { "description": "Newport", "quantity": 5, "unit": null }
+          ]
+        },
+        "confidence": 0.9,
+        "needsReview": []
+      }
+    }
+  }
+}

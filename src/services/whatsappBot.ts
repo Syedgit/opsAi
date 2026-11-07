@@ -34,16 +34,16 @@ export async function sendWhatsAppMessage(
   storeId?: string
 ): Promise<boolean> {
   try {
-    // Get phone number ID for the store, or fallback to env var
-    let phoneNumberId: string | null = null;
-    
-    if (storeId) {
+    const envId = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim() || null;
+    const routing = (process.env.WHATSAPP_STORE_ROUTING || 'group').toLowerCase().trim();
+    let phoneNumberId: string | null = routing === 'group' && envId ? envId : null;
+
+    if (!phoneNumberId && storeId) {
       phoneNumberId = await getStorePhoneNumberId(storeId);
     }
-    
-    // Fallback to environment variable if store doesn't have one yet
+
     if (!phoneNumberId) {
-      phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || null;
+      phoneNumberId = envId;
     }
     
     if (!phoneNumberId) {

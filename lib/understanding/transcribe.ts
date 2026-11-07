@@ -1,5 +1,6 @@
 import OpenAI, { toFile } from 'openai';
 import { getAiConfig } from './config';
+import type { AiUsageRecord } from './usage';
 
 export interface AudioInput {
   buffer: Buffer;
@@ -32,7 +33,7 @@ export function audioExtension(mimeType: string): string {
  */
 export async function transcribeAudio(
   audio: AudioInput,
-  overrides?: { client?: TranscriberLike; model?: string }
+  overrides?: { client?: TranscriberLike; model?: string; onUsage?: (usage: AiUsageRecord) => void }
 ): Promise<string | null> {
   const config = getAiConfig();
   const model = overrides?.model ?? config?.transcriptionModel;
@@ -48,6 +49,7 @@ export async function transcribeAudio(
     type: audio.mimeType.split(';')[0].trim() || 'audio/ogg',
   });
   const result = await client.audio.transcriptions.create({ file, model });
+  overrides?.onUsage?.({ kind: 'transcription', model, audioBytes: audio.buffer.length });
   const text = result.text?.trim();
   return text ? text : null;
 }

@@ -1,0 +1,195 @@
+{
+  "title": "7-Eleven standards: a reading outside the limit keeps the task open, and a broken printer gets a fallback",
+  "why": "Cold holding must be 40F or lower (FS5) and the label task has a fallback for a broken printer (FS6). A reading over the limit does not close the task, tells the manager once, and the task closes only on an in-range reading. A reported problem keeps the task open and tells the employee what to do in the meantime.",
+  "today": "2026-10-26T09:00:00-04:00",
+  "linkedGroups": [
+    "Rockaway"
+  ],
+  "taskTemplates": [
+    {
+      "store": "Rockaway",
+      "title": "Date labels on opened milk and creamers",
+      "standardId": "FS6",
+      "criticality": "critical",
+      "category": "food_safety",
+      "startTime": "10:00",
+      "evidence": "photo",
+      "fallback": "Label printer broken? Write the open date and time on masking tape with a marker."
+    },
+    {
+      "store": "Rockaway",
+      "title": "Cold holding temperature",
+      "standardId": "FS5",
+      "criticality": "major",
+      "category": "food_safety",
+      "startTime": "10:00",
+      "evidence": "text",
+      "maxValue": 40,
+      "unit": "F",
+      "fallback": "Use a probe thermometer now."
+    }
+  ],
+  "steps": [
+    {
+      "name": "10:00 both are announced with their standard, weight and limit",
+      "at": "2026-10-26T10:00:30-04:00",
+      "tick": true,
+      "expect": {
+        "groupPosts": 1,
+        "groupPostContains": [
+          "1. ❗[FS6] Date labels",
+          "send a photo",
+          "2. [FS5] Cold holding temperature",
+          "reply with the number (40F or lower)"
+        ],
+        "taskCounts": {
+          "OPEN": 2
+        }
+      }
+    },
+    {
+      "name": "Staff answers the temperature task with no number",
+      "from": "staff",
+      "at": "2026-10-26T10:05:00-04:00",
+      "text": "2",
+      "noAi": true,
+      "expect": {
+        "replyCount": 1,
+        "replyContains": [
+          "needs the number",
+          "40F or lower"
+        ],
+        "tasks": [
+          {
+            "title": "Cold holding",
+            "status": "OPEN"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Staff reports 45F: over the limit, so the task stays open and the owner is told",
+      "from": "staff",
+      "at": "2026-10-26T10:06:00-04:00",
+      "text": "2 45F",
+      "noAi": true,
+      "expect": {
+        "replyCount": 2,
+        "replyContains": [
+          "45F is not 40F or lower",
+          "stays open",
+          "Use a probe thermometer now.",
+          "Reading 45 F"
+        ],
+        "tasks": [
+          {
+            "title": "Cold holding",
+            "status": "OPEN",
+            "outcome": "fail"
+          }
+        ],
+        "taskCounts": {
+          "OPEN": 2,
+          "DONE": 0
+        }
+      }
+    },
+    {
+      "name": "Still too warm: the task stays open and the owner is not told a second time",
+      "from": "staff",
+      "at": "2026-10-26T10:20:00-04:00",
+      "text": "2 44",
+      "noAi": true,
+      "expect": {
+        "replyCount": 1,
+        "replyContains": [
+          "44F is not 40F or lower",
+          "manager has been told"
+        ],
+        "taskCounts": {
+          "OPEN": 2,
+          "DONE": 0
+        }
+      }
+    },
+    {
+      "name": "In range: the task closes and remembers it was fixed",
+      "from": "staff",
+      "at": "2026-10-26T10:40:00-04:00",
+      "text": "2 38F",
+      "noAi": true,
+      "expect": {
+        "replyCount": 1,
+        "replyContains": [
+          "Task 2",
+          "done at 10:40am",
+          "38F"
+        ],
+        "tasks": [
+          {
+            "title": "Cold holding",
+            "status": "DONE",
+            "outcome": "fixed",
+            "evidenceText": "38F"
+          }
+        ],
+        "taskCounts": {
+          "OPEN": 1,
+          "DONE": 1
+        }
+      }
+    },
+    {
+      "name": "The label printer is broken: fallback given, owner told, task stays open",
+      "from": "staff",
+      "at": "2026-10-26T10:45:00-04:00",
+      "text": "1 problem label printer broken",
+      "noAi": true,
+      "expect": {
+        "replyCount": 2,
+        "replyContains": [
+          "While it is broken",
+          "masking tape",
+          "Reported by staff"
+        ],
+        "tasks": [
+          {
+            "title": "Date labels",
+            "status": "OPEN",
+            "outcome": "problem"
+          }
+        ],
+        "taskCounts": {
+          "OPEN": 1,
+          "DONE": 1
+        }
+      }
+    },
+    {
+      "name": "Hand-labelled; staff sends the photo with the number",
+      "from": "staff",
+      "at": "2026-10-26T10:55:00-04:00",
+      "image": "labels.png",
+      "text": "1",
+      "noAi": true,
+      "expect": {
+        "replyContains": [
+          "Task 1",
+          "done"
+        ],
+        "tasks": [
+          {
+            "title": "Date labels",
+            "status": "DONE",
+            "outcome": "fixed",
+            "evidenceType": "photo"
+          }
+        ],
+        "taskCounts": {
+          "OPEN": 0,
+          "DONE": 2
+        }
+      }
+    }
+  ]
+}

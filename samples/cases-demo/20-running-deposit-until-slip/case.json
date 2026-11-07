@@ -1,0 +1,81 @@
+{
+  "title": "Morning deposit due keeps adding until a bank slip is in the chat",
+  "why": "Non-7-Eleven stores get a morning note of what to take to the bank from sales already posted. If no deposit slip shows up, the next day's close is added. A confirmed bank slip clears it.",
+  "today": "2026-10-12T22:00:00-04:00",
+  "linkedGroups": ["Rockaway"],
+  "storeTypes": { "Rockaway": "convenience" },
+  "steps": [
+    {
+      "name": "Owner posts Monday's sales",
+      "text": "Rockaway 10/12 cash 106 card 334 gas 1355 Lays 142 deposit 1653",
+      "expect": {
+        "entries": [{ "kind": "daily_close", "store": "Rockaway", "date": "2026-10-12", "deposit": 1653 }]
+      }
+    },
+    {
+      "name": "Owner confirms Monday",
+      "text": "OK",
+      "expect": {
+        "replyContains": ["Saved", "To deposit:", "$1,653"],
+        "groupPostContains": ["To deposit:", "$1,653"]
+      }
+    },
+    {
+      "name": "Tuesday morning: deposit due from Monday",
+      "at": "2026-10-13T08:00:30-04:00",
+      "tick": true,
+      "expect": {
+        "groupPosts": 1,
+        "groupPostContains": ["deposit due", "$1,653", "Mon, Oct 12", "keep adding"],
+        "groupPostNotContains": ["Tue, Oct 13"]
+      }
+    },
+    {
+      "name": "Owner posts Tuesday's sales without a bank slip",
+      "at": "2026-10-13T22:00:00-04:00",
+      "text": "Rockaway 10/13 cash 106 card 334 gas 1355 Lays 142 deposit 1653",
+      "expect": {
+        "entries": [{ "kind": "daily_close", "store": "Rockaway", "date": "2026-10-13" }]
+      }
+    },
+    {
+      "name": "Owner confirms Tuesday; the bag now holds two days",
+      "text": "OK",
+      "expect": {
+        "replyContains": ["To deposit:", "$3,306", "Oct 12", "Oct 13"]
+      }
+    },
+    {
+      "name": "Wednesday morning: both days still undeposited",
+      "at": "2026-10-14T08:00:30-04:00",
+      "tick": true,
+      "expect": {
+        "groupPosts": 1,
+        "groupPostContains": ["$3,306", "2 days", "Mon, Oct 12", "Tue, Oct 13"]
+      }
+    },
+    {
+      "name": "Owner sends the bank slip",
+      "at": "2026-10-14T09:15:00-04:00",
+      "text": "Rockaway TD slip 3306",
+      "expect": {
+        "entries": [{ "kind": "deposit_receipt", "store": "Rockaway", "total": 3306 }]
+      }
+    },
+    {
+      "name": "Owner confirms the slip; the bag is clear",
+      "text": "OK",
+      "expect": {
+        "replyContains": ["Bank slip saved", "Deposit bag is clear"]
+      }
+    },
+    {
+      "name": "Thursday morning: nothing left to deposit",
+      "at": "2026-10-15T08:00:30-04:00",
+      "tick": true,
+      "expect": {
+        "groupPosts": 0
+      }
+    }
+  ]
+}

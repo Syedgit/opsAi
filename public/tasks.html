@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#25D366">
+    <title>opsAi · Tasks &amp; alerts</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --primary: #25D366; --primary-dark: #128C7E; --secondary: #075E54;
+            --bg: #f5f7fa; --card: #fff; --text: #1a1a1a; --light: #666; --border: #e0e0e0;
+            --ok: #10b981; --warn: #f59e0b; --bad: #ef4444;
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; background: var(--bg); color: var(--text); }
+        header { background: linear-gradient(90deg, var(--primary-dark), var(--secondary)); color: #fff; padding: 14px 20px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+        header a { color: #fff; text-decoration: none; opacity: .85; font-size: 14px; }
+        header h1 { font-size: 18px; flex: 1; }
+        header select { padding: 8px 10px; border-radius: 6px; border: none; font-size: 14px; max-width: 100%; }
+        main { max-width: 1000px; margin: 0 auto; padding: 20px 16px 60px; }
+        .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+        .tab { padding: 10px 18px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); cursor: pointer; font-size: 14px; }
+        .tab.active { background: var(--primary); color: #fff; border-color: var(--primary); font-weight: 600; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+        .card h2 { font-size: 16px; margin-bottom: 10px; }
+        .muted { color: var(--light); font-size: 13px; }
+        .scores { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+        .score { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+        .score .big { font-size: 28px; font-weight: 700; }
+        .score .label { font-size: 12px; color: var(--light); text-transform: uppercase; letter-spacing: .04em; }
+        .good { color: var(--ok); } .mid { color: var(--warn); } .low { color: var(--bad); }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; font-size: 12px; text-transform: uppercase; color: var(--light); padding: 8px; border-bottom: 1px solid var(--border); }
+        td { padding: 10px 8px; border-bottom: 1px solid var(--border); font-size: 14px; vertical-align: top; }
+        tr:last-child td { border-bottom: none; }
+        .badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+        .b-open { background: #fef3c7; color: #92400e; } .b-late { background: #fee2e2; color: #991b1b; }
+        .b-done { background: #d1fae5; color: #065f46; } .b-missed { background: #fee2e2; color: #991b1b; }
+        .b-off { background: #e5e7eb; color: #374151; }
+        button { cursor: pointer; font-size: 14px; border-radius: 8px; padding: 8px 14px; border: 1px solid var(--border); background: #fff; }
+        button.primary { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+        button.danger { color: var(--bad); }
+        button.small { padding: 4px 10px; font-size: 12px; }
+        button:disabled { opacity: .5; cursor: default; }
+        .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+        label { display: block; font-size: 12px; color: var(--light); margin-bottom: 4px; }
+        input[type=text], input[type=time], input[type=number], select, textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-family: inherit; }
+        textarea { min-height: 60px; resize: vertical; }
+        .days label { display: inline-flex; align-items: center; gap: 4px; margin-right: 10px; color: var(--text); font-size: 14px; }
+        .notice { padding: 10px 14px; border-radius: 8px; font-size: 14px; margin-bottom: 14px; }
+        .notice.err { background: #fee2e2; color: #991b1b; } .notice.ok { background: #d1fae5; color: #065f46; } .notice.info { background: #e0f2fe; color: #075985; }
+        .empty { text-align: center; padding: 28px 10px; color: var(--light); }
+        .proof img { max-width: 240px; max-height: 200px; border-radius: 8px; border: 1px solid var(--border); display: block; margin-top: 6px; }
+        .preset-group { margin-bottom: 12px; }
+        .preset { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; font-size: 14px; }
+        .preset input { margin-top: 3px; }
+        .vendor-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+        .vendor-row input, .vendor-row select { flex: 1; }
+        html { scroll-behavior: smooth; }
+        .admin-lead { font-size: 14px; color: var(--light); line-height: 1.45; margin-bottom: 14px; max-width: 740px; }
+        .admin-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; }
+        .admin-nav a { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); color: var(--text); text-decoration: none; font-size: 13px; font-weight: 600; }
+        .admin-nav a:hover { border-color: var(--primary); color: var(--primary-dark); }
+        .admin-nav a span { background: #eef2f7; color: var(--light); border-radius: 999px; padding: 1px 7px; font-size: 11px; font-weight: 700; }
+        .admin-section { scroll-margin-top: 12px; margin-bottom: 28px; }
+        .admin-kicker { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--light); font-weight: 700; margin-bottom: 10px; }
+        .admin-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+        .admin-head .admin-kicker { margin-bottom: 0; }
+        .admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+        .admin-grid:has(> :only-child) { grid-template-columns: 1fr; }
+        .admin-grid .card { margin-bottom: 0; }
+        .card .card-help { margin-bottom: 12px; }
+        .count { font-weight: 600; color: var(--light); font-size: 13px; }
+        .preset-group { background: #f8fafc; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+        .danger-card { border-color: #fecaca; }
+        @media (max-width: 800px) { .admin-grid { grid-template-columns: 1fr; } }
+        @media (max-width: 640px) {
+            td, th { padding: 8px 4px; }
+            .hide-sm { display: none; }
+            .vendor-row { flex-wrap: wrap; }
+            .admin-nav a { font-size: 12px; padding: 7px 10px; }
+        }
+    </style>
+</head>
+<body>
+<header>
+    <a href="/dashboard">&larr; Dashboard</a>
+    <h1>Tasks &amp; alerts</h1>
+    <select id="storeSelect" aria-label="Store"></select>
+    <button type="button" class="small" id="logoutBtn">Log out</button>
+</header>
+<main>
+    <div id="notice"></div>
+    <div class="tabs">
+        <div class="tab active" data-view="today">Today</div>
+        <div class="tab" data-view="inspection">Inspection</div>
+        <div class="tab" data-view="setup">Store admin</div>
+    </div>
+    <div id="content"><div class="empty">Loading…</div></div>
+</main>
+
+<script>
+    // Keep in sync with TASK_CATEGORIES in lib/tasks/schedule.ts. The first eight are the 7Clean report's own.
+    const CATEGORIES = {
+        food_safety: 'Food Safety', proprietary_fresh: 'Proprietary Fresh Food', proprietary_beverage: 'Proprietary Beverage',
+        product_availability: 'Product Availability', interior_cleanliness: 'Interior Cleanliness', exterior_cleanliness: 'Exterior Cleanliness',
+        vault: 'Vault', back_of_house: 'Back of House', cleanliness: 'Cleanliness', inventory: 'Inventory', equipment: 'Equipment',
+        customer_service: 'Customer service', safety: 'Safety', reports: 'Daily reports', other: 'Other'
+    };
+    const CRITICALITY = { critical: 'Critical (50)', major: 'Major (20)', minor: 'Minor (3)' };
+    const CRIT_BADGE = { critical: '<span class="badge b-late">Critical</span>', major: '<span class="badge b-open">Major</span>', minor: '<span class="badge b-off">Minor</span>' };
+    const EVIDENCE = { photo: 'Photo', text: 'Text answer', either: 'Photo or text', none: 'Just "done"' };
+    const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    let storeId = new URLSearchParams(location.search).get('storeId') || '';
+    let view = 'today';
+    let board = null;
+    let inspection = null;
+    let lastReport = null;
+    let importing = null; // { pdf: base64, preview } while an inspector's report is being reviewed
+    let editing = null; // template being edited, or {} for a new one
+    const features = {}; // store-type switches for the starter list, e.g. { fuel: true }
+
+    const token = localStorage.getItem('authToken');
+    if (!token) location.href = '/login';
+    const authHeaders = () => ({ Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' });
+
+    function esc(value) {
+        return String(value === null || value === undefined ? '' : value)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    function normTitle(value) {
+        return String(value || '').trim().toLowerCase().replace(/['\u2019`]/g, "'").replace(/\s+/g, ' ');
+    }
+    function note(kind, text) {
+        document.getElementById('notice').innerHTML = text ? '<div class="notice ' + kind + '">' + esc(text) + '</div>' : '';
+        if (text) window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    function clock(value) {
+        if (!value) return '';
+        return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone: board ? board.timeZone : undefined }).format(new Date(value));
+    }
+    function pctClass(p) { return p === null ? '' : p >= 90 ? 'good' : p >= 70 ? 'mid' : 'low'; }
+    function pct(line) { return line.percent === null ? '—' : line.percent + '%'; }
+    function unitText(unit) { return unit ? (/^[A-Za-z]{1,2}$/.test(unit) ? unit : ' ' + unit) : ''; }
+    function limitText(t) {
+        const hasMin = t.minValue !== null && t.minValue !== undefined, hasMax = t.maxValue !== null && t.maxValue !== undefined;
+        if (hasMin && hasMax) return 'between ' + t.minValue + ' and ' + t.maxValue + unitText(t.unit);
+        if (hasMax) return t.maxValue + unitText(t.unit) + ' or lower';
+        if (hasMin) return t.minValue + unitText(t.unit) + ' or higher';
+        return '';
+    }
+    function crit(c) { return c && CRIT_BADGE[c] ? CRIT_BADGE[c] : ''; }
+
+    async function api(method, body, query) {
+        const qs = new URLSearchParams(Object.assign({ storeId: storeId }, query || {})).toString();
+        const res = await fetch('/api/stores/tasks?' + qs, { method: method, headers: authHeaders(), body: body ? JSON.stringify(body) : undefined });
+        if (res.status === 401) { location.href = '/login'; return null; }
+        let data = {};
+        try { data = await res.json(); } catch (e) { /* not json */ }
+        if (!res.ok) throw new Error(data.error || ('The server answered ' + res.status));
+        return data;
+    }
+
+    async function load() {
+        if (!storeId) return;
+        document.getElementById('content').innerHTML = '<div class="empty">Loading…</div>';
+        try {
+            board = await api('GET');
+            if (board.setup && board.setup.fuel) features.fuel = true;
+            render();
+        } catch (e) {
+            document.getElementById('content').innerHTML = '';
+            note('err', 'Could not load tasks. ' + e.message + ' If this is new, the task tables may not be created yet (run scripts/add-tasks.sql).');
+        }
+    }
+
+    /* ------------------------------------ Today ------------------------------------ */
+
+    function statusBadge(run) {
+        if (run.status === 'DONE') return '<span class="badge b-done">Done</span>';
+        if (run.status === 'MISSED') return '<span class="badge b-missed">Missed</span>';
+        if (run.status === 'CANCELLED') return '<span class="badge b-off">Removed</span>';
+        const lateMs = Date.now() - new Date(run.dueAt).getTime();
+        return lateMs > (run.lateAfterMinutes || 60) * 60000 ? '<span class="badge b-late">Late</span>' : '<span class="badge b-open">Open</span>';
+    }
+
+    function scoreCard(label, line) {
+        return '<div class="score"><div class="label">' + esc(label) + '</div><div class="big ' + pctClass(line.percent) + '">' + esc(pct(line)) + '</div>' +
+            '<div class="muted">' + esc(line.done) + ' done · ' + esc(line.missed) + ' missed · ' + esc(line.pending) + ' pending</div>' +
+            (line.criticalMissed ? '<div class="muted low">' + esc(line.criticalMissed) + ' Critical missed</div>' : '') + '</div>';
+    }
+
+    function renderToday() {
+        const t = board.scoreToday, w = board.scoreWeek;
+        let html = '<div class="scores">' + scoreCard('Today', t.total) + scoreCard('Last 7 days', w.total) +
+            w.byCategory.map(function (c) { return scoreCard(c.label, c); }).join('') + '</div>';
+
+        if (!board.setup && board.templates.length === 0) html = setupCard() + html;
+        const runs = board.runs.filter(function (r) { return r.status !== 'CANCELLED'; });
+        const open = runs.filter(function (r) { return r.status === 'OPEN'; });
+        const closed = runs.filter(function (r) { return r.status !== 'OPEN'; }).reverse();
+
+        const photoBadge = function (r) {
+            const note = r.photoNote ? '<div class="muted">' + esc(r.photoNote) + '</div>' : '';
+            if (r.photoVerdict === 'pass') return ' <span class="badge b-off">Photo checked ✓</span>' + note;
+            if (r.photoVerdict === 'fail') return ' <span class="badge b-late">Photo did not pass</span>' + note;
+            if (r.photoVerdict === 'unclear') return ' <span class="badge b-open">Photo unclear</span>' + note;
+            if (r.photoVerdict === 'unchecked') return ' <span class="badge b-off">Photo not checked</span>' + note;
+            if (r.photoVerdict === 'approved') return ' <span class="badge b-off">Photo accepted by a manager</span>';
+            return '';
+        };
+        const proof = function (r) {
+            if (r.status === 'OPEN' && r.hasPhoto) {
+                return '<div class="proof"><button class="small" data-photo="' + esc(r.id) + '">View latest photo</button><div data-photo-box="' + esc(r.id) + '"></div></div>';
+            }
+            if (r.status !== 'DONE') return '<span class="muted">—</span>';
+            let p = '<div class="proof">';
+            if (r.resultValue !== null && r.resultValue !== undefined) p += '<div><strong>' + esc(r.resultValue) + esc(unitText(r.unit)) + '</strong></div>';
+            else if (r.evidenceText) p += '<div>' + esc(r.evidenceText) + '</div>';
+            if (r.hasPhoto) p += '<button class="small" data-photo="' + esc(r.id) + '">View photo</button><div data-photo-box="' + esc(r.id) + '"></div>';
+            if (!r.evidenceText && !r.hasPhoto) p += '<span class="muted">Marked done</span>';
+            return p + '<div class="muted">at ' + esc(clock(r.completedAt)) + '</div></div>';
+        };
+        const rows = function (list) {
+            return list.map(function (r) {
+                return '<tr><td><strong>' + esc(r.code) + '</strong></td><td>' + (r.standardId ? '<strong>' + esc(r.standardId) + '</strong> ' : '') + esc(r.title) + ' ' + crit(r.criticality) + '<div class="muted">' + esc(CATEGORIES[r.category] || r.category) + ' · ' + esc(r.points) + ' pt</div>' +
+                    (r.issueText ? '<div class="low" style="font-size: 13px;">Problem reported: ' + esc(r.issueText) + '</div>' : '') + '</td>' +
+                    '<td>' + esc(clock(r.dueAt)) + '</td><td>' + statusBadge(r) + (r.outcome === 'fail' && r.status === 'OPEN' ? ' <span class="badge b-late">Out of range' + (r.resultValue !== null && r.resultValue !== undefined ? ': ' + esc(r.resultValue) + esc(unitText(r.unit)) : '') + '</span>' : '') +
+                    (r.outcome === 'problem' && r.status === 'OPEN' ? ' <span class="badge b-late">Problem</span>' : '') + photoBadge(r) + (r.outcome === 'fixed' ? ' <span class="badge b-off">Fixed after a problem</span>' : '') +
+                    (r.escalated ? ' <span class="muted">owner told</span>' : '') + '</td><td class="proof">' + proof(r) + '</td>' +
+                    (board.canEdit && r.status === 'OPEN' ? '<td>' + (r.hasPhoto && (r.photoVerdict === 'fail' || r.photoVerdict === 'unclear') ? '<button class="small" data-approve="' + esc(r.id) + '">Accept photo</button> ' : '') + '<button class="small danger" data-close="' + esc(r.id) + '">Close as missed</button></td>' : '<td></td>') + '</tr>';
+            }).join('');
+        };
+        const head = '<thead><tr><th>#</th><th>Task</th><th>Due</th><th>Status</th><th>Proof</th><th></th></tr></thead>';
+
+        html += '<div class="card"><div class="row" style="justify-content: space-between;"><h2>Open now (' + open.length + ')</h2>' +
+            (board.canEdit ? '<button data-run-now class="small">Send alerts now</button>' : '') + '</div>' +
+            (open.length ? '<table>' + head + '<tbody>' + rows(open) + '</tbody></table>' : '<div class="empty">Nothing is waiting on the team. 👍</div>') + '</div>';
+        html += '<div class="card"><h2>Finished today (' + closed.length + ')</h2>' +
+            (closed.length ? '<table>' + head + '<tbody>' + rows(closed) + '</tbody></table>' : '<div class="empty">Nothing finished yet today.</div>') + '</div>';
+        html += '<p class="muted">Score = points of finished tasks ÷ points of tasks that are finished or past their late time. Tasks still open but not yet late do not count either way. Times are ' + esc(board.timeZone) + '.</p>';
+        return html;
+    }
+
+    /* ---------------------------------- Inspection ---------------------------------- */
+
+    async function loadInspection() {
+        document.getElementById('content').innerHTML = '<div class="empty">Loading…</div>';
+        try {
+            const data = await api('GET', null, { view: 'inspection' });
+            inspection = data.prediction;
+            lastReport = data.lastReport || null;
+            if (board) board.canEdit = data.canEdit; else board = { canEdit: data.canEdit, timeZone: 'America/New_York' };
+            render();
+        } catch (e) {
+            document.getElementById('content').innerHTML = '';
+            note('err', 'Could not load the inspection view. ' + e.message);
+        }
+    }
+
+    const MAX_REPORT_BYTES = 2500000;
+
+    function reportHeader(r) {
+        return esc(r.property || 'Inspection') + ' · ' + esc(String(r.inspectedOn || '').slice(0, 10)) +
+            (r.cycle ? ' · cycle ' + esc(r.cycle) : '') + (r.visit ? ', visit ' + esc(r.visit) : '');
+    }
+
+    function renderLastReport() {
+        if (!lastReport) return '';
+        const failed = Array.isArray(lastReport.findings) ? lastReport.findings : [];
+        return '<div class="card"><h2>Last inspector report: <span class="' + pctClass(lastReport.percent) + '">' + esc(lastReport.percent) + '%</span></h2>' +
+            '<div class="muted" style="margin-bottom: 8px;">' + reportHeader(lastReport) + '</div>' +
+            (failed.length ? '<div class="muted">The inspector found: ' + failed.map(function (f) { return '<strong>' + esc(f.standardId) + '</strong>' + (f.repeat ? ' (repeat)' : ''); }).join(', ') + '. These are marked below.</div>' : '') + '</div>';
+    }
+
+    function renderImport() {
+        if (!board || !board.canEdit) return '';
+        if (!importing) {
+            return '<div class="card"><h2>Import the inspector\'s report</h2>' +
+                '<p class="muted" style="margin-bottom: 10px;">Upload the 7Clean Debrief Report PDF you got after an inspection. opsAi reads what failed and offers a task for each one, with the inspector\'s note on it. It reads the file with fixed rules (no AI, no cost). The manager\'s name, email and signature are not read or kept, and the PDF itself is not stored.</p>' +
+                '<input type="file" id="reportFile" accept="application/pdf"></div>';
+        }
+        const pv = importing.preview;
+        const rows = pv.proposals.map(function (p) {
+            const pick = p.kind === 'add' || p.kind === 'custom'
+                ? '<input type="checkbox" data-report-pick="' + esc(p.standardId) + '" checked>'
+                : '';
+            const label = { add: 'Add', custom: 'Add (from the report)', tracked: 'Already tracked', skip: 'Skipped' }[p.kind] || '';
+            return '<tr><td>' + pick + '</td><td><strong>' + esc(p.standardId) + '</strong></td><td>' + esc(p.title) + ' ' + crit(p.criticality) + (p.repeat ? ' <span class="badge b-late">Repeat</span>' : '') +
+                (p.comment ? '<div class="muted">Inspector: ' + esc(p.comment) + '</div>' : (p.details.length ? '<div class="muted">Inspector: ' + esc(p.details[0]) + '</div>' : '')) +
+                (p.note ? '<div class="muted">' + esc(p.note) + '</div>' : '') + '</td><td>' + (p.points === null ? '' : esc(p.points) + ' pt') + '</td><td>' + esc(label) +
+                (p.scheduleText ? '<div class="muted">' + esc(p.scheduleText) + '</div>' : '') + '</td></tr>';
+        }).join('');
+        return '<div class="card"><h2>Inspector report: ' + esc(pv.report.percent) + '%</h2>' +
+            '<div class="muted" style="margin-bottom: 8px;">' + reportHeader(pv.report) + (pv.report.earned !== null ? ' · ' + esc(pv.report.earned) + ' of ' + esc(pv.report.possible) + ' points' : '') + '</div>' +
+            (pv.alreadySaved ? '<div class="notice info">This report was imported before. Adding tasks again only adds the ones you tick that are not tracked yet.</div>' : '') +
+            (pv.proposals.length ? '<table><tbody>' + rows + '</tbody></table>' : '<div class="empty">The report lists no failed standards. 👍</div>') +
+            '<div style="margin-top: 12px;"><button class="primary" data-apply-report="1">Add ticked tasks and save the report</button> <button class="small" data-cancel-report="1">Cancel</button></div>' +
+            '<p class="muted" style="margin-top: 8px;">New tasks start at a default time. Set their times in Setup.</p></div>';
+    }
+
+    function readFileAsBase64(file) {
+        return new Promise(function (resolve, reject) {
+            const reader = new FileReader();
+            reader.onload = function () { resolve(String(reader.result).split(',')[1] || ''); };
+            reader.onerror = function () { reject(new Error('Could not read that file.')); };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    async function previewReport(file) {
+        if (file.size > MAX_REPORT_BYTES) { note('err', 'That file is over 2.5 MB. Is it the right PDF?'); return; }
+        note('info', 'Reading the report…');
+        try {
+            const pdf = await readFileAsBase64(file);
+            const preview = await api('POST', { action: 'preview_report', pdf: pdf });
+            importing = { pdf: pdf, preview: preview };
+            note('', '');
+            render();
+        } catch (e) {
+            note('err', e.message);
+        }
+    }
+
+    function renderInspection() {
+        const p = inspection;
+        if (!p) return '<div class="empty">Loading…</div>';
+        let html = renderImport() + renderLastReport();
+        if (p.autoFail.length) {
+            html += '<div class="notice err"><strong>Auto-fail risk.</strong> ' + p.autoFail.map(function (r) { return esc(r.standardId) + ' ' + esc(r.title); }).join('; ') + '. An inspection can fail outright on these.</div>';
+        }
+        html += '<div class="scores"><div class="score"><div class="label">If the inspector walked in now</div><div class="big ' + pctClass(p.percent) + '">' + (p.percent === null ? '—' : esc(p.percent) + '%') + '</div>' +
+            '<div class="muted">' + esc(p.earned) + ' of ' + esc(p.possible) + ' points on the standards you track</div></div>' +
+            '<div class="score"><div class="label">Would lose right now</div><div class="big ' + (p.atRisk ? 'low' : 'good') + '">' + esc(p.atRisk) + '</div><div class="muted">points</div></div>' +
+            '<div class="score"><div class="label">Not tracked yet</div><div class="big ' + (p.untracked ? 'mid' : 'good') + '">' + esc(p.untracked) + '</div><div class="muted">points an inspector would still check</div></div>' +
+            p.byCategory.map(function (c) { return '<div class="score"><div class="label">' + esc(c.label) + '</div><div class="big ' + pctClass(c.percent) + '">' + (c.percent === null ? '—' : esc(c.percent) + '%') + '</div><div class="muted">' + esc(c.earned) + ' / ' + esc(c.possible) + ' pts</div></div>'; }).join('') + '</div>';
+
+        const row = function (r, extra) {
+            return '<tr><td><strong>' + esc(r.standardId) + '</strong></td><td>' + esc(r.title) + ' ' + crit(r.criticality) + (r.repeat ? ' <span class="badge b-late">Repeat</span>' : '') + (r.lastFinding && !r.repeat ? ' <span class="badge b-late">Found at last inspection</span>' : '') +
+                '<div class="muted">' + esc(CATEGORIES[r.category] || r.category) + '</div></td><td>' + esc(r.points) + ' pt</td><td>' + (extra || '') + '</td></tr>';
+        };
+        html += '<div class="card"><h2>Would cost points right now (' + p.fails.length + ')</h2>' +
+            (p.fails.length ? '<table><tbody>' + p.fails.map(function (r) { return row(r, '<span class="low">' + esc(r.reason) + '</span>'); }).join('') + '</tbody></table>' : '<div class="empty">Nothing is failing on the standards you track. 👍</div>') + '</div>';
+        if (p.pending.length) {
+            html += '<div class="card"><h2>Waiting for proof (' + p.pending.length + ')</h2><table><tbody>' + p.pending.map(function (r) { return row(r, '<span class="muted">not due or not answered yet</span>'); }).join('') + '</tbody></table></div>';
+        }
+        if (p.notTracked.length) {
+            html += '<div class="card"><h2>Not tracked yet (' + p.notTracked.length + ')</h2><p class="muted" style="margin-bottom: 8px;">An inspector checks these, but nobody is being asked about them here. Add the ones that apply to your store.</p><table><tbody>' +
+                p.notTracked.map(function (r) { return row(r, board && board.canEdit ? '<button class="small" data-add-standard="' + esc(r.presetId) + '">Add task</button>' : ''); }).join('') + '</tbody></table></div>';
+        }
+        html += '<div class="card"><h2>Passing (' + p.passes.length + ')</h2>' + (p.passes.length ? '<div class="muted">' + p.passes.map(function (r) { return esc(r.standardId); }).join(', ') + '</div>' : '<div class="muted">None yet.</div>') + '</div>';
+        html += '<p class="muted">This is a prediction from what your team has proven through tasks, not the inspector\'s score. It covers only the standards in the list (what the 7Clean report we have shows), so the real inspection can include items not shown here. A standard passes when its latest task was done with proof, and fails when it was missed, is late, read out of range, or has a problem reported.</p>';
+        return html;
+    }
+
+    /* ------------------------------------ Setup ------------------------------------ */
+
+    function renderForm() {
+        const t = editing;
+        const val = function (k, d) { return t[k] === null || t[k] === undefined ? d : t[k]; };
+        const days = t.daysOfWeek || [0, 1, 2, 3, 4, 5, 6];
+        const repeats = Boolean(t.repeatEveryMinutes);
+        const frequency = t.frequency || 'weekly';
+        const monthDays = t.monthDays || [];
+        const monthBoxes = [];
+        for (let d = 1; d <= 31; d += 1) {
+            monthBoxes.push('<label><input type="checkbox" name="monthDay" value="' + d + '"' + (monthDays.indexOf(d) >= 0 ? ' checked' : '') + '> ' + (d === 31 ? '31 (last day)' : d) + '</label>');
+        }
+        const options = function (map, current) {
+            return Object.keys(map).map(function (k) { return '<option value="' + esc(k) + '"' + (k === current ? ' selected' : '') + '>' + esc(map[k]) + '</option>'; }).join('');
+        };
+        return '<div class="card" id="formCard"><h2>' + (t.id ? 'Edit task' : 'New task') + '</h2><form id="taskForm">' +
+            '<div class="grid">' +
+            '<div style="grid-column: 1 / -1;"><label>What should they do?</label><input type="text" name="title" maxlength="120" required value="' + esc(val('title', '')) + '" placeholder="e.g. Check the coffee station"></div>' +
+            '<div style="grid-column: 1 / -1;"><label>Instructions (shown in the alert, optional)</label><textarea name="instructions" maxlength="500" placeholder="What good looks like, what to photograph">' + esc(val('instructions', '')) + '</textarea></div>' +
+            '<div><label>Inspection category</label><select name="category">' + options(CATEGORIES, val('category', 'other')) + '</select></div>' +
+            '<div><label>Standard ID (optional, like FS6)</label><input type="text" name="standardId" maxlength="20" value="' + esc(val('standardId', '')) + '"></div>' +
+            '<div><label>How serious is a miss?</label><select name="criticality"><option value="">Not set</option>' + options(CRITICALITY, val('criticality', '')) + '</select></div>' +
+            '<div><label>Shift label (optional)</label><input type="text" name="shift" maxlength="40" value="' + esc(val('shift', '')) + '" placeholder="Morning, 2nd shift, Night"></div>' +
+            '<div><label>Due at (store time)</label><input type="time" name="startTime" required value="' + esc(val('startTime', '10:00')) + '"></div>' +
+            '<div><label>Proof required</label><select name="evidence">' + options(EVIDENCE, val('evidence', 'either')) + '</select></div>' +
+            '<div style="grid-column: 1 / -1;"><label>Have AI check the photo (optional). Say what it must show, like: both milk dispensers have a date label that is not expired. Costs one AI reading per photo. A photo that does not pass keeps the task open.</label><input type="text" name="photoCheck" maxlength="200" value="' + esc(val('photoCheck', '')) + '"></div>' +
+            '<div><label>Points (leave empty to use Critical 50 / Major 20 / Minor 3)</label><input type="number" name="points" min="0" max="100" value="' + esc(t.id ? val('points', '') : '') + '"></div>' +
+            '</div>' +
+            '<div style="margin: 14px 0;"><label>Limit on the answer (optional). The employee must reply with a number inside it, or the task stays open and the manager is told. Example: cold case at most 40, roller grill at least 140.</label>' +
+            '<div class="grid"><div><label>At least</label><input type="number" step="any" name="minValue" value="' + esc(val('minValue', '')) + '"></div>' +
+            '<div><label>At most</label><input type="number" step="any" name="maxValue" value="' + esc(val('maxValue', '')) + '"></div>' +
+            '<div><label>Unit (F, rows, items)</label><input type="text" name="unit" maxlength="10" value="' + esc(val('unit', '')) + '"></div></div></div>' +
+            '<div style="margin: 14px 0;"><label>If something is broken, what should they do meanwhile? (optional)</label><textarea name="fallback" maxlength="300" placeholder="e.g. Label printer broken? Write the date and time on masking tape with a marker.">' + esc(val('fallback', '')) + '</textarea></div>' +
+            '<div style="margin: 14px 0;"><label><input type="checkbox" name="repeats"' + (repeats ? ' checked' : '') + '> Repeat during the day (for example every hour)</label>' +
+            '<div class="grid" id="repeatBox" style="margin-top: 8px;' + (repeats ? '' : ' display:none;') + '">' +
+            '<div><label>Every (minutes)</label><input type="number" name="repeatEveryMinutes" min="5" max="720" value="' + esc(val('repeatEveryMinutes', 60)) + '"></div>' +
+            '<div><label>Until (same day)</label><input type="time" name="endTime" value="' + esc(val('endTime', '')) + '"></div></div></div>' +
+            '<div style="margin-bottom: 14px;"><label>How often</label><select name="frequency">' +
+            '<option value="weekly"' + (frequency === 'weekly' ? ' selected' : '') + '>On the days I pick (every day, weekdays, only Monday...)</option>' +
+            '<option value="interval"' + (frequency === 'interval' ? ' selected' : '') + '>Every few days (every 3 days, every 2 weeks...)</option>' +
+            '<option value="monthly"' + (frequency === 'monthly' ? ' selected' : '') + '>Monthly, on days of the month</option>' +
+            '<option value="once"' + (frequency === 'once' ? ' selected' : '') + '>Once, on one date (a bill or invoice due)</option></select></div>' +
+            '<div class="days" id="weeklyBox" style="margin-bottom: 14px;' + (frequency === 'weekly' ? '' : ' display:none;') + '"><label>Days</label>' + DAYS.map(function (d, i) {
+                return '<label><input type="checkbox" name="day" value="' + i + '"' + (days.indexOf(i) >= 0 ? ' checked' : '') + '> ' + d + '</label>';
+            }).join('') + '</div>' +
+            '<div class="grid" id="intervalBox" style="margin-bottom: 14px;' + (frequency === 'interval' ? '' : ' display:none;') + '">' +
+            '<div><label>Every how many days (2 to 90; 14 = every 2 weeks)</label><input type="number" name="intervalDays" min="2" max="90" value="' + esc(val('intervalDays', 3)) + '"></div>' +
+            '<div><label>First time on (optional, default today)</label><input type="date" name="anchorDate" value="' + esc(frequency === 'interval' ? val('anchorDate', '') : '') + '"></div></div>' +
+            '<div class="grid" id="onceBox" style="margin-bottom: 14px;' + (frequency === 'once' ? '' : ' display:none;') + '">' +
+            '<div><label>On this date</label><input type="date" name="onceDate" value="' + esc(frequency === 'once' ? val('anchorDate', '') : '') + '"></div></div>' +
+            '<div class="days" id="monthlyBox" style="margin-bottom: 14px;' + (frequency === 'monthly' ? '' : ' display:none;') + '"><label>Days of the month (29 to 31 fall on the last day of a shorter month)</label>' + monthBoxes.join('') + '</div>' +
+            '<div class="grid">' +
+            '<div><label>Remind every (minutes)</label><input type="number" name="remindEveryMinutes" min="5" max="240" value="' + esc(val('remindEveryMinutes', 15)) + '"></div>' +
+            '<div><label>Tell the owner after (minutes)</label><input type="number" name="escalateAfterMinutes" min="10" max="1440" value="' + esc(val('escalateAfterMinutes', 60)) + '"></div>' +
+            '<div><label>Counts as late after (minutes)</label><input type="number" name="lateAfterMinutes" min="5" max="720" value="' + esc(val('lateAfterMinutes', 60)) + '"></div>' +
+            '</div>' +
+            '<div style="margin-top: 14px;"><label><input type="checkbox" name="active"' + (val('active', true) ? ' checked' : '') + '> Active</label></div>' +
+            '<div class="row" style="margin-top: 14px;"><button type="submit" class="primary">Save task</button><button type="button" data-cancel-edit>Cancel</button></div>' +
+            '</form></div>';
+    }
+
+    const STORE_TYPES = { seven_eleven: '7-Eleven', convenience: 'Convenience store', gas_station: 'Gas station', other: 'Other business' };
+
+    // The store's shifts and hours are what place the starter tasks. Until they are set, point the owner at the setup steps.
+    const SUGGESTED_VENDORS = [{ name: 'HLA', category: 'cigarettes' }, { name: 'ABC', category: 'drinks' }, { name: 'RPS', category: 'auto' }];
+    const DEFAULT_VENDOR_CATEGORIES = [
+        { id: 'cigarettes', label: 'Cigarettes / tobacco' }, { id: 'drinks', label: 'Drinks' }, { id: 'snacks', label: 'Snacks' },
+        { id: 'candy', label: 'Candy' }, { id: 'lottery', label: 'Lottery' }, { id: 'auto', label: 'Auto / automotive' },
+        { id: 'ice', label: 'Ice' }, { id: 'bread', label: 'Bread / bakery' }, { id: 'dairy', label: 'Dairy' }, { id: 'other', label: 'Other' },
+    ];
+
+    function vendorCategoryOptions(selected) {
+        const cats = (board.vendorCategories && board.vendorCategories.length) ? board.vendorCategories : DEFAULT_VENDOR_CATEGORIES;
+        return cats.map(function (c) {
+            return '<option value="' + esc(c.id) + '"' + (c.id === selected ? ' selected' : '') + '>' + esc(c.label) + '</option>';
+        }).join('');
+    }
+
+    function vendorsCard() {
+        const list = (board.vendors && board.vendors.length) ? board.vendors : (board.canEdit ? SUGGESTED_VENDORS : []);
+        if (!board.canEdit && list.length === 0) return '';
+        const rows = list.map(function (v, i) {
+            return '<div class="vendor-row"><input type="text" maxlength="40" name="vendorName" placeholder="HLA" value="' + esc(v.name) + '"' + (board.canEdit ? '' : ' disabled') + '>' +
+                '<select name="vendorCategory"' + (board.canEdit ? '' : ' disabled') + '>' + vendorCategoryOptions(v.category) + '</select>' +
+                (board.canEdit ? '<button type="button" class="small" data-remove-vendor="' + i + '">Remove</button>' : '') + '</div>';
+        }).join('');
+        return '<div class="card"><h2>Vendors</h2>' +
+            '<p class="muted card-help">When someone sends an order photo or a typed list, opsAi asks the group to confirm the vendor. Change these names to yours.</p>' +
+            (board.canEdit
+                ? '<form id="vendorsForm">' + (rows || '<div class="muted">No vendors yet.</div>') +
+                  '<div class="row" style="margin-top: 10px;"><button type="button" class="small" id="addVendorBtn">+ Add vendor</button><button type="submit" class="primary">Save vendors</button></div></form>'
+                : '<div class="muted">' + list.map(function (v) { return esc(v.name) + ' · ' + esc(v.category); }).join('<br>') + '</div>') +
+            '</div>';
+    }
+
+    function samplesCard() {
+        const s = board.messageSamples || {};
+        if (!board.canEdit && !s.dailyClose && !s.invoice) return '';
+        return '<div class="card"><h2>Report samples</h2>' +
+            '<p class="muted card-help">Paste a typical close or invoice. opsAi uses it as this store’s template. Photos of POS screens still go in the group — this box is the wording, not the file.</p>' +
+            (board.canEdit
+                ? '<form id="samplesForm"><label>Typical daily close</label><textarea name="dailyClose" maxlength="2000" placeholder="Rockaway cash 106 card 334 gas 1355 deposit 1653">' + esc(s.dailyClose || '') + '</textarea>' +
+                  '<label style="margin-top: 10px;">Typical invoice</label><textarea name="invoice" maxlength="2000" placeholder="Pepsi invoice 184.20 paid cash">' + esc(s.invoice || '') + '</textarea>' +
+                  '<p class="muted" style="margin: 6px 0 8px;">Type a typical message, or attach a photo. We read the photo and keep the wording — the file is not stored.</p>' +
+                  '<input type="file" id="sampleInvoicePhoto" accept="image/jpeg,image/png,image/webp,image/gif">' +
+                  '<div style="margin-top: 10px;"><button type="submit" class="primary">Save samples</button></div></form>'
+                : '<div class="muted">' + (s.dailyClose ? '<p>' + esc(s.dailyClose) + '</p>' : '') + (s.invoice ? '<p>' + esc(s.invoice) + '</p>' : '') + '</div>') +
+            '</div>';
+    }
+
+    const TEAM_ROLES = { OWNER: 'Owner', MANAGER: 'Manager', STAFF: 'Staff' };
+
+    function roleOptions(selected, includeOwner) {
+        const roles = includeOwner ? ['OWNER', 'MANAGER', 'STAFF'] : ['MANAGER', 'STAFF'];
+        return roles.map(function (r) {
+            return '<option value="' + r + '"' + (r === selected ? ' selected' : '') + '>' + TEAM_ROLES[r] + '</option>';
+        }).join('');
+    }
+
+    function peopleTeam() {
+        return board.people || { whatsapp: [], dashboard: [] };
+    }
+
+    function whatsappCard() {
+        const team = peopleTeam();
+        const canOwners = board.canManageOwners;
+        if (!board.canEdit && team.whatsapp.length === 0) return '';
+        let html = '<div class="card"><div class="row" style="justify-content: space-between; align-items: baseline; margin-bottom: 8px;"><h2 style="margin:0;">WhatsApp team</h2>' + (team.whatsapp.length ? '<span class="count">' + team.whatsapp.length + '</span>' : '') + '</div>';
+        html += '<p class="muted card-help">Numbers can be changed later. Staff here can message in the ops group. A partner can be a second owner.</p>';
+        if (team.whatsapp.length === 0) html += '<div class="muted" style="margin-bottom: 8px;">No WhatsApp numbers yet.</div>';
+        else {
+            html += '<table><thead><tr><th>Name</th><th>Number</th><th>Role</th>' + (board.canEdit ? '<th></th>' : '') + '</tr></thead><tbody>';
+            team.whatsapp.forEach(function (p) {
+                const ownerLocked = p.role === 'OWNER' && !canOwners;
+                html += '<tr>';
+                if (board.canEdit && !ownerLocked) {
+                    html += '<td><input type="text" maxlength="80" data-wa-name="' + esc(p.id) + '" value="' + esc(p.name || '') + '"></td>';
+                    html += '<td><input type="text" maxlength="20" data-wa-phone="' + esc(p.id) + '" value="' + esc(p.phoneE164) + '"></td>';
+                    html += '<td><select data-wa-role="' + esc(p.id) + '">' + roleOptions(p.role, canOwners) + '</select></td>';
+                    html += '<td style="white-space: nowrap; text-align: right;"><button class="small" data-save-wa="' + esc(p.id) + '">Save</button> <button class="small danger" data-remove-wa="' + esc(p.id) + '">Remove</button></td>';
+                } else {
+                    html += '<td>' + esc(p.name || '—') + '</td><td>' + esc(p.phoneE164) + '</td><td>' + esc(TEAM_ROLES[p.role] || p.role) + '</td>' + (board.canEdit ? '<td></td>' : '');
+                }
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+        }
+        if (board.canEdit) {
+            html += '<form id="whatsappPersonForm" class="grid" style="margin-top: 12px; align-items: end;"><div><label>Name</label><input type="text" name="name" maxlength="80" placeholder="Sam"></div>' +
+                '<div><label>WhatsApp</label><input type="text" name="phoneE164" required placeholder="+15551234567"></div>' +
+                '<div><label>Role</label><select name="role">' + roleOptions('STAFF', canOwners) + '</select></div>' +
+                '<div><button type="submit" class="primary">Add WhatsApp</button></div></form>';
+        }
+        return html + '</div>';
+    }
+
+    function dashboardCard() {
+        const team = peopleTeam();
+        const canOwners = board.canManageOwners;
+        if (!board.canEdit && team.dashboard.length === 0) return '';
+        let html = '<div class="card"><div class="row" style="justify-content: space-between; align-items: baseline; margin-bottom: 8px;"><h2 style="margin:0;">Dashboard login</h2>' + (team.dashboard.length ? '<span class="count">' + team.dashboard.length + '</span>' : '') + '</div>';
+        html += '<p class="muted card-help">Who can open this store on the website. They sign up first, then you add their email. Add a partner as Owner to share reports and admin.</p>';
+        if (team.dashboard.length === 0) html += '<div class="muted" style="margin-bottom: 8px;">No dashboard logins yet.</div>';
+        else {
+            html += '<table><thead><tr><th>Name</th><th>Email</th><th>Role</th>' + (board.canEdit ? '<th></th>' : '') + '</tr></thead><tbody>';
+            team.dashboard.forEach(function (p) {
+                html += '<tr><td>' + esc(p.name || '—') + '</td><td>' + esc(p.email) + '</td><td>' + esc(TEAM_ROLES[p.role] || p.role) + '</td>';
+                if (board.canEdit) html += '<td style="text-align: right;"><button class="small danger" data-remove-dash="' + esc(p.userId) + '">Remove</button></td>';
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+        }
+        if (board.canEdit) {
+            html += '<form id="dashboardMemberForm" class="grid" style="margin-top: 12px; align-items: end;"><div><label>Email they signed up with</label><input type="email" name="email" required placeholder="partner@store.com"></div>' +
+                '<div><label>Role</label><select name="role">' + roleOptions('STAFF', canOwners) + '</select></div>' +
+                '<div><button type="submit" class="primary">Add dashboard login</button></div></form>';
+        }
+        return html + '</div>';
+    }
+
+    function removeStoreCard() {
+        if (!board.canManageOwners) return '';
+        return '<div class="card danger-card"><h2>Remove this store</h2><p class="muted card-help">Takes it off the dashboard. Past reports stay. You can add a new store from the dashboard.</p>' +
+            '<button class="danger" data-deactivate-store>Remove store</button></div>';
+    }
+
+    function setupCard() {
+        const link = '/onboarding?setup=' + encodeURIComponent(storeId);
+        if (!board.setup) {
+            return board.canEdit ? '<div class="card"><h2>Hours and shifts</h2><p class="muted card-help">Tell us your shifts and opening hours and we place the starter tasks to fit them.</p><a href="' + esc(link) + '"><button class="primary">Set up now</button></a></div>' : '';
+        }
+        const st = board.setup;
+        const hours = st.open24h ? 'Open 24 hours' : 'Open ' + esc(st.opensAt) + ' to ' + esc(st.closesAt);
+        return '<div class="card"><div class="row" style="justify-content: space-between; align-items: flex-start;"><div><h2 style="margin-bottom: 6px;">Hours and shifts</h2>' +
+            '<div><strong>' + esc(STORE_TYPES[st.storeType] || st.storeType) + '</strong> · ' + hours + (st.fuel ? ' · fuel pumps' : '') + '</div>' +
+            '<div class="muted">Shifts: ' + st.shifts.map(function (x) { return esc(x.name) + ' ' + esc(x.start); }).join(', ') + '</div></div>' +
+            (board.canEdit ? '<a href="' + esc(link) + '"><button class="small">Change store setup</button></a>' : '') + '</div></div>';
+    }
+
+    function adminNav(items) {
+        return '<nav class="admin-nav" aria-label="Jump to a section">' + items.filter(Boolean).map(function (x) {
+            return '<a href="#' + esc(x.id) + '">' + esc(x.label) + (x.count ? ' <span>' + esc(x.count) + '</span>' : '') + '</a>';
+        }).join('') + '</nav>';
+    }
+
+    function shiftOrder(keys) {
+        const order = ['Morning', 'Every shift', 'Evening', 'Night', 'End of shift', 'Weekly', 'Monthly', 'No shift label'];
+        return keys.slice().sort(function (a, b) {
+            const ia = order.indexOf(a), ib = order.indexOf(b);
+            if (ia < 0 && ib < 0) return a.localeCompare(b);
+            if (ia < 0) return 1;
+            if (ib < 0) return -1;
+            return ia - ib;
+        });
+    }
+
+    function renderSetup() {
+        const team = peopleTeam();
+        const vendorCount = ((board.vendors && board.vendors.length) ? board.vendors : (board.canEdit ? SUGGESTED_VENDORS : [])).filter(function (v) { return v.name; }).length;
+        const groups = {};
+        board.templates.forEach(function (t) { const g = t.shift || 'No shift label'; (groups[g] = groups[g] || []).push(t); });
+
+        let offered = [];
+        const byGroup = {};
+        if (board.canEdit) {
+            const savedTitles = {};
+            board.templates.forEach(function (t) { savedTitles[normTitle(t.title)] = true; });
+            offered = board.presets.filter(function (p) {
+                if (p.alreadyOnStore || savedTitles[normTitle(p.title)]) return false;
+                if (p.requires && !features[p.requires]) return false;
+                return true;
+            });
+            const bucketLabel = { daily_reports: 'Daily reports', shift_checks: 'Shift reminders', photo_proofs: 'Photo proofs', weekly_monthly: 'Weekly and monthly' };
+            offered.forEach(function (p) {
+                const g = bucketLabel[p.bucket] || p.group;
+                (byGroup[g] = byGroup[g] || []).push(p);
+            });
+        }
+
+        const waCard = whatsappCard();
+        const dashCard = dashboardCard();
+        const peopleGrid = waCard || dashCard ? '<div class="admin-grid">' + waCard + dashCard + '</div>' : '';
+        const vendorCard = vendorsCard();
+        const sampleCard = samplesCard();
+        const ordersGrid = vendorCard || sampleCard ? '<div class="admin-grid">' + vendorCard + sampleCard + '</div>' : '';
+
+        let html = '<p class="admin-lead">Owners and managers add reminders here. The team gets a WhatsApp message when one is due, then answers with the task number and proof (a photo captioned with the number, or text like <strong>2 190F</strong>). Pay is never part of this.</p>';
+        if (!board.canEdit) html += '<div class="notice err">Only owners and managers can change tasks or samples.</div>';
+        html += adminNav([
+            (waCard || dashCard) ? { id: 'admin-people', label: 'People', count: team.whatsapp.length + team.dashboard.length } : null,
+            { id: 'admin-store', label: 'Store' },
+            ordersGrid ? { id: 'admin-orders', label: 'Vendors & samples', count: vendorCount || null } : null,
+            { id: 'admin-tasks', label: 'Tasks', count: board.templates.length },
+            board.canEdit ? { id: 'admin-add', label: 'Add more', count: offered.length || null } : null,
+        ]);
+
+        if (waCard || dashCard) {
+            html += '<section class="admin-section" id="admin-people"><div class="admin-kicker">People</div>' + peopleGrid + '</section>';
+        }
+
+        html += '<section class="admin-section" id="admin-store"><div class="admin-kicker">Store</div><div class="admin-grid">' + setupCard() + removeStoreCard() + '</div></section>';
+
+        if (ordersGrid) {
+            html += '<section class="admin-section" id="admin-orders"><div class="admin-kicker">Orders and reports</div>' + ordersGrid + '</section>';
+        }
+
+        html += '<section class="admin-section" id="admin-tasks"><div class="admin-head"><div class="admin-kicker">Reminders for ' + esc(board.storeName) + '</div>' +
+            (board.canEdit ? '<button class="primary" data-new>+ New task</button>' : '') + '</div>';
+        if (editing && board.canEdit) html += renderForm();
+        if (board.templates.length === 0) {
+            html += '<div class="card"><div class="empty">No tasks yet. Add your own, or pick from Add more below.</div></div>';
+        } else {
+            shiftOrder(Object.keys(groups)).forEach(function (g) {
+                html += '<div class="card"><div class="row" style="justify-content: space-between; align-items: baseline; margin-bottom: 8px;"><h2 style="margin:0;">' + esc(g) + '</h2><span class="count">' + groups[g].length + '</span></div><table><tbody>' + groups[g].map(function (t) {
+                    return '<tr><td>' + (t.standardId ? '<strong>' + esc(t.standardId) + '</strong> ' : '') + '<strong>' + esc(t.title) + '</strong> ' + crit(t.criticality) + (t.active ? '' : ' <span class="badge b-off">Off</span>') + (t.photoCheck ? ' <span class="badge b-off">AI photo check</span>' : '') +
+                        '<div class="muted">' + esc(t.scheduleText) + (limitText(t) ? ' · answer ' + esc(limitText(t)) : '') + '</div></td>' +
+                        '<td class="hide-sm">' + esc(CATEGORIES[t.category] || t.category) + '<div class="muted">' + esc(EVIDENCE[t.evidence] || t.evidence) + ' · ' + esc(t.points) + ' pt</div></td>' +
+                        (board.canEdit ? '<td style="text-align: right; white-space: nowrap;"><button class="small" data-edit="' + esc(t.id) + '">Edit</button> <button class="small danger" data-delete="' + esc(t.id) + '">Delete</button></td>' : '<td></td>') + '</tr>';
+                }).join('') + '</tbody></table></div>';
+            });
+        }
+        html += '</section>';
+
+        if (board.canEdit) {
+            html += '<section class="admin-section" id="admin-add"><div class="admin-kicker">Add more</div><div class="card"><h2>' +
+                (isSevenEleven() ? 'Starter reminders and 7Clean' : 'Starter reminders') + '</h2>' +
+                '<p class="muted card-help">Tick only reminders that are not on this store yet. After you add them they leave this list and show above, where you can edit times.</p>';
+            html += (board.features || []).map(function (f) {
+                    return '<label style="color: var(--text); font-size: 14px; margin-bottom: 10px;"><input type="checkbox" data-feature="' + esc(f.id) + '"' + (features[f.id] ? ' checked' : '') + '> ' + esc(f.label) + '</label>';
+                }).join('');
+            if (offered.length === 0) {
+                html += '<div class="empty">Every starter reminder for this store is already added. Edit them in the cards above, or write your own with + New task.</div>';
+            } else {
+                html += Object.keys(byGroup).map(function (g) {
+                    return '<div class="preset-group"><div class="row" style="justify-content: space-between;"><strong style="font-size: 13px;">' + esc(g) + '</strong>' +
+                        '<button type="button" class="small" data-pick-group="' + esc(g) + '">Tick all</button></div>' + byGroup[g].map(function (p) {
+                            return '<label class="preset" style="color: var(--text); font-size: 14px;"><input type="checkbox" data-preset="' + esc(p.id) + '" data-group="' + esc(g) + '"><span>' +
+                                (p.standardId ? '<strong>' + esc(p.standardId) + '</strong> ' : '') + esc(p.title) + ' ' + crit(p.criticality) +
+                                (p.source === 'suggested' && isSevenEleven() ? ' <span class="badge b-off">Added by us</span>' : '') +
+                                '<div class="muted">' + esc(p.scheduleText) + (isSevenEleven() ? ' · ' + esc(p.points) + ' pt' : '') + '</div></span></label>';
+                        }).join('') + '</div>';
+                }).join('') +
+                '<button type="button" class="primary" data-import>Add selected</button>';
+            }
+            html += '</div></section>';
+        }
+        return html;
+    }
+
+    // The inspection score and the 7Clean list are the 7-Eleven inspection: other stores get simple everyday tasks.
+    function isSevenEleven() { return !board.setup || board.setup.storeType === 'seven_eleven'; }
+
+    function render() {
+        if (view === 'inspection' && !isSevenEleven()) view = 'today';
+        document.querySelectorAll('.tab').forEach(function (t) { if (t.dataset.view === 'inspection') t.style.display = isSevenEleven() ? '' : 'none'; });
+        document.getElementById('content').innerHTML = view === 'today' ? renderToday() : view === 'inspection' ? renderInspection() : renderSetup();
+        document.querySelectorAll('.tab').forEach(function (t) { t.classList.toggle('active', t.dataset.view === view); });
+    }
+
+    function readForm(form) {
+        const f = new FormData(form);
+        const num = function (k) { const v = f.get(k); return v === null || v === '' ? null : Number(v); };
+        const repeats = f.get('repeats') === 'on';
+        return {
+            title: f.get('title'),
+            instructions: f.get('instructions') || null,
+            category: f.get('category'),
+            standardId: f.get('standardId') || null,
+            criticality: f.get('criticality') || null,
+            minValue: num('minValue'),
+            maxValue: num('maxValue'),
+            unit: f.get('unit') || null,
+            fallback: f.get('fallback') || null,
+            shift: f.get('shift') || null,
+            startTime: f.get('startTime'),
+            endTime: repeats ? (f.get('endTime') || null) : null,
+            repeatEveryMinutes: repeats ? num('repeatEveryMinutes') : null,
+            frequency: f.get('frequency') || 'weekly',
+            daysOfWeek: f.get('frequency') === 'weekly' || !f.get('frequency') ? f.getAll('day').map(Number) : undefined,
+            intervalDays: f.get('frequency') === 'interval' ? num('intervalDays') : null,
+            anchorDate: f.get('frequency') === 'interval' ? (f.get('anchorDate') || null) : f.get('frequency') === 'once' ? (f.get('onceDate') || null) : null,
+            monthDays: f.get('frequency') === 'monthly' ? f.getAll('monthDay').map(Number) : [],
+            evidence: f.get('evidence'),
+            photoCheck: f.get('photoCheck') || null,
+            points: num('points') === null ? undefined : num('points'),
+            remindEveryMinutes: num('remindEveryMinutes') || 15,
+            escalateAfterMinutes: num('escalateAfterMinutes'),
+            lateAfterMinutes: num('lateAfterMinutes') || 60,
+            active: f.get('active') === 'on'
+        };
+    }
+
+    async function act(body, success) {
+        note('', '');
+        try {
+            const r = await api('POST', body);
+            if (success) note('ok', typeof success === 'function' ? success(r) : success);
+            return r;
+        } catch (e) {
+            note('err', e.message);
+            return null;
+        }
+    }
+
+    document.addEventListener('click', async function (e) {
+        const el = e.target.closest('button, .tab');
+        if (!el) return;
+        if (el.id === 'logoutBtn') {
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('user');
+            localStorage.removeItem('skipOwnerOnboarding');
+            location.href = '/login';
+            return;
+        }
+        if (el.classList.contains('tab')) { view = el.dataset.view; editing = null; note('', ''); if (view === 'inspection') { loadInspection(); } else if (board) render(); return; }
+        if (el.hasAttribute('data-new')) { editing = {}; render(); document.getElementById('formCard').scrollIntoView({ behavior: 'smooth' }); return; }
+        if (el.hasAttribute('data-cancel-edit')) { editing = null; render(); return; }
+        if (el.dataset.edit) {
+            editing = board.templates.find(function (t) { return t.id === el.dataset.edit; }) || null;
+            render(); if (editing) document.getElementById('formCard').scrollIntoView({ behavior: 'smooth' });
+            return;
+        }
+        if (el.dataset.delete) {
+            const t = board.templates.find(function (x) { return x.id === el.dataset.delete; });
+            if (!t || !confirm('Delete "' + t.title + '"? Open reminders for it stop. Past results stay in the score.')) return;
+            if (await act({ action: 'delete', id: t.id }, 'Task deleted.')) load();
+            return;
+        }
+        if (el.dataset.close) {
+            if (!confirm('Close this task as missed? The team stops being reminded and it counts against the score.')) return;
+            if (await act({ action: 'close', runId: el.dataset.close })) load();
+            return;
+        }
+        if (el.hasAttribute('data-run-now')) {
+            el.disabled = true;
+            await act({ action: 'run_now' }, function (r) { return 'Checked now: ' + r.alerted + ' new alert(s), ' + r.reminded + ' reminder(s).'; });
+            load();
+            return;
+        }
+        if (el.dataset.approve) {
+            if (!confirm('Accept this photo and mark the task done?')) return;
+            if (await act({ action: 'approve', runId: el.dataset.approve }, 'Photo accepted. Task marked done.')) load();
+            return;
+        }
+        if (el.dataset.saveWa) {
+            const id = el.dataset.saveWa;
+            const nameEl = document.querySelector('[data-wa-name="' + id + '"]');
+            const phoneEl = document.querySelector('[data-wa-phone="' + id + '"]');
+            const roleEl = document.querySelector('[data-wa-role="' + id + '"]');
+            if (await act({ action: 'update_whatsapp_person', id: id, name: nameEl ? nameEl.value : '', phoneE164: phoneEl ? phoneEl.value : '', role: roleEl ? roleEl.value : undefined }, 'WhatsApp person saved.')) load();
+            return;
+        }
+        if (el.dataset.removeWa) {
+            if (!confirm('Remove this WhatsApp number from the store? They will not be recognized until you add them again.')) return;
+            if (await act({ action: 'remove_whatsapp_person', id: el.dataset.removeWa }, 'WhatsApp person removed.')) load();
+            return;
+        }
+        if (el.dataset.removeDash) {
+            if (!confirm('Remove this person’s dashboard access to this store?')) return;
+            if (await act({ action: 'remove_dashboard_member', userId: el.dataset.removeDash }, 'Dashboard access removed.')) load();
+            return;
+        }
+        if (el.hasAttribute('data-deactivate-store')) {
+            if (!confirm('Remove this store from the dashboard? Past reports stay saved.')) return;
+            if (await act({ action: 'deactivate_store' }, 'Store removed from the dashboard.')) {
+                location.href = '/dashboard';
+            }
+            return;
+        }
+        if (el.dataset.cancelReport) { importing = null; render(); return; }
+        if (el.dataset.applyReport) {
+            const ids = Array.prototype.map.call(document.querySelectorAll('[data-report-pick]:checked'), function (c) { return c.dataset.reportPick; });
+            const r = await act({ action: 'apply_report', pdf: importing.pdf, standardIds: ids }, function (res) {
+                return (res.added ? res.added + ' task(s) added. Set their times in Store admin.' : 'No tasks added.') + (res.saved ? ' Report saved.' : ' This report was already saved.');
+            });
+            if (r) { importing = null; loadInspection(); }
+            return;
+        }
+        if (el.dataset.addStandard) {
+            if (await act({ action: 'import_presets', presetIds: [el.dataset.addStandard] }, 'Task added. Edit its times in Store admin.')) loadInspection();
+            return;
+        }
+        if (el.hasAttribute('data-pick-group')) {
+            e.preventDefault();
+            const group = el.getAttribute('data-pick-group');
+            document.querySelectorAll('input[data-preset][data-group]').forEach(function (c) {
+                if (c.getAttribute('data-group') === group) c.checked = true;
+            });
+            return;
+        }
+        if (el.id === 'addVendorBtn') {
+            const rows = readVendorRows();
+            if (rows.length >= 20) { note('err', 'A store can have up to 20 vendors.'); return; }
+            rows.push({ name: '', category: 'other' });
+            board.vendors = rows;
+            render();
+            return;
+        }
+        if (el.dataset.removeVendor !== undefined) {
+            const rows = readVendorRows();
+            rows.splice(Number(el.dataset.removeVendor), 1);
+            board.vendors = rows;
+            render();
+            return;
+        }
+        if (el.hasAttribute('data-import')) {
+            const ids = Array.prototype.map.call(document.querySelectorAll('[data-preset]:checked'), function (c) { return c.dataset.preset; });
+            if (ids.length === 0) { note('err', 'Tick at least one starter task.'); return; }
+            if (await act({ action: 'import_presets', presetIds: ids }, function (r) {
+                const added = r.added || 0;
+                const skipped = r.skipped || 0;
+                if (added === 0 && skipped > 0) return 'Those reminders are already on this store. Edit their times in the list above.';
+                if (added === 0) return 'No new reminders added.';
+                return added + ' reminder(s) saved for this store' + (skipped ? ' (' + skipped + ' already there)' : '') + '. Edit the times to fit your hours.';
+            })) load();
+            return;
+        }
+        if (el.dataset.photo) {
+            const id = el.dataset.photo;
+            const box = document.querySelector('[data-photo-box="' + id + '"]');
+            el.disabled = true;
+            try {
+                const res = await fetch('/api/stores/tasks?' + new URLSearchParams({ storeId: storeId, photo: id }), { headers: { Authorization: 'Bearer ' + token } });
+                if (!res.ok) throw new Error('The photo is no longer available (WhatsApp keeps photos about 30 days).');
+                const img = document.createElement('img');
+                img.alt = 'Proof photo';
+                img.src = URL.createObjectURL(await res.blob());
+                box.innerHTML = '';
+                box.appendChild(img);
+                el.remove();
+            } catch (err) {
+                box.textContent = err.message;
+                el.disabled = false;
+            }
+        }
+    });
+
+    document.addEventListener('change', function (e) {
+        if (e.target.id === 'reportFile') {
+            const file = e.target.files && e.target.files[0];
+            if (file) previewReport(file);
+            return;
+        }
+        if (e.target.dataset && e.target.dataset.feature) {
+            const ticked = Array.prototype.map.call(document.querySelectorAll('[data-preset]:checked'), function (c) { return c.dataset.preset; });
+            features[e.target.dataset.feature] = e.target.checked;
+            render();
+            ticked.forEach(function (id) { const c = document.querySelector('[data-preset="' + id + '"]'); if (c) c.checked = true; });
+            return;
+        }
+        if (e.target.name === 'repeats') document.getElementById('repeatBox').style.display = e.target.checked ? '' : 'none';
+        if (e.target.name === 'frequency') {
+            document.getElementById('weeklyBox').style.display = e.target.value === 'weekly' ? '' : 'none';
+            document.getElementById('intervalBox').style.display = e.target.value === 'interval' ? '' : 'none';
+            document.getElementById('monthlyBox').style.display = e.target.value === 'monthly' ? '' : 'none';
+            const onceBox = document.getElementById('onceBox');
+            if (onceBox) onceBox.style.display = e.target.value === 'once' ? '' : 'none';
+        }
+    });
+
+    function readVendorRows() {
+        const form = document.getElementById('vendorsForm');
+        if (!form) return [];
+        const names = form.querySelectorAll('[name="vendorName"]');
+        const cats = form.querySelectorAll('[name="vendorCategory"]');
+        return Array.prototype.map.call(names, function (n, i) {
+            return { name: n.value.trim(), category: cats[i] ? cats[i].value : 'other' };
+        });
+    }
+
+    document.addEventListener('submit', async function (e) {
+        if (e.target.id === 'whatsappPersonForm') {
+            e.preventDefault();
+            const f = new FormData(e.target);
+            if (await act({ action: 'add_whatsapp_person', name: f.get('name') || '', phoneE164: f.get('phoneE164'), role: f.get('role') }, 'WhatsApp person added.')) load();
+            return;
+        }
+        if (e.target.id === 'dashboardMemberForm') {
+            e.preventDefault();
+            const f = new FormData(e.target);
+            if (await act({ action: 'add_dashboard_member', email: f.get('email'), role: f.get('role') }, 'Dashboard login added.')) load();
+            return;
+        }
+        if (e.target.id === 'vendorsForm') {
+            e.preventDefault();
+            const vendors = readVendorRows().filter(function (v) { return v.name; });
+            if (await act({ action: 'save_vendors', vendors: vendors }, 'Vendors saved. The next order photo or list will ask the group to confirm the vendor.')) load();
+            return;
+        }
+        if (e.target.id === 'samplesForm') {
+            e.preventDefault();
+            const f = new FormData(e.target);
+            const photoInput = document.getElementById('sampleInvoicePhoto');
+            const file = photoInput && photoInput.files && photoInput.files[0];
+            const body = { action: 'save_samples', dailyClose: f.get('dailyClose') || '', invoice: f.get('invoice') || '' };
+            try {
+                if (file) {
+                    if (file.size > MAX_REPORT_BYTES) throw new Error('Photo must be under 2.5 MB.');
+                    if (!/^image\/(jpeg|png|webp|gif)$/i.test(file.type)) throw new Error('Use a JPEG, PNG, or WebP photo.');
+                    note('info', 'Reading invoice photo…');
+                    body.invoiceImage = await readFileAsBase64(file);
+                    body.invoiceMime = file.type;
+                }
+            } catch (err) {
+                note('err', err.message);
+                return;
+            }
+            const saved = await act(body, function (r) {
+                return r.invoiceSample
+                    ? 'Samples saved. Invoice wording: ' + r.invoiceSample
+                    : 'Samples saved. The next WhatsApp close is read against this wording.';
+            });
+            if (saved) load();
+            return;
+        }
+        if (e.target.id !== 'taskForm') return;
+        e.preventDefault();
+        const template = readForm(e.target);
+        const body = editing && editing.id ? { action: 'update', id: editing.id, template: template } : { action: 'create', template: template };
+        if (await act(body, 'Task saved.')) { editing = null; load(); }
+    });
+
+    (async function init() {
+        const select = document.getElementById('storeSelect');
+        try {
+            const res = await fetch('/api/stores', { headers: authHeaders() });
+            if (res.status === 401) { location.href = '/login'; return; }
+            const data = await res.json();
+            const stores = Array.isArray(data.stores) ? data.stores : [];
+            if (stores.length === 0) { document.getElementById('content').innerHTML = '<div class="empty">You do not have a store yet.</div>'; return; }
+            stores.forEach(function (s) {
+                const o = document.createElement('option');
+                o.value = s.storeId;
+                o.textContent = s.storeName + ' (' + s.storeId + ')';
+                select.appendChild(o);
+            });
+            if (!stores.some(function (s) { return s.storeId === storeId; })) storeId = stores[0].storeId;
+            select.value = storeId;
+            select.addEventListener('change', function () {
+                storeId = select.value; editing = null; note('', '');
+                history.replaceState(null, '', '/tasks?storeId=' + encodeURIComponent(storeId));
+                load();
+            });
+            load();
+        } catch (e) {
+            note('err', 'Could not load your stores. ' + e.message);
+        }
+    })();
+</script>
+</body>
+</html>

@@ -72,6 +72,18 @@
     {
       "source": "/api/stores",
       "destination": "/api/stores/index.ts"
+    },
+    {
+      "source": "/tasks",
+      "destination": "/tasks.html"
+    },
+    {
+      "source": "/api/stores/tasks",
+      "destination": "/api/stores/tasks.ts"
+    },
+    {
+      "source": "/api/cron/tasks",
+      "destination": "/api/cron/tasks.ts"
     }
   ],
   "headers": [
@@ -109,6 +121,10 @@
   "functions": {
     "api/webhook/whatsapp.ts": {
       "maxDuration": 60
+    },
+    "api/stores/tasks.ts": {
+      "maxDuration": 30,
+      "includeFiles": "node_modules/pdf-parse/**"
     }
   }
 }

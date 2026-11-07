@@ -83,16 +83,51 @@
             display: inline-block; background: #e8f8ef; color: #065f46; padding: 4px 10px;
             border-radius: 6px; font-weight: 600; font-size: 14px;
         }
+        .auth-container.wide { max-width: 680px; }
+        .type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
+        .type-btn {
+            padding: 12px; border: 2px solid var(--border); border-radius: 10px; background: white;
+            text-align: left; cursor: pointer; color: var(--text);
+        }
+        .type-btn strong { display: block; font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+        .type-btn span { display: block; font-size: 12px; font-weight: 400; color: var(--text-light); line-height: 1.35; }
+        .type-btn.selected { border-color: var(--primary); background: #e8f8ef; }
+        .type-btn.selected strong { color: #065f46; }
+        @media (max-width: 560px) { .type-grid { grid-template-columns: 1fr; } }
+        .check-row { display: flex; align-items: center; gap: 8px; font-size: 14px; margin-bottom: 12px; color: var(--text); }
+        .check-row input { width: auto; }
+        .time-row { display: flex; gap: 12px; }
+        .time-row .form-group { flex: 1; }
+        .shift-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+        .shift-row input[type="text"] { flex: 2; padding: 10px 12px; border: 2px solid var(--border); border-radius: 8px; font-size: 15px; }
+        .shift-row input[type="time"] { flex: 1; padding: 10px 12px; border: 2px solid var(--border); border-radius: 8px; font-size: 15px; }
+        .small-btn { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 13px; cursor: pointer; color: var(--text); }
+        .link-btn { background: none; border: none; color: var(--primary-dark); font-size: 14px; cursor: pointer; text-decoration: underline; margin-top: 14px; }
+        .group-title { font-size: 13px; font-weight: 700; margin: 16px 0 6px; color: var(--text); text-transform: uppercase; letter-spacing: .03em; }
+        .task-row { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; margin: 0 0 8px; border: 2px solid var(--border); border-radius: 10px; font-size: 14px; cursor: pointer; background: white; }
+        .task-row:has(input:checked) { border-color: var(--primary); background: #e8f8ef; }
+        .task-row input { width: auto; margin-top: 3px; }
+        .task-row .when { color: var(--text-light); font-size: 12px; }
+        .bucket-blurb { font-size: 13px; color: var(--text-light); margin: 0 0 8px; line-height: 1.4; }
+        textarea { width: 100%; padding: 12px 14px; border: 2px solid var(--border); border-radius: 8px; font-size: 15px; font-family: inherit; resize: vertical; }
+        .back-row { display: flex; gap: 10px; }
+        .back-row button { flex: 1; }
+        .vendor-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+        .vendor-row input[type="text"] { flex: 1.2; padding: 10px 12px; border: 2px solid var(--border); border-radius: 8px; font-size: 15px; }
+        .vendor-row select { flex: 1.4; padding: 10px 12px; border: 2px solid var(--border); border-radius: 8px; font-size: 15px; }
     </style>
 </head>
 <body>
     <div class="auth-container">
-        <a href="/dashboard" class="logo-link">opsAi</a>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <a href="/dashboard" class="logo-link" style="margin-bottom:0;">opsAi</a>
+            <button type="button" id="logoutBtn" style="background:none;border:none;color:var(--text-light);font-size:13px;font-weight:600;cursor:pointer;">Log out</button>
+        </div>
 
         <div id="setupPanel" class="step-panel active">
             <div class="auth-header">
                 <h1>Set up your store</h1>
-                <p>One opsAi WhatsApp number serves all stores. You’ll create your own private ops group and connect it in a few steps.</p>
+                <p>Name it, then pick what WhatsApp should nag this location about: daily reports, shift reminders, photo proofs, weekly checks. You can change every item later as owner.</p>
             </div>
             <div class="error-message" id="errorMessage"></div>
             <form id="onboardingForm">
@@ -103,7 +138,7 @@
                 <div class="form-group">
                     <label for="ownerPhoneE164">Your WhatsApp number</label>
                     <input type="tel" id="ownerPhoneE164" name="ownerPhoneE164" required placeholder="+15551234567" autocomplete="tel">
-                    <div class="help-text">International format with + and country code. Must match the phone you’ll message from.</div>
+                    <div class="help-text">Your personal WhatsApp, with + and country code — not the opsAi business number. You can change it later, and add a partner or staff, on Tasks &amp; alerts → Store admin.</div>
                 </div>
                 <div class="form-group">
                     <label for="timezone">Timezone</label>
@@ -123,22 +158,76 @@
             </div>
         </div>
 
+        <div id="profilePanel" class="step-panel">
+            <div class="auth-header">
+                <h1>What kind of business is this?</h1>
+                <p>Pick 7-Eleven, a gas station, a convenience store, or another business. Hours and shifts decide <em>when</em> each reminder fires — not while you are closed.</p>
+            </div>
+            <div class="error-message" id="profileError"></div>
+            <div id="profileBody"><div class="loading show">Loading…</div></div>
+            <div class="auth-footer"><button type="button" class="link-btn" id="skipSetupBtn">Skip reminders for now — no alerts until you finish this on Tasks &amp; alerts.</button></div>
+        </div>
+
+        <div id="tasksPanel" class="step-panel">
+            <div class="auth-header">
+                <h1>What should WhatsApp remind the team about?</h1>
+                <p id="tasksIntro">Tick every item you want an alert for. Each one fires at a time on a shift until someone sends proof. Untick the rest — you can add more later from Store admin.</p>
+            </div>
+            <div class="error-message" id="tasksError"></div>
+            <div id="tasksBody"></div>
+            <div class="back-row">
+                <button type="button" class="btn-secondary" id="tasksBackBtn">Back</button>
+                <button type="button" class="btn-primary" id="tasksSaveBtn" style="margin-top: 10px;">Save and continue</button>
+            </div>
+        </div>
+
+        <div id="samplesPanel" class="step-panel">
+            <div class="auth-header">
+                <h1>How do you send the day’s numbers?</h1>
+                <p>Paste a real WhatsApp message (or what a POS screenshot says). Set the vendors you order from so a photo or “need 10 Marlboro” comes back as a list to confirm.</p>
+            </div>
+            <div class="error-message" id="samplesError"></div>
+            <div class="form-group">
+                <label>Vendors you order from</label>
+                <div class="help-text" style="margin-bottom: 8px;">HLA for cigarettes, ABC for drinks, RPS for auto — change the names to yours. When someone sends an order photo or a typed list, opsAi reads the items and asks you to confirm the vendor.</div>
+                <div id="vendorRows"></div>
+                <button type="button" class="small-btn" id="addVendorBtn" style="margin-top: 4px;">+ Add vendor</button>
+            </div>
+            <div class="form-group">
+                <label for="sampleClose">Typical daily close (text)</label>
+                <textarea id="sampleClose" maxlength="2000" rows="5" placeholder="Rockaway 10/12 cash 106 card 334 gas 1355 Lays 142 deposit 1653"></textarea>
+                <div class="help-text">Copy a message from your group, or type the labels you use (cash, card, gas, deposit).</div>
+            </div>
+            <div class="form-group">
+                <label for="sampleInvoice">Typical invoice (optional)</label>
+                <textarea id="sampleInvoice" maxlength="2000" rows="3" placeholder="Pepsi invoice 184.20 paid cash"></textarea>
+                <div class="help-text">Type a typical WhatsApp invoice, or attach a photo. We read the photo and keep the wording — the file is not stored.</div>
+                <input type="file" id="sampleInvoicePhoto" accept="image/jpeg,image/png,image/webp,image/gif" style="margin-top: 8px;">
+                <img id="sampleInvoicePreview" alt="" style="display: none; max-width: 220px; margin-top: 8px; border-radius: 8px; border: 1px solid var(--border);">
+            </div>
+            <div class="back-row">
+                <button type="button" class="btn-secondary" id="samplesSkipBtn">Skip for now</button>
+                <button type="button" class="btn-primary" id="samplesSaveBtn" style="margin-top: 10px;">Save vendors and samples</button>
+            </div>
+        </div>
+
         <div id="successPanel" class="step-panel">
             <div class="success-icon">✅</div>
             <div class="auth-header">
                 <h1>Store created</h1>
-                <p>Store <span class="store-badge" id="successStoreId"></span> is ready. Connect your WhatsApp ops group:</p>
+                <p>Store <span class="store-badge" id="successStoreId"></span> is ready. Connect WhatsApp:</p>
             </div>
             <ol class="steps-list">
-                <li>Create a WhatsApp group on your phone (e.g. “<span id="groupNameHint">Your Store</span> — ops”).</li>
-                <li>Add the <strong>opsAi business number</strong> to the group:<br>
+                <li>Open an <strong>existing</strong> store group, or create one (e.g. “<span id="groupNameHint">Your Store</span> — ops”). Either works.</li>
+                <li>Add the <strong>opsAi business number</strong> to that group:<br>
                     <div class="number-highlight" id="opsNumberDisplay">See dashboard for number</div>
                 </li>
                 <li>From <strong>your registered WhatsApp number</strong>, send any message in that group (e.g. “hello” or “Sales cash 100 card 200”).</li>
                 <li>opsAi will reply when the group is connected — then send real ops messages and reply <strong>OK</strong> to confirm.</li>
             </ol>
+            <div class="number-highlight" id="tasksHint" style="font-size: 14px; font-weight: 600; display: none;"></div>
             <div class="number-highlight" style="font-size: 15px; font-weight: 600;">
-                Try it now: send opsAi yesterday's close report in whatever form you use. A photo, typed text or a voice note all work. Check what it understood, fix anything wrong, and reply OK. That is the whole setup.
+                Try it now: send yesterday’s close as text or a photo. Check what it understood, fix anything wrong, and reply OK. Voice notes are ignored.
             </div>
             <button type="button" class="btn-primary" id="goDashboardBtn">Open dashboard</button>
         </div>
@@ -148,8 +237,18 @@
         if (!token) {
             window.location.replace('/login?next=/onboarding');
         }
+        document.getElementById('logoutBtn').addEventListener('click', function () {
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('user');
+            localStorage.removeItem('skipOwnerOnboarding');
+            window.location.href = '/login';
+        });
 
         let opsDisplayNumber = null;
+
+        // ?setup=S001: an existing store finishing (or redoing) its setup. No store to create, no redirect to the dashboard.
+        const setupStoreParam = new URLSearchParams(window.location.search).get('setup');
+        const isSetupMode = Boolean(setupStoreParam);
 
         // ?add=1: an existing owner adding another location (no phone needed, no redirect away).
         const isAddMode = new URLSearchParams(window.location.search).get('add') === '1';
@@ -171,7 +270,7 @@
                 });
                 const d = await r.json();
                 if (d.opsWhatsAppDisplayNumber) opsDisplayNumber = d.opsWhatsAppDisplayNumber;
-                if (d.success && !d.needsOnboarding && !isAddMode) {
+                if (d.success && !d.needsOnboarding && !isAddMode && !isSetupMode && token !== 'preview') {
                     window.location.replace('/dashboard');
                 }
             } catch (_) {}
@@ -187,9 +286,370 @@
             window.location.href = '/dashboard';
         });
 
-        function showSuccessPanel(storeId, storeName) {
+        function esc(v) {
+            return String(v === null || v === undefined ? '' : v).replace(/[&<>"']/g, function (c) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+            });
+        }
+
+        function showPanel(id) {
+            document.querySelectorAll('.step-panel').forEach(function (p) { p.classList.toggle('active', p.id === id); });
+            document.querySelector('.auth-container').classList.toggle('wide', id === 'tasksPanel' || id === 'samplesPanel');
+        }
+
+        function showError(id, message) {
+            const el = document.getElementById(id);
+            el.textContent = message ? message.charAt(0).toUpperCase() + message.slice(1) : '';
+            el.classList.toggle('show', Boolean(message));
+        }
+
+        /* ------------------- store setup: type, hours, shifts, then starter tasks ------------------- */
+
+        let setupStoreId = null;
+        let setupStoreName = '';
+        let storeTypes = [];
+        let setupState = null; // what the form holds
+        let suggestions = [];
+        const VENDOR_CATEGORIES = [
+            { id: 'cigarettes', label: 'Cigarettes / tobacco' },
+            { id: 'drinks', label: 'Drinks' },
+            { id: 'snacks', label: 'Snacks' },
+            { id: 'candy', label: 'Candy' },
+            { id: 'lottery', label: 'Lottery' },
+            { id: 'auto', label: 'Auto / automotive' },
+            { id: 'ice', label: 'Ice' },
+            { id: 'bread', label: 'Bread / bakery' },
+            { id: 'dairy', label: 'Dairy' },
+            { id: 'other', label: 'Other' },
+        ];
+        const SUGGESTED_VENDORS = [
+            { name: 'HLA', category: 'cigarettes' },
+            { name: 'ABC', category: 'drinks' },
+            { name: 'RPS', category: 'auto' },
+        ];
+        let vendorDraft = SUGGESTED_VENDORS.map(function (v) { return { name: v.name, category: v.category }; });
+
+        function categoryOptions(selected) {
+            return VENDOR_CATEGORIES.map(function (c) {
+                return '<option value="' + esc(c.id) + '"' + (c.id === selected ? ' selected' : '') + '>' + esc(c.label) + '</option>';
+            }).join('');
+        }
+
+        function renderVendors() {
+            const el = document.getElementById('vendorRows');
+            el.innerHTML = vendorDraft.map(function (v, i) {
+                return '<div class="vendor-row"><input type="text" maxlength="40" placeholder="HLA" data-vendor="' + i + '" data-field="name" value="' + esc(v.name) + '">' +
+                    '<select data-vendor="' + i + '" data-field="category">' + categoryOptions(v.category) + '</select>' +
+                    '<button type="button" class="small-btn" data-remove-vendor="' + i + '">Remove</button></div>';
+            }).join('') || '<div class="help-text">No vendors yet. Add HLA, ABC, RPS or your own names.</div>';
+        }
+
+        function readVendorsFromForm() {
+            vendorDraft.forEach(function (v, i) {
+                const name = document.querySelector('[data-vendor="' + i + '"][data-field="name"]');
+                const cat = document.querySelector('[data-vendor="' + i + '"][data-field="category"]');
+                if (name) v.name = name.value.trim();
+                if (cat) v.category = cat.value;
+            });
+            return vendorDraft.filter(function (v) { return v.name; }).slice(0, 20);
+        }
+
+        async function setupApi(method, body, query) {
+            const qs = new URLSearchParams(Object.assign({ storeId: setupStoreId }, query || {})).toString();
+            const res = await fetch('/api/stores/tasks?' + qs, {
+                method: method,
+                headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+                body: body ? JSON.stringify(body) : undefined,
+            });
+            let data = {};
+            try { data = await res.json(); } catch (e) { /* not json */ }
+            if (!res.ok) throw new Error(data.error || ('The server answered ' + res.status));
+            return data;
+        }
+
+        async function startSetup(storeId, storeName) {
+            setupStoreId = storeId;
+            setupStoreName = storeName || '';
+            showPanel('profilePanel');
+            showError('profileError', '');
+            try {
+                const data = await setupApi('GET', null, { view: 'setup' });
+                storeTypes = data.storeTypes || [];
+                if (data.storeName) setupStoreName = data.storeName;
+                setupState = data.setup ? JSON.parse(JSON.stringify(data.setup)) : null;
+                if (Array.isArray(data.vendors) && data.vendors.length > 0) {
+                    vendorDraft = data.vendors.map(function (v) { return { name: v.name, category: v.category }; });
+                }
+                if (data.vendorCategories && data.vendorCategories.length) {
+                    VENDOR_CATEGORIES.splice(0, VENDOR_CATEGORIES.length, ...data.vendorCategories);
+                }
+                renderProfile();
+            } catch (e) {
+                document.getElementById('profileBody').innerHTML = '';
+                showError('profileError', 'Could not load setup. ' + e.message);
+            }
+        }
+
+        function renderProfile() {
+            let html = '<div class="form-group"><label>Business type</label><div class="type-grid">' +
+                storeTypes.map(function (t) {
+                    return '<button type="button" class="type-btn' + (setupState && setupState.storeType === t.id ? ' selected' : '') + '" data-type="' + esc(t.id) + '"><strong>' +
+                        esc(t.label) + '</strong><span>' + esc(t.blurb || '') + '</span></button>';
+                }).join('') + '</div></div>';
+            if (setupState) {
+                const st = setupState;
+                html += '<div class="form-group"><label class="check-row"><input type="checkbox" id="open24" ' + (st.open24h ? 'checked' : '') + '> Open 24 hours</label>' +
+                    '<div class="time-row" id="hoursRow" style="' + (st.open24h ? 'display: none;' : '') + '">' +
+                    '<div class="form-group"><label for="opensAt">Opens</label><input type="time" id="opensAt" value="' + esc(st.opensAt || '') + '"></div>' +
+                    '<div class="form-group"><label for="closesAt">Closes</label><input type="time" id="closesAt" value="' + esc(st.closesAt || '') + '"></div></div></div>';
+                html += '<div class="form-group"><label>Your shifts</label>' +
+                    st.shifts.map(function (sh, i) {
+                        return '<div class="shift-row"><input type="text" maxlength="30" placeholder="Shift name" data-shift="' + i + '" data-field="name" value="' + esc(sh.name) + '">' +
+                            '<input type="time" data-shift="' + i + '" data-field="start" value="' + esc(sh.start) + '">' +
+                            (st.shifts.length > 1 ? '<button type="button" class="small-btn" data-remove-shift="' + i + '">Remove</button>' : '') + '</div>';
+                    }).join('') +
+                    '<div class="help-text">Each shift runs until the next one starts. Morning routines go in the first shift, end-of-day routines in the last.</div>' +
+                    (st.shifts.length < 4 ? '<button type="button" class="small-btn" id="addShift" style="margin-top: 8px;">+ Add a shift</button>' : '') + '</div>';
+                html += '<div class="form-group"><label class="check-row"><input type="checkbox" id="fuelBox" ' + (st.fuel ? 'checked' : '') + '> This location sells fuel (pumps / spill kit reminders)</label></div>';
+                html += '<button type="button" class="btn-primary" id="profileNext">Next: choose WhatsApp reminders</button>';
+            }
+            document.getElementById('profileBody').innerHTML = html;
+        }
+
+        function readHoursFromForm() {
+            if (!setupState) return;
+            const o = document.getElementById('opensAt'), c = document.getElementById('closesAt');
+            if (o) setupState.opensAt = o.value || null;
+            if (c) setupState.closesAt = c.value || null;
+        }
+
+        document.getElementById('profileBody').addEventListener('click', async function (e) {
+            const t = e.target;
+            const typeBtn = t.closest && t.closest('[data-type]');
+            if (typeBtn && typeBtn.dataset.type) {
+                const chosen = storeTypes.find(function (x) { return x.id === typeBtn.dataset.type; });
+                if (chosen && (!setupState || setupState.storeType !== chosen.id)) {
+                    setupState = JSON.parse(JSON.stringify(chosen.defaults));
+                    renderProfile();
+                }
+            } else if (t.id === 'addShift') {
+                readHoursFromForm();
+                const last = setupState.shifts[setupState.shifts.length - 1];
+                setupState.shifts.push({ name: '', start: last ? last.start : '12:00' });
+                renderProfile();
+            } else if (t.dataset.removeShift !== undefined) {
+                readHoursFromForm();
+                setupState.shifts.splice(Number(t.dataset.removeShift), 1);
+                renderProfile();
+            } else if (t.id === 'profileNext') {
+                readHoursFromForm();
+                showError('profileError', '');
+                t.disabled = true;
+                try {
+                    const data = await setupApi('POST', { action: 'setup_preview', setup: setupState });
+                    suggestions = data.suggestions || [];
+                    renderTasks();
+                    showPanel('tasksPanel');
+                } catch (err) {
+                    showError('profileError', err.message);
+                } finally {
+                    t.disabled = false;
+                }
+            }
+        });
+
+        document.getElementById('profileBody').addEventListener('input', function (e) {
+            const t = e.target;
+            if (!setupState) return;
+            if (t.dataset.shift !== undefined) setupState.shifts[Number(t.dataset.shift)][t.dataset.field] = t.value;
+            else if (t.id === 'opensAt') setupState.opensAt = t.value || null;
+            else if (t.id === 'closesAt') setupState.closesAt = t.value || null;
+        });
+
+        document.getElementById('profileBody').addEventListener('change', function (e) {
+            const t = e.target;
+            if (!setupState) return;
+            if (t.id === 'open24') {
+                setupState.open24h = t.checked;
+                document.getElementById('hoursRow').style.display = t.checked ? 'none' : '';
+                if (!t.checked) {
+                    setupState.opensAt = setupState.opensAt || '06:00';
+                    setupState.closesAt = setupState.closesAt || '22:00';
+                    document.getElementById('opensAt').value = setupState.opensAt;
+                    document.getElementById('closesAt').value = setupState.closesAt;
+                }
+            } else if (t.id === 'fuelBox') {
+                setupState.fuel = t.checked;
+            }
+        });
+
+        const BUCKET_ORDER = ['daily_reports', 'shift_checks', 'photo_proofs', 'weekly_monthly'];
+        const BUCKET_BLURB = {
+            daily_reports: 'Nag the shift to send numbers you already collect — close, deposit, competitor prices, invoices.',
+            shift_checks: 'Time-based checks on each shift: open, clean, restock, pumps. Staff reply OK or send a photo.',
+            photo_proofs: 'Must send a picture (date labels, 7Clean items, a POS screen). Stays open until the photo is right.',
+            weekly_monthly: 'Less often: fire safety, spill kit, pest report, deep clean.',
+        };
+
+        function renderTasks() {
+            const simple = setupState && setupState.storeType !== 'seven_eleven';
+            document.getElementById('tasksIntro').textContent = simple
+                ? 'Tick every report or reminder this location needs. Ticked items become WhatsApp alerts on the shifts you chose. You can add, edit or turn off any of them later as owner.'
+                : '7-Eleven: daily close plus 7Clean photo checks are ticked. Untick what you do not need. Upload an inspection PDF later on Store admin if you want the failed standards added.';
+            const byBucket = {};
+            suggestions.forEach(function (s) {
+                const b = s.bucket || 'shift_checks';
+                (byBucket[b] = byBucket[b] || []).push(s);
+            });
+            const buckets = BUCKET_ORDER.filter(function (b) { return byBucket[b] && byBucket[b].length; });
+            document.getElementById('tasksBody').innerHTML = buckets.map(function (b) {
+                const label = (byBucket[b][0] && byBucket[b][0].bucketLabel) || b;
+                return '<div class="group-title">' + esc(label) +
+                    ' <button type="button" class="small-btn" data-tick-bucket="' + esc(b) + '" style="margin-left: 8px; text-transform: none; letter-spacing: 0; font-weight: 600;">Tick all</button></div>' +
+                    '<p class="bucket-blurb">' + esc(BUCKET_BLURB[b] || '') + '</p>' +
+                    byBucket[b].map(function (s) {
+                        const proof = s.evidence === 'photo' ? ' · photo required' : (s.evidence === 'text' ? ' · text reply' : '');
+                        return '<label class="task-row"><input type="checkbox" data-preset="' + esc(s.presetId) + '" data-bucket="' + esc(b) + '"' + (s.recommended ? ' checked' : '') + '><span><strong>' +
+                            (s.standardId ? esc(s.standardId) + ' ' : '') + esc(s.title) + '</strong>' +
+                            '<div class="when">' + esc(s.scheduleText) + (s.shift ? ' · ' + esc(s.shift) : '') + proof + '</div></span></label>';
+                    }).join('');
+            }).join('') + (setupState && setupState.storeType === 'seven_eleven'
+                ? '<div class="help-text" style="margin-top: 14px;">Have your last 7-Eleven inspection report? Upload it later on Tasks &amp; alerts → Inspection, and it will add a task for everything the inspector found.</div>' : '');
+        }
+
+        document.getElementById('tasksPanel').addEventListener('click', function (e) {
+            const btn = e.target.closest && e.target.closest('[data-tick-bucket]');
+            if (!btn) return;
+            e.preventDefault();
+            const bucket = btn.getAttribute('data-tick-bucket');
+            document.querySelectorAll('#tasksBody input[data-preset][data-bucket]').forEach(function (c) {
+                if (c.getAttribute('data-bucket') === bucket) c.checked = true;
+            });
+        });
+
+        document.getElementById('tasksBackBtn').addEventListener('click', function () {
+            showError('tasksError', '');
+            showPanel('profilePanel');
+        });
+
+        function finishSetup(added) {
+            if (isSetupMode) {
+                window.location.href = '/tasks?storeId=' + encodeURIComponent(setupStoreId);
+                return;
+            }
+            showSuccessPanel(setupStoreId, setupStoreName, added);
+        }
+
+        document.getElementById('tasksSaveBtn').addEventListener('click', async function (e) {
+            const btn = e.currentTarget;
+            const ids = Array.prototype.map.call(document.querySelectorAll('#tasksBody input[data-preset]:checked'), function (i) { return i.dataset.preset; });
+            showError('tasksError', '');
+            btn.disabled = true;
+            try {
+                const data = await setupApi('POST', { action: 'setup_apply', setup: setupState, presetIds: ids });
+                window._tasksAdded = data.added;
+                if (isSetupMode) {
+                    finishSetup(data.added);
+                    return;
+                }
+                renderVendors();
+                showPanel('samplesPanel');
+            } catch (err) {
+                showError('tasksError', err.message);
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        document.getElementById('samplesPanel').addEventListener('click', function (e) {
+            const t = e.target;
+            if (t.id === 'addVendorBtn') {
+                readVendorsFromForm();
+                if (vendorDraft.length >= 20) return;
+                vendorDraft.push({ name: '', category: 'other' });
+                renderVendors();
+            } else if (t.dataset.removeVendor !== undefined) {
+                readVendorsFromForm();
+                vendorDraft.splice(Number(t.dataset.removeVendor), 1);
+                renderVendors();
+            }
+        });
+
+        document.getElementById('samplesSkipBtn').addEventListener('click', function () {
+            finishSetup(window._tasksAdded);
+        });
+
+        document.getElementById('sampleInvoicePhoto').addEventListener('change', function () {
+            const file = this.files && this.files[0];
+            const preview = document.getElementById('sampleInvoicePreview');
+            if (!file) { preview.style.display = 'none'; preview.removeAttribute('src'); return; }
+            preview.src = URL.createObjectURL(file);
+            preview.style.display = 'block';
+        });
+
+        function readInvoicePhoto() {
+            const input = document.getElementById('sampleInvoicePhoto');
+            const file = input && input.files && input.files[0];
+            if (!file) return Promise.resolve(null);
+            if (file.size > 2500000) return Promise.reject(new Error('Photo must be under 2.5 MB.'));
+            if (!/^image\/(jpeg|png|webp|gif)$/i.test(file.type)) return Promise.reject(new Error('Use a JPEG, PNG, or WebP photo.'));
+            return new Promise(function (resolve, reject) {
+                const reader = new FileReader();
+                reader.onload = function () {
+                    resolve({ invoiceImage: String(reader.result).split(',')[1] || '', invoiceMime: file.type });
+                };
+                reader.onerror = function () { reject(new Error('Could not read that photo.')); };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        document.getElementById('samplesSaveBtn').addEventListener('click', async function (e) {
+            const btn = e.currentTarget;
+            showError('samplesError', '');
+            btn.disabled = true;
+            const original = btn.textContent;
+            try {
+                const photo = await readInvoicePhoto();
+                if (photo) btn.textContent = 'Reading invoice photo…';
+                await setupApi('POST', { action: 'save_vendors', vendors: readVendorsFromForm() });
+                const samples = {
+                    action: 'save_samples',
+                    dailyClose: document.getElementById('sampleClose').value,
+                    invoice: document.getElementById('sampleInvoice').value,
+                };
+                if (photo) {
+                    samples.invoiceImage = photo.invoiceImage;
+                    samples.invoiceMime = photo.invoiceMime;
+                }
+                await setupApi('POST', samples);
+                finishSetup(window._tasksAdded);
+            } catch (err) {
+                showError('samplesError', err.message);
+            } finally {
+                btn.textContent = original;
+                btn.disabled = false;
+            }
+        });
+
+        document.getElementById('skipSetupBtn').addEventListener('click', function () {
+            if (isSetupMode) { window.location.href = '/tasks?storeId=' + encodeURIComponent(setupStoreId); return; }
+            showSuccessPanel(setupStoreId, setupStoreName);
+        });
+
+        if (isSetupMode) {
             document.getElementById('setupPanel').classList.remove('active');
-            document.getElementById('successPanel').classList.add('active');
+            startSetup(setupStoreParam, '');
+        }
+
+        function showSuccessPanel(storeId, storeName, tasksAdded) {
+            showPanel('successPanel');
+            if (typeof tasksAdded === 'number') {
+                const hint = document.getElementById('tasksHint');
+                hint.style.display = '';
+                hint.textContent = tasksAdded > 0
+                    ? tasksAdded + ' reminders are scheduled. After the ops group is connected they post there at the times you chose. Owners and managers can edit any of them on Tasks & alerts → Store admin.'
+                    : 'Hours and shifts are saved. Add reminders on Tasks & alerts → Store admin when you are ready.';
+            }
             document.getElementById('successStoreId').textContent = storeId;
             // The dashboard opens on the store that was just added.
             sessionStorage.setItem('selectStoreId', storeId);
@@ -236,7 +696,8 @@
                 const data = await response.json();
                 if (data.opsWhatsAppDisplayNumber) opsDisplayNumber = data.opsWhatsAppDisplayNumber;
                 if (response.ok && data.success) {
-                    showSuccessPanel(data.storeId, storeName);
+                    sessionStorage.setItem('selectStoreId', data.storeId);
+                    startSetup(data.storeId, storeName);
                 } else {
                     errorEl.textContent = data.error || data.message || 'Setup failed.';
                     errorEl.classList.add('show');

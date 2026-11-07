@@ -1,0 +1,19 @@
+{
+  "title": "Voice notes are ignored",
+  "why": "A voice note gets no reply and is not downloaded, transcribed, saved or sent to the AI.",
+  "today": "2026-10-13T12:00:00-04:00",
+  "steps": [
+    {
+      "name": "Owner sends a voice note",
+      "audio": "voice.wav",
+      "noAi": true,
+      "expect": {
+        "noReply": true,
+        "status": {
+          "PENDING": 0
+        },
+        "entries": []
+      }
+    }
+  ]
+}

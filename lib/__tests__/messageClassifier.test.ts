@@ -18,6 +18,12 @@ describe('classifyMessage', () => {
     const result = classifyMessage('');
     expect(result.type).toBe(ClassificationType.UNKNOWN);
   });
+
+  it('treats a restock list as an order, not a broken pump', () => {
+    expect(classifyMessage('need 10 Marlboro').type).toBe(ClassificationType.ORDER_REQUEST);
+    expect(classifyMessage('out of pepsi').type).toBe(ClassificationType.ORDER_REQUEST);
+    expect(classifyMessage('pump 3 is out of order').type).not.toBe(ClassificationType.ORDER_REQUEST);
+  });
 });
 
 describe('isWhatsAppCommand', () => {

@@ -7,6 +7,7 @@ import { UnderstandingUnavailableError, type MessageUnderstander } from './extra
 import { formatEntriesReply, planUnderstanding } from './plan';
 import { loadStoreProfiles } from './storeProfiles';
 import { transcribeAudio } from './transcribe';
+import type { AiUsageRecord } from './usage';
 import type { Understanding } from './schema';
 
 export interface UnderstandParams {
@@ -34,8 +35,8 @@ const RETRY_MESSAGE =
   "😕 I couldn't read that right now. Please send it again in a minute, or type the numbers like: cash 298 card 1355 gas 1440.";
 
 /** What the sender sees as the "extracted" record in message_log (no raw media is kept). */
-function logPayload(understanding: Understanding, transcript: string | null): Record<string, unknown> {
-  return { understanding, ...(transcript ? { transcript } : {}) };
+function logPayload(understanding: Understanding, transcript: string | null, usage: AiUsageRecord[]): Record<string, unknown> {
+  return { understanding, ...(transcript ? { transcript } : {}), ...(usage.length > 0 ? { usage } : {}) };
 }
 
 /**
@@ -50,6 +51,7 @@ export async function understandAndRespond(prisma: PrismaClient, params: Underst
 
   let text = params.text.trim();
   let transcript: string | null = null;
+  const usage: AiUsageRecord[] = [];
   let image: { base64: string; mimeType: string } | undefined;
 
   const finish = async (reply: string, classification: string, extracted?: unknown) => {
@@ -74,7 +76,7 @@ export async function understandAndRespond(prisma: PrismaClient, params: Underst
 
     if (isAudio) {
       try {
-        transcript = await transcribeAudio({ buffer: media.buffer, mimeType: media.mimeType });
+        transcript = await transcribeAudio({ buffer: media.buffer, mimeType: media.mimeType }, { onUsage: (u) => usage.push(u) });
       } catch (error) {
         console.error('Transcription failed', { messageId, error: error instanceof Error ? error.message : error });
         await finish(RETRY_MESSAGE, 'AI_UNAVAILABLE');
@@ -101,7 +103,7 @@ export async function understandAndRespond(prisma: PrismaClient, params: Underst
 
   let understanding: Understanding;
   try {
-    understanding = await understander.understand({ text, image, profiles, now });
+    understanding = await understander.understand({ text, image, profiles, now, onUsage: (u) => usage.push(u) });
   } catch (error) {
     if (!(error instanceof UnderstandingUnavailableError)) throw error;
     console.error('AI understanding unavailable', { messageId, error: error.message });
@@ -116,11 +118,12 @@ export async function understandAndRespond(prisma: PrismaClient, params: Underst
     now,
     multiStoreSender,
     canTeachRules: canReportForAllStores,
+    canManageSchedules: canReportForAllStores,
   });
   const heard = transcript ? `🎙️ I heard: "${transcript}"\n\n` : '';
 
   if (plan.entries.length === 0) {
-    await finish(`${heard}${plan.notice ?? RETRY_MESSAGE}`, understanding.kind.toUpperCase(), logPayload(understanding, transcript));
+    await finish(`${heard}${plan.notice ?? RETRY_MESSAGE}`, understanding.kind.toUpperCase(), logPayload(understanding, transcript, usage));
     return 'handled';
   }
 
@@ -132,12 +135,13 @@ export async function understandAndRespond(prisma: PrismaClient, params: Underst
   const confirmedBefore = await prisma.pendingActions.count({
     where: { storeId, status: 'CONFIRMED' },
   });
-  const welcome = confirmedBefore === 0 ? `${FIRST_REPORT_INTRO}\n\n` : '';
+  const isMoneyReport = plan.entries.some((e) => e.kind !== 'work_schedule');
+  const welcome = confirmedBefore === 0 && isMoneyReport ? `${FIRST_REPORT_INTRO}\n\n` : '';
 
   await finish(
     `${heard}${welcome}${formatEntriesReply(plan.entries)}`,
     understanding.kind.toUpperCase(),
-    logPayload(understanding, transcript)
+    logPayload(understanding, transcript, usage)
   );
   return 'handled';
 }

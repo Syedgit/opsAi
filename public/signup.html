@@ -167,28 +167,6 @@
             color: var(--text-light);
             margin-top: 4px;
         }
-        
-        .btn-google {
-            width: 100%;
-            background: white;
-            color: #4285F4;
-            padding: 14px;
-            border: 2px solid #dadce0;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            text-decoration: none;
-        }
-        
-        .btn-google:hover {
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            border-color: #c0c0c0;
-        }
     </style>
 </head>
 <body>
@@ -200,29 +178,12 @@
             <p>Start managing your stores today</p>
         </div>
         
-        <div class="error-message" id="errorMessage"></div>
-        
-        <div style="margin-bottom: 24px;">
-            <button onclick="window.location.href='/api/auth/google/initiate'" class="btn-google" id="googleBtn">
-                <svg width="18" height="18" viewBox="0 0 18 18" style="margin-right: 8px;">
-                    <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/>
-                    <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z"/>
-                    <path fill="#FBBC05" d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.951H.957C.348 6.174 0 7.55 0 9s.348 2.826.957 4.049l3.007-2.342z"/>
-                    <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.951L3.964 7.293C4.672 5.156 6.656 3.58 9 3.58z"/>
-                </svg>
-                Continue with Google
-            </button>
-        </div>
-        
-        <div style="text-align: center; margin: 24px 0; position: relative;">
-            <div style="position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: var(--border);"></div>
-            <span style="background: white; padding: 0 16px; color: var(--text-light); font-size: 14px;">or</span>
-        </div>
+        <div class="error-message" id="errorMessage" role="alert"></div>
         
         <form id="signupForm">
             <div class="form-group">
                 <label for="name">Full Name</label>
-                <input type="text" id="name" name="name" autocomplete="name" placeholder="John Doe">
+                <input type="text" id="name" name="name" required autocomplete="name" placeholder="Your name">
             </div>
             
             <div class="form-group">
@@ -234,6 +195,11 @@
                 <label for="password">Password</label>
                 <input type="password" id="password" name="password" required autocomplete="new-password" placeholder="••••••••" minlength="8">
                 <div class="password-hint">Must be at least 8 characters</div>
+            </div>
+
+            <div class="form-group">
+                <label for="passwordConfirm">Confirm Password</label>
+                <input type="password" id="passwordConfirm" name="passwordConfirm" required autocomplete="new-password" placeholder="••••••••" minlength="8">
             </div>
             
             <button type="submit" class="btn-primary" id="submitBtn">Create Account</button>
@@ -251,21 +217,35 @@
         const errorMessage = document.getElementById('errorMessage');
         const submitBtn = document.getElementById('submitBtn');
         const loading = document.getElementById('loading');
+
+        function showError(text) {
+            errorMessage.style.background = '#fee';
+            errorMessage.style.color = '#e74c3c';
+            errorMessage.textContent = text;
+            errorMessage.classList.add('show');
+        }
         
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            const name = document.getElementById('name').value;
-            const email = document.getElementById('email').value;
+            const name = document.getElementById('name').value.trim();
+            const email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value;
-            
+            const passwordConfirm = document.getElementById('passwordConfirm').value;
+
+            if (!name) {
+                showError('Name is required');
+                return;
+            }
             if (password.length < 8) {
-                errorMessage.textContent = 'Password must be at least 8 characters';
-                errorMessage.classList.add('show');
+                showError('Password must be at least 8 characters');
+                return;
+            }
+            if (password !== passwordConfirm) {
+                showError('Passwords do not match');
                 return;
             }
             
-            // Reset UI
             errorMessage.classList.remove('show');
             submitBtn.disabled = true;
             loading.classList.add('show');
@@ -276,32 +256,20 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ name, email, password }),
+                    body: JSON.stringify({ name, email, password, passwordConfirm }),
                 });
                 
                 const data = await response.json();
                 
-                if (response.ok && data.success) {
-                    // Show success and redirect to login
-                    errorMessage.style.background = '#efe';
-                    errorMessage.style.color = '#2e7d32';
-                    errorMessage.textContent = 'Account created! Redirecting to login...';
-                    errorMessage.classList.add('show');
-                    
-                    setTimeout(() => {
-                        window.location.href = '/login?next=/onboarding';
-                    }, 1500);
-                } else {
-                    errorMessage.style.background = '#fee';
-                    errorMessage.style.color = '#e74c3c';
-                    errorMessage.textContent = data.error || 'Signup failed. Please try again.';
-                    errorMessage.classList.add('show');
+                if (response.ok && data.success && data.token) {
+                    localStorage.setItem('authToken', data.token);
+                    localStorage.setItem('user', JSON.stringify(data.user));
+                    window.location.href = '/onboarding';
+                    return;
                 }
+                showError(data.error || 'Signup failed. Please try again.');
             } catch (error) {
-                errorMessage.style.background = '#fee';
-                errorMessage.style.color = '#e74c3c';
-                errorMessage.textContent = 'Network error. Please check your connection and try again.';
-                errorMessage.classList.add('show');
+                showError('Network error. Please check your connection and try again.');
             } finally {
                 submitBtn.disabled = false;
                 loading.classList.remove('show');

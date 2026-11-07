@@ -1,0 +1,61 @@
+{
+  "title": "A real two-store close: people paid from the till, deposit copied even when it looks wrong",
+  "why": "Store credit/cash, Gas, a name+amount (Ahsan 21, Umar 220-) are till payouts not hours, and Total deposit is saved as written so a typo like 6611 is flagged. One shared group can cover both stores; each close still lands on its own store id.",
+  "today": "2026-11-06T22:00:00-05:00",
+  "linkedGroups": ["Rockaway"],
+  "steps": [
+    {
+      "name": "Owner sends both stores the way they actually type it",
+      "text": "11/06/2026\nRockAway*\n\nStore credit:  $ 242\nStore cash:    $ 125\nGas:              $ 1206\nAhsan.         21\nTotal deposit Rockaway:  $ 1566\n\nDanville*\n\nStore credit:  $  0\nStore cash.:   $ 0\nGas:             $ 661\nUmar.             220- \nTotal deposit Denville:6611 ",
+      "expect": {
+        "replyCount": 1,
+        "replyContains": [
+          "Rockaway",
+          "Denville",
+          "Ahsan $21",
+          "Umar $220",
+          "$1,566",
+          "$6,611",
+          "Reply OK to save all"
+        ],
+        "replyNotContains": ["salary", "wage", "hourly"],
+        "status": { "PENDING": 2 },
+        "entries": [
+          {
+            "kind": "daily_close",
+            "store": "Rockaway",
+            "date": "2026-11-06",
+            "cash": 125,
+            "card": 242,
+            "fuel": 1206,
+            "deposit": 1566,
+            "payouts": [{ "label": "Ahsan", "amount": 21 }],
+            "warnings": ["deposit_unexplained"]
+          },
+          {
+            "kind": "daily_close",
+            "store": "Denville",
+            "date": "2026-11-06",
+            "cash": 0,
+            "card": 0,
+            "fuel": 661,
+            "deposit": 6611,
+            "payouts": [{ "label": "Umar", "amount": 220 }],
+            "warnings": ["deposit_unexplained"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "Owner confirms both",
+      "text": "OK",
+      "expect": {
+        "status": { "PENDING": 0, "CONFIRMED": 2 },
+        "dashboard": {
+          "Rockaway": { "sales": { "count": 1, "first": { "cash": 125, "card": 242, "fuel_sales": 1206 } } },
+          "Denville": { "sales": { "count": 1, "first": { "cash": 0, "card": 0, "fuel_sales": 661 } } }
+        }
+      }
+    }
+  ]
+}

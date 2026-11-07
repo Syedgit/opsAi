@@ -59,7 +59,7 @@ router.post('/send-message', async (req, res) => {
       messageId: response.data.messages?.[0]?.id,
       to: to,
       phoneNumberId,
-      displayPhoneNumber: '15558608667',
+      displayPhoneNumber: process.env.OPS_WHATSAPP_DISPLAY_NUMBER || null,
     });
     return;
   } catch (error: unknown) {
@@ -194,18 +194,22 @@ router.post('/mock-webhook', async (req, res) => {
       error: 'Missing required fields',
       required: ['phone', 'message'],
       example: {
-        phone: '+17329397703',
+        phone: '+15551234567',
         message: 'Sales today: Cash $2100, Card $5400',
         type: 'text',
-        phoneNumberId: '933263666546131', // Optional: use specific phone number ID
-        storeId: 'S001', // Optional: will lookup phone number ID if provided
+        phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID,
+        storeId: 'S001',
       },
     });
     return;
   }
 
   // Lookup phone number ID from store if storeId provided
-  let finalPhoneNumberId = phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID || '869870982886772';
+  let finalPhoneNumberId = phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if (!finalPhoneNumberId) {
+    res.status(500).json({ error: 'WHATSAPP_PHONE_NUMBER_ID is not configured' });
+    return;
+  }
   if (storeId && !phoneNumberId) {
     try {
       const { prisma } = await import('../config/database');
@@ -232,7 +236,7 @@ router.post('/mock-webhook', async (req, res) => {
             value: {
               messaging_product: 'whatsapp',
               metadata: {
-                display_phone_number: '15558608667',
+                display_phone_number: (process.env.OPS_WHATSAPP_DISPLAY_NUMBER || '').replace(/^\+/, '') || 'not-configured',
                 phone_number_id: finalPhoneNumberId,
               },
               messages: [

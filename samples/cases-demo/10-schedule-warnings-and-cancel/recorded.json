@@ -1,0 +1,120 @@
+{
+  "_note": "Hand-written stand-in for what the AI answers. Re-record from the real model with: npm run e2e -- --live --record",
+  "steps": {
+    "0": {
+      "reading": {
+        "kind": "work_schedule",
+        "schedule": {
+          "storeHint": "Rockaway",
+          "weekStart": "2026-10-26",
+          "employees": [
+            {
+              "name": "Ali",
+              "statedTotalHours": null,
+              "shifts": [
+                {
+                  "date": null,
+                  "day": "Mon",
+                  "start": "07:00",
+                  "end": "15:00",
+                  "breakMinutes": null
+                },
+                {
+                  "date": null,
+                  "day": "Tue",
+                  "start": "07:00",
+                  "end": "15:00",
+                  "breakMinutes": null
+                },
+                {
+                  "date": null,
+                  "day": "Wed",
+                  "start": "07:00",
+                  "end": "15:00",
+                  "breakMinutes": null
+                },
+                {
+                  "date": null,
+                  "day": "Thu",
+                  "start": "07:00",
+                  "end": "15:00",
+                  "breakMinutes": null
+                },
+                {
+                  "date": null,
+                  "day": "Fri",
+                  "start": "07:00",
+                  "end": "15:00",
+                  "breakMinutes": null
+                },
+                {
+                  "date": null,
+                  "day": "Sat",
+                  "start": "07:00",
+                  "end": "15:00",
+                  "breakMinutes": null
+                }
+              ]
+            },
+            {
+              "name": "Maria",
+              "statedTotalHours": 40,
+              "shifts": [
+                {
+                  "date": null,
+                  "day": "Mon",
+                  "start": "09:00",
+                  "end": "17:00",
+                  "breakMinutes": null
+                }
+              ]
+            },
+            {
+              "name": "Sam",
+              "statedTotalHours": null,
+              "shifts": [
+                {
+                  "date": null,
+                  "day": "Tue",
+                  "start": "9",
+                  "end": null,
+                  "breakMinutes": null
+                }
+              ]
+            }
+          ]
+        },
+        "confidence": 0.9,
+        "needsReview": [
+          "Sam Tue AM/PM"
+        ]
+      }
+    },
+    "2": {
+      "reading": {
+        "kind": "work_schedule",
+        "schedule": {
+          "storeHint": "Rockaway",
+          "weekStart": "2026-10-26",
+          "employees": [
+            {
+              "name": "Maria",
+              "statedTotalHours": null,
+              "shifts": [
+                {
+                  "date": null,
+                  "day": "Mon",
+                  "start": "09:00",
+                  "end": "17:00",
+                  "breakMinutes": null
+                }
+              ]
+            }
+          ]
+        },
+        "confidence": 0.9,
+        "needsReview": []
+      }
+    }
+  }
+}

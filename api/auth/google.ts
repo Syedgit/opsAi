@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { sign } from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import { getJwtSecret } from '../../lib/apiAuth';
+import { googleOAuthStep } from '../../lib/googleOAuth';
 
 const prisma = new PrismaClient();
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -20,7 +21,7 @@ const oauth2Client = new OAuth2Client(
  */
 export async function initiateGoogleAuth(_req: VercelRequest, res: VercelResponse): Promise<void> {
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
-    res.status(500).json({ error: 'Google OAuth not configured' });
+    res.redirect('/login?error=google_not_configured');
     return;
   }
 
@@ -45,6 +46,11 @@ export async function initiateGoogleAuth(_req: VercelRequest, res: VercelRespons
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== 'GET') {
     res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  if (googleOAuthStep(req.url) === 'initiate') {
+    await initiateGoogleAuth(req, res);
     return;
   }
 

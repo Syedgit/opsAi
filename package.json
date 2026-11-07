@@ -28,6 +28,9 @@
     "prebuild": "npm run type-check",
     "test": "jest",
     "simulate": "ts-node -T scripts/simulate-whatsapp.ts",
+    "e2e": "ts-node -T scripts/e2e/run.ts",
+    "e2e:demo": "ts-node -T scripts/e2e/run.ts --dir samples/cases-demo --strict",
+    "e2e:new": "ts-node -T scripts/e2e/new-case.ts",
     "preview": "ts-node -T scripts/ui-preview.ts"
   },
   "keywords": [
@@ -55,6 +58,7 @@
     "ioredis": "^5.3.0",
     "jsonwebtoken": "^9.0.3",
     "openai": "^4.20.0",
+    "pdf-parse": "^1.1.1",
     "twilio": "^4.20.0",
     "uuid": "^9.0.1",
     "winston": "^3.11.0",

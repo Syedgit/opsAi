@@ -1,0 +1,42 @@
+{
+  "_note": "Hand-written stand-in for what the AI answers. Re-record from the real model with: npm run e2e -- --live --record",
+  "steps": {
+    "0": {
+      "reading": {
+        "kind": "daily_close",
+        "reports": [
+          {
+            "storeHint": "RockAway*",
+            "reportDate": "2026-11-06",
+            "cardSales": 242,
+            "cashSales": 125,
+            "storeSalesTotal": null,
+            "fuelSales": 1206,
+            "fuelGallons": null,
+            "fuelDiscounts": null,
+            "payouts": [{ "label": "Ahsan", "amount": 21 }],
+            "reportedDeposit": 1566,
+            "reportedDayTotal": null,
+            "periodClosed": null
+          },
+          {
+            "storeHint": "Danville*",
+            "reportDate": "2026-11-06",
+            "cardSales": 0,
+            "cashSales": 0,
+            "storeSalesTotal": null,
+            "fuelSales": 661,
+            "fuelGallons": null,
+            "fuelDiscounts": null,
+            "payouts": [{ "label": "Umar", "amount": 220 }],
+            "reportedDeposit": 6611,
+            "reportedDayTotal": null,
+            "periodClosed": null
+          }
+        ],
+        "confidence": 0.9,
+        "needsReview": []
+      }
+    }
+  }
+}

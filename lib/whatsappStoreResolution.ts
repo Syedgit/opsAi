@@ -8,6 +8,9 @@ import type { PrismaClient } from '@prisma/client';
  * - phone_number: only StoreConfig.whatsappPhoneNumberId (per-number / shared WABA)
  * - group: only store_whatsapp_groups.whatsappGroupId (one number, many groups)
  * - both: try group_id first, then phone_number_id
+ *
+ * A group maps to one home store. One chat can still cover several of the same owner's
+ * stores: "Rockaway" / "Denville" in the message files each close under that store's id.
  */
 export type WhatsAppStoreRoutingMode = 'phone_number' | 'group' | 'both';
 

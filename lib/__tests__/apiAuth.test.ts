@@ -51,6 +51,17 @@ describe('getAuthUser', () => {
   it('returns null without header', () => {
     expect(getAuthUser({ headers: {} } as VercelRequest)).toBeNull();
   });
+
+  it('rejects a WhatsApp tap-link used as a session', () => {
+    process.env.JWT_SECRET = 'unit-test-secret';
+    const token = sign(
+      { typ: 'wa_link', userId: 'u1', email: 'a@b.com', storeId: 'S001' },
+      getJwtSecret(),
+      { expiresIn: '20m' },
+    );
+    const req = { headers: { authorization: `Bearer ${token}` } } as VercelRequest;
+    expect(getAuthUser(req)).toBeNull();
+  });
 });
 
 describe('requireAdmin', () => {

@@ -3,6 +3,7 @@ import { getAiConfig } from './config';
 import type { StoreProfile } from './profile';
 import { buildSystemPrompt } from './prompt';
 import { UnderstandingSchema, unknownUnderstanding, type Understanding } from './schema';
+import type { AiUsageRecord } from './usage';
 
 export interface UnderstandInput {
   /** Typed text, or a voice-note transcript. */
@@ -11,6 +12,8 @@ export interface UnderstandInput {
   /** Stores this sender can report for. */
   profiles: StoreProfile[];
   now?: Date;
+  /** Called with what the AI call used, so cost can be tracked. */
+  onUsage?: (usage: AiUsageRecord) => void;
 }
 
 /** One implementation per AI provider; tests use a fake. */
@@ -68,7 +71,10 @@ interface ChatCreateParams {
 export interface ChatClientLike {
   chat: {
     completions: {
-      create(params: ChatCreateParams): Promise<{ choices: Array<{ message: { content: string | null } }> }>;
+      create(params: ChatCreateParams): Promise<{
+        choices: Array<{ message: { content: string | null } }>;
+        usage?: { prompt_tokens?: number; completion_tokens?: number };
+      }>;
     };
   };
 }
@@ -98,6 +104,8 @@ export function createOpenAiUnderstander(overrides?: {
   const config = getAiConfig();
   const model = overrides?.model ?? config?.extractionModel;
   if (!model) return null;
+  // Typed text is easy to read, so it can use a cheaper model; photos keep the stronger one.
+  const textModel = overrides?.model ? overrides.model : (config?.textModel ?? model);
 
   let client = overrides?.client;
   if (!client) {
@@ -113,8 +121,9 @@ export function createOpenAiUnderstander(overrides?: {
 
       let raw: string | null | undefined;
       try {
+        const useModel = input.image ? model : textModel;
         const response = await chat.chat.completions.create({
-          model,
+          model: useModel,
           messages: [
             { role: 'system', content: buildSystemPrompt(input.profiles, input.now ?? new Date()) },
             { role: 'user', content },
@@ -122,6 +131,12 @@ export function createOpenAiUnderstander(overrides?: {
           response_format: { type: 'json_object' },
         });
         raw = response.choices[0]?.message?.content;
+        input.onUsage?.({
+          kind: 'extraction',
+          model: useModel,
+          inputTokens: response.usage?.prompt_tokens,
+          outputTokens: response.usage?.completion_tokens,
+        });
       } catch (error) {
         throw new UnderstandingUnavailableError(
           `AI request failed: ${error instanceof Error ? error.message : 'unknown error'}`,

@@ -14,6 +14,9 @@ import { handleWhatsAppCommand, isWhatsAppCommand } from './whatsappCommands';
 import { sendWhatsAppMessage } from './whatsappMessaging';
 import { createOpenAiUnderstander } from './understanding/extractor';
 import { understandAndRespond } from './understanding/service';
+import { routeIntent } from './understanding/intent';
+import { tryTaskEvidence } from './tasks/evidence';
+import { checkAiBudget } from './understanding/budget';
 
 export interface ProcessWhatsAppMessageInput {
   messageId: string;
@@ -114,6 +117,12 @@ export async function processWhatsAppMessage(
     mediaId,
   });
 
+  // Voice notes are ignored completely: no reply, no download, no AI.
+  if (mediaId && mediaType?.toLowerCase().startsWith('audio')) {
+    await updateMessageLog(prisma, messageId, { classification: 'AUDIO_IGNORED', processed: true, storeId: storeId ?? undefined });
+    return;
+  }
+
   if (!storeId) {
     // One reply per stranger per day; every reply costs money and an open number attracts spam.
     if (await shouldReplyNotLinked(prisma, phoneE164)) {
@@ -162,11 +171,80 @@ export async function processWhatsAppMessage(
     return;
   }
 
-  const isAudio = Boolean(mediaId && mediaType?.toLowerCase().startsWith('audio'));
+  // Replies to shift tasks ("2 190F", a photo with caption 3) are proof for a task, not store data.
+  try {
+    const member = await prisma.userDirectory.findUnique({ where: { phoneE164 }, select: { role: true } });
+    const handled = await tryTaskEvidence(prisma, {
+      messageId,
+      phoneE164,
+      storeId,
+      text,
+      mediaId,
+      groupId: input.groupId ?? null,
+      role: member?.role ?? null,
+    });
+    if (handled) return;
+  } catch (error) {
+    // Tasks must never stop normal reporting (for example while the tables are not created yet).
+    console.error('Task evidence check failed', { messageId, error: error instanceof Error ? error.message : error });
+  }
 
-  // AI understanding (text, photos, voice). Off unless OPENAI_API_KEY and OPENAI_EXTRACTION_MODEL are set.
+  // Intent (code) → reason (one AI read, only if needed) → execute (always code).
+  const intent = routeIntent({ text, hasMedia: Boolean(mediaId) });
+
+  if (intent.layer === 'execute' && (intent.action === 'chatter' || intent.action === 'no_data')) {
+    if (intent.reply) await sendWhatsAppMessage(prisma, phoneE164, intent.reply, storeId);
+    await updateMessageLog(prisma, messageId, { classification: intent.classification, processed: true, storeId });
+    return;
+  }
+
+  if (intent.layer === 'execute' && intent.action === 'rules') {
+    await executeRuleExtraction(prisma, {
+      messageId,
+      phoneE164,
+      storeId,
+      type: intent.type,
+      fields: intent.fields,
+      confidence: intent.confidence,
+    });
+    return;
+  }
+
+  // Reasoning: photos, invoices (due dates), order lists, leftover numbers, equipment. Not reminders or alerts.
   const understander = createOpenAiUnderstander();
+  let aiAllowed = true;
   if (understander) {
+    const budget = await checkAiBudget(prisma, storeId);
+    if (!budget.allowed) {
+      aiAllowed = false;
+      if (budget.notify) {
+        await sendWhatsAppMessage(
+          prisma,
+          phoneE164,
+          '⏳ This store has used today\'s smart-reading budget. Typed numbers like "cash 298 card 1355 gas 1440" still work. Photos work again tomorrow.',
+          storeId
+        );
+        await prisma.messageLog
+          .create({
+            data: {
+              messageId: `ai-limit:${storeId}:${messageId}`,
+              phoneE164,
+              storeId,
+              messageType: 'system',
+              classification: 'AI_LIMIT',
+              processed: true,
+            },
+          })
+          .catch((error: unknown) => console.error('Could not record AI limit notice', error instanceof Error ? error.message : error));
+      }
+      if (mediaId) {
+        await updateMessageLog(prisma, messageId, { classification: 'AI_LIMIT', processed: true, storeId });
+        return;
+      }
+    }
+  }
+
+  if (understander && aiAllowed) {
     const outcome = await understandAndRespond(prisma, {
       messageId,
       phoneE164,
@@ -177,69 +255,74 @@ export async function processWhatsAppMessage(
       understander,
     });
     if (outcome === 'handled') return;
-    // 'fallback': the AI was unreachable for a text message, so the rule-based path below handles it.
-  } else if (isAudio) {
-    await sendWhatsAppMessage(
-      prisma,
-      phoneE164,
-      '🎙️ Voice notes are not switched on yet. Please send a photo or type it, like: cash 298 card 1355 gas 1440.',
-      storeId
-    );
-    await updateMessageLog(prisma, messageId, { classification: 'AUDIO_UNSUPPORTED', processed: true, storeId });
-    return;
   }
 
-  const classification = classifyMessage(text || 'image receipt');
-  if (classification.type === ClassificationType.UNKNOWN) {
+  await executeRuleExtraction(prisma, { messageId, phoneE164, storeId, text });
+}
+
+async function executeRuleExtraction(
+  prisma: PrismaClient,
+  args: {
+    messageId: string;
+    phoneE164: string;
+    storeId: string;
+    text?: string;
+    type?: ClassificationType;
+    fields?: Record<string, unknown>;
+    confidence?: number;
+  }
+): Promise<void> {
+  const type = args.type ?? classifyMessage(args.text || 'image receipt').type;
+  if (type === ClassificationType.UNKNOWN) {
     await sendWhatsAppMessage(
       prisma,
-      phoneE164,
+      args.phoneE164,
       '❓ Could not classify message. Try clearer text like "Sales cash 2100 card 5400" or a receipt photo with a caption. Reply HELP for examples.',
-      storeId
+      args.storeId
     );
-    await updateMessageLog(prisma, messageId, {
+    await updateMessageLog(prisma, args.messageId, {
       classification: ClassificationType.UNKNOWN,
       processed: true,
-      storeId,
+      storeId: args.storeId,
     });
     return;
   }
 
-  const extraction = extractDataFromText(classification.type, text || 'image');
-
-  // The rules read very little. Never save (or show) a partial reading as if it were complete.
-  const left = unusedNumbers(classification.type, text, extraction.fields);
-  if (left.length > 0) {
-    await sendWhatsAppMessage(
-      prisma,
-      phoneE164,
-      `😕 I can't read all of that right now (I would have left out: ${left.join(', ')}). Please send it again in a minute, or send one store at a time like: cash 298 card 1355.`,
-      storeId
-    );
-    await updateMessageLog(prisma, messageId, {
-      classification: 'RULES_INCOMPLETE',
-      processed: true,
-      storeId,
-    });
-    return;
+  const fields = args.fields ?? extractDataFromText(type, args.text || 'image').fields;
+  const confidence = args.confidence ?? 0.6;
+  if (args.text) {
+    const left = unusedNumbers(type, args.text, fields);
+    if (left.length > 0) {
+      await sendWhatsAppMessage(
+        prisma,
+        args.phoneE164,
+        `😕 I can't read all of that right now (I would have left out: ${left.join(', ')}). Please send it again in a minute, or send one store at a time like: cash 298 card 1355.`,
+        args.storeId
+      );
+      await updateMessageLog(prisma, args.messageId, {
+        classification: 'RULES_INCOMPLETE',
+        processed: true,
+        storeId: args.storeId,
+      });
+      return;
+    }
   }
+
   const actionId = await createPendingAction(
     prisma,
-    phoneE164,
-    storeId,
-    classification.type,
-    extraction.fields,
-    extraction.confidence,
-    messageId
+    args.phoneE164,
+    args.storeId,
+    type,
+    fields,
+    confidence,
+    args.messageId
   );
-
-  const summary = formatExtractionSummary(classification.type, extraction.fields);
-  await sendWhatsAppMessage(prisma, phoneE164, `${summary}\n\nRef: ${actionId.slice(0, 8)}`, storeId);
-
-  await updateMessageLog(prisma, messageId, {
-    classification: classification.type,
-    extractedData: extraction.fields,
+  const summary = formatExtractionSummary(type, fields);
+  await sendWhatsAppMessage(prisma, args.phoneE164, `${summary}\n\nRef: ${actionId.slice(0, 8)}`, args.storeId);
+  await updateMessageLog(prisma, args.messageId, {
+    classification: type,
+    extractedData: fields,
     processed: true,
-    storeId,
+    storeId: args.storeId,
   });
 }

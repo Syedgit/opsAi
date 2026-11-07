@@ -18,7 +18,7 @@ function prismaWith(profileJson: unknown, exists = true) {
 
 describe('parseStoredProfile', () => {
   it('treats nothing as an empty profile', () => {
-    expect(parseStoredProfile(null)).toEqual({ aliases: [], depositRule: null, labelAliases: {}, vendorAliases: {} });
+    expect(parseStoredProfile(null)).toEqual({ aliases: [], depositRule: null, labelAliases: {}, vendorAliases: {}, messageSamples: {}, vendors: [] });
   });
 
   it('keeps what was taught and fills the rest with defaults', () => {

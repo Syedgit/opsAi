@@ -652,8 +652,9 @@
                 <a href="/login" style="color: var(--text); text-decoration: none; font-weight: 500;">Login</a>
                 <a href="/signup" class="btn-primary">Sign Up</a>
             </span>
-            <span id="userMenu" style="display: none;">
+            <span id="userMenu" style="display: none; align-items: center; gap: 12px;">
                 <a href="/dashboard" class="btn-primary">Dashboard</a>
+                <a href="/login" id="logoutLink" style="color: var(--text); text-decoration: none; font-weight: 500;">Log out</a>
             </span>
         </div>
     </nav>
@@ -1042,6 +1043,16 @@
                     if (response.ok) {
                         document.getElementById('authButtons').style.display = 'none';
                         document.getElementById('userMenu').style.display = 'inline-flex';
+                        const logout = document.getElementById('logoutLink');
+                        if (logout) {
+                            logout.addEventListener('click', function (e) {
+                                e.preventDefault();
+                                localStorage.removeItem('authToken');
+                                localStorage.removeItem('user');
+                                localStorage.removeItem('skipOwnerOnboarding');
+                                window.location.href = '/login';
+                            });
+                        }
                     } else {
                         localStorage.removeItem('authToken');
                     }

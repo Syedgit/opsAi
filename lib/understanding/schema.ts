@@ -61,6 +61,8 @@ export const InvoiceSchema = z.object({
   vendorName: z.string().nullable(),
   invoiceNumber: z.string().nullable(),
   invoiceDate: isoDate.nullable(),
+  /** Payment due date when printed ("Due date", "Pay by", Net 15/30). Null when none is shown. */
+  dueDate: isoDate.nullable().optional(),
   storeHint: z.string().nullable().optional(),
   lineItems: z.array(InvoiceLineSchema).default([]),
   tax: optionalAmount,
@@ -115,6 +117,57 @@ export const EquipmentIssueSchema = z.object({
 });
 export type EquipmentIssue = z.infer<typeof EquipmentIssueSchema>;
 
+/** One shift on a staff schedule. Times are as the model read them ("17:00", "5pm"); code parses them. */
+export const ShiftSchema = z.object({
+  /** Calendar date when the sheet prints one for this shift. */
+  date: isoDate.nullable().default(null),
+  /** Weekday as written ("Mon", "Tuesday"), used with the week start when there is no date. */
+  day: z.string().nullable().default(null),
+  start: z.string().nullable().default(null),
+  end: z.string().nullable().default(null),
+  /** Unpaid break to subtract, only when the sheet says so. */
+  breakMinutes: z.number().min(0).max(600).nullable().default(null),
+});
+export type Shift = z.infer<typeof ShiftSchema>;
+
+/**
+ * Privacy: there is deliberately no pay rate, wage or salary field. Hours only.
+ */
+export const EmployeeScheduleSchema = z.object({
+  /** Name exactly as written on the sheet. */
+  name: z.string().min(1),
+  /** Total hours when the sheet prints one, used only to cross-check our own count. */
+  statedTotalHours: z.number().min(0).max(200).nullable().default(null),
+  /** Set by "FIX <name> <hours>" when the manager corrects the total (left early, swapped a shift). */
+  adjustedHours: z.number().min(0).max(200).nullable().default(null),
+  shifts: z.array(ShiftSchema).default([]),
+});
+export type EmployeeSchedule = z.infer<typeof EmployeeScheduleSchema>;
+
+export const WorkScheduleSchema = z.object({
+  storeHint: z.string().nullable().default(null),
+  /** First date of the week the sheet covers. */
+  weekStart: isoDate.nullable().default(null),
+  employees: z.array(EmployeeScheduleSchema).min(1),
+});
+export type WorkSchedule = z.infer<typeof WorkScheduleSchema>;
+
+/** A restock / order list (photo of a handwritten sheet, or typed "need 10 Marlboro"). */
+export const OrderItemSchema = z.object({
+  description: z.string().min(1),
+  quantity: z.number().finite().nullable().optional(),
+  unit: z.string().nullable().optional(),
+});
+export type OrderItem = z.infer<typeof OrderItemSchema>;
+
+export const OrderSchema = z.object({
+  storeHint: z.string().nullable().optional(),
+  /** Vendor as written on the sheet or in the message ("HLA", "cig guy"). */
+  vendorHint: z.string().nullable().optional(),
+  items: z.array(OrderItemSchema).min(1),
+});
+export type Order = z.infer<typeof OrderSchema>;
+
 export const UnderstandingSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('daily_close'),
@@ -137,6 +190,18 @@ export const UnderstandingSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('equipment_issue'),
     issue: EquipmentIssueSchema,
+    confidence,
+    needsReview,
+  }),
+  z.object({
+    kind: z.literal('work_schedule'),
+    schedule: WorkScheduleSchema,
+    confidence,
+    needsReview,
+  }),
+  z.object({
+    kind: z.literal('order'),
+    order: OrderSchema,
     confidence,
     needsReview,
   }),

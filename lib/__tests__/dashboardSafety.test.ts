@@ -24,8 +24,56 @@ describe('dashboard.html', () => {
     expect(esc(42)).toBe('42');
   });
 
+  it('has a Schedule tab that escapes names and never mentions pay', () => {
+    expect(html).toContain('data-tab="schedules"');
+    const fn = html.match(/function renderSchedules\(container, items\) \{[\s\S]*?\n {8}\}\n/);
+    expect(fn).not.toBeNull();
+    const body = fn![0];
+    expect(body).toContain('esc(e.name)');
+    expect(body).toContain('esc(week)');
+    expect(body).not.toMatch(/wage|salary|payroll|rate|\$/i);
+  });
+
   it('never shows made-up data', () => {
     expect(html).not.toMatch(/mock=true/);
     expect(html).not.toMatch(/Main Street Store|Highway 101 Store|Downtown Plaza Store/);
+  });
+
+  it('links to the tasks page', () => {
+    expect(html).toContain('href="/tasks"');
+  });
+});
+
+describe('tasks.html', () => {
+  const tasks = fs.readFileSync(path.join(__dirname, '../../public/tasks.html'), 'utf8');
+  const vercel = fs.readFileSync(path.join(__dirname, '../../vercel.json'), 'utf8');
+
+  it('escapes every value that comes from the server before it goes into HTML', () => {
+    // Values that other people write (task titles, proof text) must always pass through esc().
+    // confirm() shows plain text, not HTML, so it is not checked.
+    const html = tasks.split('\n').filter((line) => !line.includes('confirm(')).join('\n');
+    const fields = html.match(/'\s*\+\s*(?:t|r|p|c)\.(?:title|instructions|evidenceText|shift|scheduleText|label)\s*\+\s*'/g) ?? [];
+    expect(fields).toEqual([]);
+  });
+
+  it('defines esc() with all five characters', () => {
+    const fn = tasks.match(/function esc\(value\) \{[\s\S]*?\n {4}\}/);
+    expect(fn).not.toBeNull();
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const esc = new Function(`${fn![0]}; return esc;`)() as (v: unknown) => string;
+    expect(esc('<script>"\'&')).toBe('&lt;script&gt;&quot;&#39;&amp;');
+  });
+
+  it('sets innerHTML only from strings built with esc()', () => {
+    const assigns = tasks.match(/innerHTML = [^;]+;/g) ?? [];
+    for (const a of assigns) expect(a).not.toMatch(/\b(?:e|err|error)\.message(?!\))/);
+  });
+
+  it('has no pay wording', () => {
+    expect(tasks).not.toMatch(/wage|salary|payroll/i);
+  });
+
+  it('is allowed to show proof photos by the content security policy', () => {
+    expect(vercel).toMatch(/img-src[^"]*blob:/);
   });
 });

@@ -1,0 +1,70 @@
+{
+  "_note": "Hand-written stand-in for what the AI answers. Re-record from the real model with: npm run e2e -- --live --record",
+  "steps": {
+    "0": {
+      "reading": {
+        "kind": "work_schedule",
+        "schedule": {
+          "storeHint": "Rockaway",
+          "weekStart": "2026-10-26",
+          "employees": [
+            {
+              "name": "Maria",
+              "statedTotalHours": null,
+              "shifts": [
+                {
+                  "date": null,
+                  "day": "Mon",
+                  "start": "09:00",
+                  "end": "17:00",
+                  "breakMinutes": null
+                }
+              ]
+            },
+            {
+              "name": "Sam",
+              "statedTotalHours": null,
+              "shifts": [
+                {
+                  "date": null,
+                  "day": "Tue",
+                  "start": "09:00",
+                  "end": "17:00",
+                  "breakMinutes": null
+                }
+              ]
+            }
+          ]
+        },
+        "confidence": 0.9,
+        "needsReview": []
+      }
+    },
+    "1": {
+      "reading": {
+        "kind": "work_schedule",
+        "schedule": {
+          "storeHint": "Rockaway",
+          "weekStart": "2026-10-26",
+          "employees": [
+            {
+              "name": "Maria",
+              "statedTotalHours": null,
+              "shifts": [
+                {
+                  "date": null,
+                  "day": "Mon",
+                  "start": null,
+                  "end": null,
+                  "breakMinutes": null
+                }
+              ]
+            }
+          ]
+        },
+        "confidence": 0.9,
+        "needsReview": []
+      }
+    }
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "title": "The AI read one number wrong; the owner fixes it before saving",
+  "why": "FIX must change the saved value and re-run the checks, so a wrong reading never reaches the dashboard.",
+  "today": "2026-10-13T12:00:00-04:00",
+  "steps": [
+    {
+      "name": "Owner sends a report that was misread (cash 12 instead of 120)",
+      "text": "Rockaway cash 120 card 300 gas 900",
+      "expect": {
+        "entries": [
+          {
+            "store": "Rockaway",
+            "cash": 12,
+            "card": 300
+          }
+        ],
+        "status": {
+          "PENDING": 1
+        }
+      }
+    },
+    {
+      "name": "Owner corrects the cash figure",
+      "text": "FIX cash 120",
+      "expect": {
+        "replyContains": [
+          "120"
+        ]
+      }
+    },
+    {
+      "name": "Owner replies OK",
+      "text": "OK",
+      "expect": {
+        "status": {
+          "PENDING": 0,
+          "CONFIRMED": 1
+        },
+        "dashboard": {
+          "Rockaway": {
+            "sales": {
+              "count": 1,
+              "first": {
+                "cash": 120,
+                "card": 300
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

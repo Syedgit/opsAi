@@ -1,0 +1,226 @@
+{
+  "title": "Tasks that come round every 2 days or monthly, and an AI check on a proof photo",
+  "why": "A task can repeat every few days or on a day of the month, not just daily. A task with a photo check is not closed by a photo that does not show what it needs: the employee is told why, the manager hears once, and a good photo closes it. If the AI is unsure the task stays open and a clearer photo is asked for.",
+  "today": "2026-10-26T09:00:00-04:00",
+  "linkedGroups": [
+    "Rockaway"
+  ],
+  "taskTemplates": [
+    {
+      "store": "Rockaway",
+      "title": "Date labels on milk and creamers",
+      "category": "food_safety",
+      "standardId": "FS6",
+      "criticality": "critical",
+      "startTime": "10:00",
+      "evidence": "photo",
+      "photoCheck": "both the milk and the creamer dispensers show a date label that is not expired",
+      "remindEveryMinutes": 240,
+      "escalateAfterMinutes": 1440,
+      "lateAfterMinutes": 120
+    },
+    {
+      "store": "Rockaway",
+      "title": "Deep clean the coffee grinder",
+      "category": "cleanliness",
+      "startTime": "11:00",
+      "evidence": "text",
+      "frequency": "interval",
+      "intervalDays": 2,
+      "anchorDate": "2026-10-26",
+      "remindEveryMinutes": 240,
+      "escalateAfterMinutes": 1440,
+      "lateAfterMinutes": 120
+    },
+    {
+      "store": "Rockaway",
+      "title": "Check fire extinguishers",
+      "category": "safety",
+      "startTime": "12:00",
+      "evidence": "none",
+      "frequency": "monthly",
+      "monthDays": [
+        27
+      ],
+      "remindEveryMinutes": 240,
+      "escalateAfterMinutes": 1440,
+      "lateAfterMinutes": 120
+    }
+  ],
+  "steps": [
+    {
+      "name": "10:01 the milk-label task is announced (the grinder and extinguishers are not due yet)",
+      "at": "2026-10-26T10:01:00-04:00",
+      "tick": true,
+      "expect": {
+        "groupPosts": 1,
+        "groupPostContains": [
+          "1. ❗[FS6] Date labels"
+        ],
+        "groupPostNotContains": [
+          "grinder",
+          "extinguishers"
+        ]
+      }
+    },
+    {
+      "name": "Staff sends a photo where the cream dispenser has no label: not accepted",
+      "from": "staff",
+      "at": "2026-10-26T10:05:00-04:00",
+      "text": "1",
+      "image": "labels.png",
+      "expect": {
+        "replyContains": [
+          "not done yet",
+          "The cream dispenser has no label"
+        ],
+        "tasks": [
+          {
+            "title": "Date labels",
+            "status": "OPEN",
+            "code": 1,
+            "outcome": "photo_fail",
+            "photoVerdict": "fail"
+          }
+        ],
+        "taskCounts": {
+          "OPEN": 1,
+          "DONE": 0
+        }
+      }
+    },
+    {
+      "name": "The AI cannot tell from the next photo: a clearer one is asked for, the task stays open",
+      "from": "staff",
+      "at": "2026-10-26T10:08:00-04:00",
+      "text": "1",
+      "image": "labels.png",
+      "expect": {
+        "replyContains": [
+          "can't tell",
+          "clearer"
+        ],
+        "tasks": [
+          {
+            "title": "Date labels",
+            "status": "OPEN",
+            "photoVerdict": "unclear"
+          }
+        ]
+      }
+    },
+    {
+      "name": "A good photo closes it, and the task is marked fixed",
+      "from": "staff",
+      "at": "2026-10-26T10:12:00-04:00",
+      "text": "1",
+      "image": "labels.png",
+      "expect": {
+        "replyContains": [
+          "done",
+          "Photo checked: Both dispensers show dated labels."
+        ],
+        "tasks": [
+          {
+            "title": "Date labels",
+            "status": "DONE",
+            "outcome": "fixed",
+            "photoVerdict": "pass",
+            "evidenceType": "photo"
+          }
+        ],
+        "taskCounts": {
+          "OPEN": 0,
+          "DONE": 1
+        }
+      }
+    },
+    {
+      "name": "11:01 the every-2-days grinder task is due on its first day",
+      "at": "2026-10-26T11:01:00-04:00",
+      "tick": true,
+      "expect": {
+        "groupPosts": 1,
+        "groupPostContains": [
+          "Deep clean the coffee grinder"
+        ]
+      }
+    },
+    {
+      "name": "Staff answers the grinder task in text",
+      "from": "staff",
+      "at": "2026-10-26T11:20:00-04:00",
+      "text": "1 cleaned and reassembled",
+      "noAi": true,
+      "expect": {
+        "tasks": [
+          {
+            "title": "grinder",
+            "status": "DONE",
+            "evidenceType": "text"
+          }
+        ],
+        "taskCounts": {
+          "OPEN": 0,
+          "DONE": 2
+        }
+      }
+    },
+    {
+      "name": "The next morning only the milk-label task comes round again",
+      "at": "2026-10-27T10:01:00-04:00",
+      "tick": true,
+      "expect": {
+        "groupPosts": 1,
+        "groupPostContains": [
+          "Date labels"
+        ],
+        "groupPostNotContains": [
+          "grinder",
+          "extinguishers"
+        ]
+      }
+    },
+    {
+      "name": "The 27th at noon the monthly extinguisher check is due; the grinder is not (every 2 days)",
+      "at": "2026-10-27T12:01:00-04:00",
+      "tick": true,
+      "expect": {
+        "groupPostContains": [
+          "Check fire extinguishers"
+        ],
+        "groupPostNotContains": [
+          "grinder"
+        ]
+      }
+    },
+    {
+      "name": "Staff marks the extinguisher check done",
+      "from": "staff",
+      "at": "2026-10-27T12:10:00-04:00",
+      "text": "2 done",
+      "noAi": true,
+      "expect": {
+        "tasks": [
+          {
+            "title": "extinguishers",
+            "status": "DONE"
+          }
+        ]
+      }
+    },
+    {
+      "name": "The 28th the grinder is due again, and the monthly task is not",
+      "at": "2026-10-28T11:01:00-04:00",
+      "tick": true,
+      "expect": {
+        "groupPostContains": [
+          "Deep clean the coffee grinder"
+        ],
+        "groupPostNotContains": [
+          "extinguishers"
+        ]
+      }
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-import { applyFixToPayload, formatEntriesReply, planUnderstanding } from '../plan';
+import { applyFixToPayload, describeEntryPayload, formatEntriesReply, planUnderstanding, scheduleGroupMessage } from '../plan';
 import { buildDefaultProfile } from '../profile';
 import type { Understanding } from '../schema';
 
@@ -70,6 +70,42 @@ describe('planUnderstanding: daily close', () => {
     expect(rockaway.lines).toContain('Gas $1,355');
     expect(rockaway.lines).toContain('Paid out: Lays $142');
     expect(rockaway.lines).toContain('Deposit $1,653');
+  });
+
+  it('reads a person-name till payout and keeps a deposit typo as written', () => {
+    const nov6: Understanding = {
+      kind: 'daily_close',
+      confidence: 0.9,
+      needsReview: [],
+      reports: [
+        {
+          storeHint: 'RockAway*',
+          reportDate: '2026-11-06',
+          cardSales: 242,
+          cashSales: 125,
+          fuelSales: 1206,
+          payouts: [{ label: 'Ahsan', amount: 21 }],
+          reportedDeposit: 1566,
+        },
+        {
+          storeHint: 'Danville*',
+          reportDate: '2026-11-06',
+          cardSales: 0,
+          cashSales: 0,
+          fuelSales: 661,
+          payouts: [{ label: 'Umar', amount: 220 }],
+          reportedDeposit: 6611,
+        },
+      ],
+    };
+    const plan = planUnderstanding(nov6, { ...ctx, now: new Date('2026-11-06T22:00:00-05:00') });
+    expect(plan.entries.map((e) => e.storeId)).toEqual(['S001', 'S002']);
+    expect(plan.entries[0].lines).toContain('Paid out: Ahsan $21');
+    expect(plan.entries[0].lines).toContain('Deposit $1,566');
+    expect(plan.entries[0].lines.join('\n')).toContain('⚠️ Deposit does not match');
+    expect(plan.entries[1].lines).toContain('Paid out: Umar $220');
+    expect(plan.entries[1].lines).toContain('Deposit $6,611');
+    expect(plan.entries.map((e) => e.lines.join('\n')).join('\n')).not.toMatch(/salary|wage|hourly|hours/i);
   });
 
   it('keeps the sender store and warns when the store name matches nothing', () => {
@@ -156,6 +192,52 @@ describe('planUnderstanding: other kinds', () => {
     expect(entry.actionType).toBe('INVOICE_EXPENSE');
     expect(entry.payload).toMatchObject({ vendor: 'Empire Snacks LLC', amount: 136.8 });
     expect(entry.lines.join('\n')).toContain('⚠️ Line items do not add up to the invoice total.');
+    expect(entry.lines.join('\n')).not.toContain("I'll remind");
+  });
+
+  it('offers a 3-days-before reminder on an unpaid invoice with a due date', () => {
+    const plan = planUnderstanding(
+      {
+        kind: 'invoice',
+        confidence: 0.9,
+        needsReview: [],
+        invoice: {
+          vendorName: 'Pepsi',
+          invoiceNumber: '88',
+          invoiceDate: '2026-10-12',
+          dueDate: '2026-10-28',
+          lineItems: [],
+          total: 850,
+          paymentStatus: 'unpaid',
+        },
+      },
+      ctx
+    );
+    const text = plan.entries[0].lines.join('\n');
+    expect(text).toContain('due Wed, Oct 28');
+    expect(text).toContain("I'll remind 3 days before, on Sun, Oct 25");
+    expect(plan.entries[0].payload).toMatchObject({ due_date: '2026-10-28' });
+  });
+
+  it('reminds today when the due date is fewer than 3 days away', () => {
+    const plan = planUnderstanding(
+      {
+        kind: 'invoice',
+        confidence: 0.9,
+        needsReview: [],
+        invoice: {
+          vendorName: 'Pepsi',
+          invoiceNumber: null,
+          invoiceDate: '2026-10-12',
+          dueDate: '2026-10-13',
+          lineItems: [],
+          total: 850,
+          paymentStatus: 'unknown',
+        },
+      },
+      ctx
+    );
+    expect(plan.entries[0].lines.join('\n')).toContain("I'll remind today");
   });
 
   it('stores a deposit slip as a hidden UNKNOWN entry and never includes a balance', () => {
@@ -313,6 +395,31 @@ describe('applyFixToPayload', () => {
     }
   });
 
+  it('fixes an invoice due date', () => {
+    const [invoiceEntry] = planUnderstanding(
+      {
+        kind: 'invoice',
+        confidence: 0.9,
+        needsReview: [],
+        invoice: {
+          vendorName: 'Pepsi',
+          invoiceNumber: null,
+          invoiceDate: '2026-10-12',
+          lineItems: [],
+          total: 850,
+          paymentStatus: 'unpaid',
+        },
+      },
+      ctx
+    ).entries;
+    const result = applyFixToPayload(invoiceEntry.payload, 'due', '10/28', NOW);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.payload.due_date).toBe(`${new Date().getUTCFullYear()}-10-28`);
+      expect((result.payload.invoice as { dueDate: string }).dueDate).toBe(`${new Date().getUTCFullYear()}-10-28`);
+    }
+  });
+
   it('does not touch legacy entries', () => {
     expect(applyFixToPayload({ cash: 1 }, 'cash', '2').ok).toBe(false);
   });
@@ -380,5 +487,194 @@ describe('deposit rule suggestion (learn by asking once)', () => {
 
     const broken = applyFixToPayload(entry.payload, 'gas', '1400', NOW);
     expect(broken.ok && broken.payload.suggested_deposit_rule).toBeNull();
+  });
+});
+
+describe('planUnderstanding: work schedule', () => {
+  const sheet = (employees: unknown[], extra: Record<string, unknown> = {}): Understanding =>
+    ({
+      kind: 'work_schedule',
+      confidence: 0.9,
+      needsReview: [],
+      schedule: { storeHint: 'Rockaway', weekStart: '2026-10-26', employees, ...extra },
+    }) as unknown as Understanding;
+
+  const day = (d: string, start: string | null, end: string | null) => ({ date: null, day: d, start, end, breakMinutes: null });
+  const maria = { name: 'Maria', statedTotalHours: null, adjustedHours: null, shifts: [day('Mon', '09:00', '17:00'), day('Tue', '09:00', '17:00')] };
+  const mariana = { name: 'Mariana', statedTotalHours: null, adjustedHours: null, shifts: [day('Wed', '10:00', '14:00')] };
+  const sam = { name: 'Sam', statedTotalHours: null, adjustedHours: null, shifts: [day('Thu', '14:00', '22:00')] };
+  const manager = { ...ctx, canManageSchedules: true };
+
+  it('is saved as one entry with hours per employee, under UNKNOWN (no database change)', () => {
+    const plan = planUnderstanding(sheet([maria, sam]), manager);
+    expect(plan.entries).toHaveLength(1);
+    expect(plan.entries[0]).toMatchObject({ kind: 'work_schedule', actionType: 'UNKNOWN', storeId: 'S001' });
+    expect(plan.entries[0].payload).toMatchObject({
+      _kind: 'work_schedule',
+      week_start: '2026-10-26',
+      total_hours: 24,
+      employees: [
+        { name: 'Maria', hours: 16 },
+        { name: 'Sam', hours: 8 },
+      ],
+    });
+    expect(plan.entries[0].lines).toEqual(['📅 Rockaway · week of Mon, Oct 26', 'Maria 16h', 'Sam 8h', 'Total 24h']);
+  });
+
+  it('only lets owners and managers post a schedule', () => {
+    const plan = planUnderstanding(sheet([maria]), ctx);
+    expect(plan.entries).toEqual([]);
+    expect(plan.notice).toContain('Only the owner or a manager');
+  });
+
+  it('saves nothing when no shift can be read', () => {
+    const plan = planUnderstanding(sheet([{ ...maria, shifts: [day('Mon', null, null)] }]), manager);
+    expect(plan.entries).toEqual([]);
+    expect(plan.notice).toContain("couldn't read any shift times");
+  });
+
+  it('never keeps pay, even if the model returns it', () => {
+    const greedy = sheet([{ ...maria, hourlyRate: 18.5, wage: 1200, shifts: [{ ...day('Mon', '09:00', '17:00'), pay: 148 }] }], { totalPayroll: 5000 });
+    const [entry] = planUnderstanding(greedy, manager).entries;
+    const everything = JSON.stringify(entry.payload) + entry.lines.join(' ') + scheduleGroupMessage(entry.payload, 'Rockaway');
+    expect(everything).not.toMatch(/hourlyRate|wage|payroll|\$|18\.5|1200|5000|148/);
+  });
+
+  it('warns when the store name does not match, like other entries', () => {
+    const plan = planUnderstanding(sheet([maria], { storeHint: 'Nowhere Mart' }), { ...manager, multiStoreSender: true });
+    expect(plan.entries[0].checks.map((c) => c.id)).toContain('store_unmatched');
+    expect(plan.entries[0].lines.join('\n')).toContain('Nowhere Mart');
+  });
+
+  it('asks for OK to post and explains FIX <name> <hours>', () => {
+    const reply = formatEntriesReply(planUnderstanding(sheet([maria]), manager).entries);
+    expect(reply).toContain('Reply OK to save and post the hours');
+    expect(reply).toContain('FIX <name> <hours>');
+  });
+
+  describe('FIX <name> <hours>', () => {
+    const entry = () => planUnderstanding(sheet([maria, mariana, sam]), manager).entries[0];
+
+    it('adjusts one person and re-adds the total', () => {
+      const fixed = applyFixToPayload(entry().payload, 'sam', '6');
+      expect(fixed.ok && fixed.payload).toMatchObject({ total_hours: 16 + 4 + 6 });
+      expect(fixed.ok && (fixed.payload.employees as Array<{ name: string; hours: number; adjusted: boolean }>)[2]).toMatchObject({ name: 'Sam', hours: 6, adjusted: true });
+    });
+
+    it('accepts "30h" and decimals', () => {
+      expect(applyFixToPayload(entry().payload, 'sam', '7.5h').ok).toBe(true);
+    });
+
+    it('matches a unique name start but refuses an ambiguous one', () => {
+      expect(applyFixToPayload(entry().payload, 'sa', '6').ok).toBe(true);
+      const ambiguous = applyFixToPayload(entry().payload, 'maria', '6'); // exact "Maria" wins over "Mariana"
+      expect(ambiguous.ok).toBe(true);
+      const tooShort = applyFixToPayload(entry().payload, 'mar', '6');
+      expect(tooShort).toEqual({ ok: false, message: '"mar" matches Maria and Mariana. Type more of the name.' });
+    });
+
+    it('handles two-word names', () => {
+      const two = planUnderstanding(sheet([{ ...maria, name: 'Mary Ann' }, sam]), manager).entries[0];
+      const fixed = applyFixToPayload(two.payload, 'mary', 'ann 20');
+      expect(fixed.ok && fixed.payload.total_hours).toBe(28);
+    });
+
+    it('explains mistakes', () => {
+      expect(applyFixToPayload(entry().payload, 'sam', 'lots')).toMatchObject({ ok: false, message: expect.stringContaining('Usage: FIX <name> <hours>') });
+      expect(applyFixToPayload(entry().payload, 'zed', '6')).toMatchObject({ ok: false, message: expect.stringContaining('Names: Maria, Mariana, Sam') });
+      expect(applyFixToPayload(entry().payload, 'sam', '500')).toMatchObject({ ok: false });
+    });
+
+    it('shows the corrected schedule and keeps it in the group message', () => {
+      const fixed = applyFixToPayload(entry().payload, 'sam', '6');
+      if (!fixed.ok) throw new Error('fix failed');
+      expect(describeEntryPayload(fixed.payload, 'Rockaway')).toContain('Sam 6h (adjusted)');
+      expect(scheduleGroupMessage(fixed.payload, 'Rockaway')).toContain('Sam 6h (adjusted)');
+    });
+  });
+
+  it('builds a group message of hours only', () => {
+    const [e] = planUnderstanding(sheet([maria, sam]), manager).entries;
+    expect(scheduleGroupMessage(e.payload, 'Rockaway')).toBe(
+      ['📅 Rockaway · hours for week of Mon, Oct 26', 'Maria 16h', 'Sam 8h', 'Total 24h', '', 'Hours come from the posted schedule.'].join('\n')
+    );
+    expect(scheduleGroupMessage({ _kind: 'daily_close' }, 'Rockaway')).toBeNull();
+  });
+});
+
+describe('planUnderstanding: order list', () => {
+  const catalog = [
+    { name: 'HLA', category: 'cigarettes' as const },
+    { name: 'ABC', category: 'drinks' as const },
+    { name: 'RPS', category: 'auto' as const },
+  ];
+  const withVendors = {
+    ...ctx,
+    profiles: [{ ...profiles[0], vendors: catalog }, profiles[1]],
+  };
+  const cigs: Understanding = {
+    kind: 'order',
+    confidence: 0.9,
+    needsReview: [],
+    order: {
+      storeHint: 'Rockaway',
+      vendorHint: 'HLA',
+      items: [
+        { description: 'Marlboro Red King', quantity: 10, unit: 'carton' },
+        { description: 'Newport', quantity: 5, unit: 'carton' },
+      ],
+    },
+  };
+
+  it('returns the list and matched vendor for the owner to confirm', () => {
+    const [entry] = planUnderstanding(cigs, withVendors).entries;
+    expect(entry.actionType).toBe('ORDER_REQUEST');
+    expect(entry.payload).toMatchObject({
+      _kind: 'order',
+      vendor: 'HLA',
+      vendor_category: 'cigarettes',
+      vendor_groups: [{
+        vendor: 'HLA',
+        items: [
+          { name: 'Marlboro Red King', qty: 10, unit: 'carton' },
+          { name: 'Newport', qty: 5, unit: 'carton' },
+        ],
+      }],
+    });
+    expect(entry.lines[0]).toBe('📦 Order · Rockaway');
+    expect(entry.lines.join('\n')).toContain('Vendor: HLA (Cigarettes / tobacco)');
+    expect(entry.lines).toContain('• 10 carton Marlboro Red King');
+    expect(entry.lines.join('\n')).toContain('Please confirm this list so we can send this order to HLA.');
+    expect(formatEntriesReply([entry])).toContain('FIX vendor HLA');
+  });
+
+  it('guesses ABC from drink products when the sheet names no vendor', () => {
+    const [entry] = planUnderstanding(
+      {
+        kind: 'order',
+        confidence: 0.8,
+        needsReview: [],
+        order: { storeHint: null, vendorHint: null, items: [{ description: 'Pepsi 12oz', quantity: 12, unit: 'case' }] },
+      },
+      withVendors
+    ).entries;
+    expect(entry.payload.vendor).toBe('ABC');
+    expect(entry.lines.join('\n')).toContain('Please confirm this list so we can send this order to ABC.');
+  });
+
+  it('asks FIX vendor when the store has no catalog yet', () => {
+    const [entry] = planUnderstanding(cigs, ctx).entries;
+    expect(entry.checks.map((c) => c.id)).toContain('vendor_unmatched');
+    expect(entry.lines.join('\n')).toContain('add HLA / ABC / RPS');
+  });
+
+  it('lets FIX vendor switch to another catalog name', () => {
+    const [entry] = planUnderstanding(cigs, withVendors).entries;
+    const fixed = applyFixToPayload(entry.payload, 'vendor', 'ABC');
+    expect(fixed.ok && fixed.payload.vendor).toBe('ABC');
+    expect(fixed.ok && fixed.payload.vendor_category).toBe('drinks');
+    const after = describeEntryPayload(fixed.ok ? fixed.payload : {}, 'Rockaway')?.join('\n') ?? '';
+    expect(after).toContain('ABC (Drinks)');
+    expect(after).toContain('Please confirm this list so we can send this order to ABC.');
   });
 });

@@ -1,0 +1,74 @@
+{
+  "title": "One message covers two stores (the real pattern from the owner)",
+  "why": "Owners with several stores send everything in one text. Each store gets its own entry, saved under the right store.",
+  "today": "2026-10-13T12:00:00-04:00",
+  "steps": [
+    {
+      "name": "Owner sends both stores",
+      "text": "10/12/2026\nRockAway*\nStore credit: $ 334\nStore cash: $ 106\nGas: $ 1355\nLays: $ 142\nTotal deposit Rockaway: $ 1653\n\nDanville*\nStore credit: $ 23\nStore cash.: $ 3\nGas: $ 872\nTotal deposit Denville: $ 875",
+      "expect": {
+        "replyCount": 1,
+        "replyContains": [
+          "Rockaway",
+          "Denville",
+          "Reply OK to save all"
+        ],
+        "status": {
+          "PENDING": 2
+        },
+        "entries": [
+          {
+            "store": "Rockaway",
+            "cash": 106,
+            "card": 334,
+            "fuel": 1355,
+            "deposit": 1653,
+            "payouts": [
+              {
+                "label": "Lays",
+                "amount": 142
+              }
+            ]
+          },
+          {
+            "store": "Denville",
+            "cash": 3,
+            "card": 23,
+            "fuel": 872,
+            "deposit": 875,
+            "payouts": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "Owner replies OK",
+      "text": "OK",
+      "expect": {
+        "status": {
+          "PENDING": 0,
+          "CONFIRMED": 2
+        },
+        "dashboard": {
+          "Rockaway": {
+            "sales": {
+              "count": 1,
+              "first": {
+                "cash": 106
+              }
+            }
+          },
+          "Denville": {
+            "sales": {
+              "count": 1,
+              "first": {
+                "cash": 3,
+                "card": 23
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

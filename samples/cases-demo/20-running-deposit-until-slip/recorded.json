@@ -1,0 +1,69 @@
+{
+  "_note": "Hand-written stand-in for what the AI answers. Re-record from the real model with: npm run e2e -- --live --record",
+  "steps": {
+    "0": {
+      "reading": {
+        "kind": "daily_close",
+        "reports": [
+          {
+            "storeHint": "Rockaway",
+            "reportDate": "2026-10-12",
+            "cardSales": 334,
+            "cashSales": 106,
+            "storeSalesTotal": null,
+            "fuelSales": 1355,
+            "fuelGallons": null,
+            "fuelDiscounts": null,
+            "payouts": [{ "label": "Lays", "amount": 142 }],
+            "reportedDeposit": 1653,
+            "reportedDayTotal": null,
+            "periodClosed": null
+          }
+        ],
+        "confidence": 0.9,
+        "needsReview": []
+      }
+    },
+    "3": {
+      "reading": {
+        "kind": "daily_close",
+        "reports": [
+          {
+            "storeHint": "Rockaway",
+            "reportDate": "2026-10-13",
+            "cardSales": 334,
+            "cashSales": 106,
+            "storeSalesTotal": null,
+            "fuelSales": 1355,
+            "fuelGallons": null,
+            "fuelDiscounts": null,
+            "payouts": [{ "label": "Lays", "amount": 142 }],
+            "reportedDeposit": 1653,
+            "reportedDayTotal": null,
+            "periodClosed": null
+          }
+        ],
+        "confidence": 0.9,
+        "needsReview": []
+      }
+    },
+    "6": {
+      "reading": {
+        "kind": "deposit_receipt",
+        "receipts": [
+          {
+            "bank": "TD",
+            "storeHint": "Rockaway",
+            "depositDate": "2026-10-14",
+            "postsOn": null,
+            "accountLast4": null,
+            "totalDeposit": 3306,
+            "cashCounts": []
+          }
+        ],
+        "confidence": 0.9,
+        "needsReview": []
+      }
+    }
+  }
+}

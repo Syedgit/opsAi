@@ -16,8 +16,8 @@ export function classifyMessage(messageText: string): ClassificationResult {
     return { type: ClassificationType.UNKNOWN, confidence: 0 };
   }
 
-  const orderPatterns = [/\b(need|order|please get|out of|bring|restock)\b/i];
-  if (orderPatterns.some((p) => p.test(text))) {
+  const orderPatterns = [/\b(need|order|please get|bring|restock)\b/i, /\bout of\b(?!\s+order)/i];
+  if (!/\bout of order\b/i.test(text) && orderPatterns.some((p) => p.test(text))) {
     return { type: ClassificationType.ORDER_REQUEST, confidence: 0.8 };
   }
 

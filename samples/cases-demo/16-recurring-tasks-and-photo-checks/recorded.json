@@ -1,0 +1,23 @@
+{
+  "_note": "Hand-written stand-in for what the AI answers about the proof photo. Re-record from the real model with: npm run e2e -- --live --record",
+  "steps": {
+    "1": {
+      "reading": {
+        "verdict": "fail",
+        "reason": "The cream dispenser has no label."
+      }
+    },
+    "2": {
+      "reading": {
+        "verdict": "unclear",
+        "reason": "the photo is too dark"
+      }
+    },
+    "3": {
+      "reading": {
+        "verdict": "pass",
+        "reason": "Both dispensers show dated labels."
+      }
+    }
+  }
+}

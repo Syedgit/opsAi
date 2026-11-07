@@ -1,0 +1,57 @@
+{
+  "title": "Thanks, thumbs-ups, greetings and small talk never use the AI",
+  "why": "Cost guardrail: only messages that could hold store data are sent to the AI. No recorded AI answer exists for this case on purpose; if the app tried to use the AI the case would be skipped, not passed.",
+  "today": "2026-10-13T12:00:00-04:00",
+  "steps": [
+    {
+      "name": "A thank-you",
+      "text": "thanks",
+      "expect": {
+        "noReply": true,
+        "status": {
+          "PENDING": 0
+        }
+      },
+      "noAi": true
+    },
+    {
+      "name": "A thumbs-up",
+      "text": "👍",
+      "expect": {
+        "noReply": true
+      },
+      "noAi": true
+    },
+    {
+      "name": "A greeting",
+      "text": "good morning",
+      "expect": {
+        "replyCount": 1,
+        "replyContains": [
+          "Send the day's numbers"
+        ]
+      },
+      "noAi": true
+    },
+    {
+      "name": "Small talk with no numbers",
+      "text": "running late today, see you soon",
+      "expect": {
+        "replyCount": 1,
+        "replyContains": [
+          "Nothing to save"
+        ],
+        "status": {
+          "PENDING": 0
+        },
+        "dashboard": {
+          "Rockaway": {
+            "sales": 0,
+            "invoices": 0
+          }
+        }
+      },
+      "noAi": true
+    }
+  ]
+}

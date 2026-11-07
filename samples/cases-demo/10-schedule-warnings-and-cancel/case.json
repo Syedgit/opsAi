@@ -1,0 +1,104 @@
+{
+  "title": "Odd schedules are flagged before anything is saved",
+  "why": "Over 40 hours, a total that disagrees with the shifts, and an unreadable shift are all raised as warnings. Cancelling saves and posts nothing. A store with no group linked just gets the normal reply.",
+  "today": "2026-10-26T09:00:00-04:00",
+  "steps": [
+    {
+      "name": "Owner sends a messy schedule",
+      "text": "Rockaway week 10/26: Ali Mon-Sat 7a-3p. Maria Mon 9a-5p (total 40). Sam Tue 9 to ?",
+      "expect": {
+        "replyContains": [
+          "Ali 48h",
+          "Maria 8h",
+          "Over 40h this week: Ali 48h",
+          "sheet says 40h",
+          "Sam Tue",
+          "Please check: Sam Tue AM/PM"
+        ],
+        "entries": [
+          {
+            "kind": "work_schedule",
+            "store": "Rockaway",
+            "employees": [
+              {
+                "name": "Ali",
+                "hours": 48
+              },
+              {
+                "name": "Maria",
+                "hours": 8
+              },
+              {
+                "name": "Sam",
+                "hours": 0
+              }
+            ],
+            "totalHours": 56,
+            "warnings": [
+              "hours_over_limit",
+              "stated_hours_maria",
+              "shift_unclear"
+            ],
+            "clean": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "Owner cancels",
+      "text": "CANCEL",
+      "expect": {
+        "status": {
+          "PENDING": 0,
+          "CANCELLED": 1
+        },
+        "groupPosts": 0,
+        "dashboard": {
+          "Rockaway": {
+            "schedules": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "Owner fixes the sheet and sends again; no group is linked",
+      "text": "Rockaway week 10/26: Maria Mon 9a-5p",
+      "expect": {
+        "replyContains": [
+          "Maria 8h",
+          "Total 8h"
+        ],
+        "entries": [
+          {
+            "kind": "work_schedule",
+            "employees": [
+              {
+                "name": "Maria",
+                "hours": 8
+              }
+            ],
+            "clean": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "Owner confirms",
+      "text": "OK",
+      "expect": {
+        "replyContains": [
+          "Saved"
+        ],
+        "replyNotContains": [
+          "Posted the hours"
+        ],
+        "groupPosts": 0,
+        "dashboard": {
+          "Rockaway": {
+            "schedules": 1
+          }
+        }
+      }
+    }
+  ]
+}

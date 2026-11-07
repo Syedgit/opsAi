@@ -1,0 +1,21 @@
+{
+  "_note": "Hand-written stand-in for what the AI answers. Re-record from the real model with: npm run e2e -- --live --record",
+  "steps": {
+    "1": {
+      "reading": {
+        "kind": "unknown",
+        "reason": "A delivery note, not a report of sales",
+        "confidence": 0.2,
+        "needsReview": []
+      }
+    },
+    "5": {
+      "reading": {
+        "kind": "unknown",
+        "reason": "A photo with no clear store figures",
+        "confidence": 0.2,
+        "needsReview": []
+      }
+    }
+  }
+}

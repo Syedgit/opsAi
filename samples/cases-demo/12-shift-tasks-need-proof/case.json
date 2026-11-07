@@ -1,0 +1,221 @@
+{
+  "title": "Morning tasks are announced in the group and stay open until the employee sends proof",
+  "why": "The scheduler posts what is due, reminds, and never closes a task without the proof it asks for (photo, text or just done). A photo with no caption goes to the one task that wants a photo. Nothing here uses the AI.",
+  "today": "2026-10-26T09:00:00-04:00",
+  "linkedGroups": [
+    "Rockaway"
+  ],
+  "taskTemplates": [
+    {
+      "store": "Rockaway",
+      "title": "Check the coffee station",
+      "shift": "Morning",
+      "category": "food_safety",
+      "startTime": "10:00",
+      "evidence": "photo",
+      "points": 2
+    },
+    {
+      "store": "Rockaway",
+      "title": "Record fridge temperature",
+      "shift": "Morning",
+      "category": "food_safety",
+      "startTime": "10:00",
+      "evidence": "text",
+      "points": 2
+    },
+    {
+      "store": "Rockaway",
+      "title": "Make fresh food",
+      "shift": "Morning",
+      "category": "food_safety",
+      "startTime": "11:00",
+      "evidence": "none",
+      "points": 1
+    }
+  ],
+  "steps": [
+    {
+      "name": "10:00 the scheduler wakes up",
+      "at": "2026-10-26T10:00:30-04:00",
+      "tick": true,
+      "expect": {
+        "groupPosts": 1,
+        "groupPostContains": [
+          "tasks due now",
+          "1. Check the coffee station",
+          "send a photo",
+          "2. Record fridge temperature",
+          "reply with text"
+        ],
+        "taskCounts": {
+          "OPEN": 2,
+          "DONE": 0
+        }
+      }
+    },
+    {
+      "name": "A second wake-up changes nothing",
+      "at": "2026-10-26T10:01:30-04:00",
+      "tick": true,
+      "expect": {
+        "groupPosts": 0,
+        "replyCount": 0,
+        "taskCounts": {
+          "OPEN": 2
+        }
+      }
+    },
+    {
+      "name": "20 minutes later nobody answered: reminder",
+      "at": "2026-10-26T10:20:00-04:00",
+      "tick": true,
+      "expect": {
+        "groupPosts": 1,
+        "groupPostContains": [
+          "still open",
+          "Check the coffee station",
+          "Record fridge temperature"
+        ],
+        "taskCounts": {
+          "OPEN": 2
+        }
+      }
+    },
+    {
+      "name": "Staff answers task 2 with no reading: not accepted",
+      "from": "staff",
+      "at": "2026-10-26T10:21:00-04:00",
+      "text": "2",
+      "noAi": true,
+      "expect": {
+        "replyCount": 1,
+        "replyContains": [
+          "Task 2",
+          "needs a short answer"
+        ],
+        "tasks": [
+          {
+            "title": "fridge",
+            "status": "OPEN"
+          }
+        ],
+        "taskCounts": {
+          "OPEN": 2,
+          "DONE": 0
+        }
+      }
+    },
+    {
+      "name": "Staff answers task 2 with the temperature",
+      "from": "staff",
+      "at": "2026-10-26T10:22:00-04:00",
+      "text": "2 38F",
+      "noAi": true,
+      "expect": {
+        "replyCount": 1,
+        "replyContains": [
+          "Task 2",
+          "done at 10:22am",
+          "1 more open"
+        ],
+        "tasks": [
+          {
+            "title": "fridge",
+            "status": "DONE",
+            "code": 2,
+            "evidenceType": "text",
+            "evidenceText": "38F"
+          }
+        ],
+        "taskCounts": {
+          "OPEN": 1,
+          "DONE": 1
+        }
+      }
+    },
+    {
+      "name": "Staff sends a photo with no caption: it can only be the coffee station",
+      "from": "staff",
+      "at": "2026-10-26T10:24:00-04:00",
+      "image": "station.png",
+      "noAi": true,
+      "expect": {
+        "replyCount": 1,
+        "replyContains": [
+          "Task 1",
+          "done at 10:24am",
+          "All tasks done"
+        ],
+        "tasks": [
+          {
+            "title": "coffee",
+            "status": "DONE",
+            "code": 1,
+            "evidenceType": "photo"
+          }
+        ],
+        "taskCounts": {
+          "OPEN": 0,
+          "DONE": 2
+        }
+      }
+    },
+    {
+      "name": "11:00 the next task is announced and reuses the free number 1",
+      "at": "2026-10-26T11:00:10-04:00",
+      "tick": true,
+      "expect": {
+        "groupPosts": 1,
+        "groupPostContains": [
+          "1. Make fresh food",
+          "reply done"
+        ],
+        "tasks": [
+          {
+            "title": "fresh food",
+            "status": "OPEN",
+            "code": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "Staff says done: the only open task closes",
+      "from": "staff",
+      "at": "2026-10-26T11:12:00-04:00",
+      "text": "done",
+      "noAi": true,
+      "expect": {
+        "replyContains": [
+          "Task 1",
+          "Make fresh food",
+          "done"
+        ],
+        "tasks": [
+          {
+            "title": "fresh food",
+            "status": "DONE"
+          }
+        ],
+        "taskCounts": {
+          "OPEN": 0,
+          "DONE": 3
+        }
+      }
+    },
+    {
+      "name": "Chatter during the shift is not a task answer",
+      "from": "staff",
+      "at": "2026-10-26T11:15:00-04:00",
+      "text": "thanks",
+      "noAi": true,
+      "expect": {
+        "taskCounts": {
+          "OPEN": 0,
+          "DONE": 3
+        }
+      }
+    }
+  ]
+}

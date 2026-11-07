@@ -1,0 +1,74 @@
+{
+  "title": "Strangers, forged webhooks, and duplicate deliveries",
+  "why": "Production safety: unknown numbers get one reply a day, forged requests are refused, and Meta retries never create double entries.",
+  "today": "2026-10-13T12:00:00-04:00",
+  "steps": [
+    {
+      "name": "A stranger texts the number",
+      "from": "stranger",
+      "text": "hello",
+      "expect": {
+        "replyCount": 1,
+        "replyContains": [
+          "Store not linked"
+        ],
+        "status": {
+          "PENDING": 0
+        }
+      }
+    },
+    {
+      "name": "The stranger texts again the same day",
+      "from": "stranger",
+      "text": "anyone there?",
+      "expect": {
+        "noReply": true
+      }
+    },
+    {
+      "name": "A forged request (wrong signature) is refused",
+      "signature": "bad",
+      "text": "Rockaway cash 1 card 1",
+      "expect": {
+        "httpStatus": 401,
+        "noReply": true,
+        "status": {
+          "PENDING": 0,
+          "CONFIRMED": 0
+        }
+      }
+    },
+    {
+      "name": "Meta delivers the same report twice",
+      "repeat": 2,
+      "text": "Rockaway 10/12 cash 106 card 334 gas 1355 Lays 142 deposit 1653",
+      "expect": {
+        "replyCount": 1,
+        "entries": [
+          {
+            "store": "Rockaway",
+            "cash": 106
+          }
+        ],
+        "status": {
+          "PENDING": 1
+        }
+      }
+    },
+    {
+      "name": "Owner replies OK",
+      "text": "OK",
+      "expect": {
+        "status": {
+          "PENDING": 0,
+          "CONFIRMED": 1
+        },
+        "dashboard": {
+          "Rockaway": {
+            "sales": 1
+          }
+        }
+      }
+    }
+  ]
+}

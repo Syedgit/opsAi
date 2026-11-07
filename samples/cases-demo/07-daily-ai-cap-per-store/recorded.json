@@ -1,0 +1,48 @@
+{
+  "_note": "Hand-written stand-in for what the AI answers. Re-record from the real model with: npm run e2e -- --live --record",
+  "steps": {
+    "0": {
+      "reading": {
+        "kind": "equipment_issue",
+        "confidence": 0.85,
+        "needsReview": [],
+        "issue": {
+          "equipment": "Ice machine",
+          "category": "unknown",
+          "description": "The ice machine is broken",
+          "screenText": null,
+          "severity": "normal",
+          "questions": []
+        }
+      }
+    },
+    "1": {
+      "reading": {
+        "kind": "daily_close",
+        "reports": [
+          {
+            "storeHint": "Rockaway",
+            "reportDate": "2026-10-12",
+            "cardSales": 334,
+            "cashSales": 106,
+            "storeSalesTotal": null,
+            "fuelSales": 1355,
+            "fuelGallons": null,
+            "fuelDiscounts": null,
+            "payouts": [
+              {
+                "label": "Lays",
+                "amount": 142
+              }
+            ],
+            "reportedDeposit": 1653,
+            "reportedDayTotal": null,
+            "periodClosed": null
+          }
+        ],
+        "confidence": 0.9,
+        "needsReview": []
+      }
+    }
+  }
+}

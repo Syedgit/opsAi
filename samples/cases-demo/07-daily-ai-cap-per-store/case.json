@@ -1,0 +1,56 @@
+{
+  "title": "A store that hits its daily AI limit is told once, and typed numbers still work",
+  "why": "Cost guardrail: a runaway phone cannot run up the AI bill. Limit set to 2 for this case.",
+  "today": "2026-10-13T12:00:00-04:00",
+  "env": {
+    "MAX_AI_MESSAGES_PER_STORE_PER_DAY": "2"
+  },
+  "steps": [
+    {
+      "name": "Equipment problem in words (no digits) still reaches the AI",
+      "text": "the ice machine is broken",
+      "expect": {
+        "replyContains": [
+          "Problem noted"
+        ],
+        "entries": []
+      }
+    },
+    {
+      "name": "Daily report (2nd smart reading)",
+      "text": "Rockaway 10/12 cash 106 card 334 gas 1355 Lays 142 deposit 1653",
+      "expect": {
+        "entries": [
+          {
+            "store": "Rockaway",
+            "cash": 106
+          }
+        ]
+      }
+    },
+    {
+      "name": "3rd message still needs a reading (gas/deposit), so the daily cap is told once",
+      "text": "Rockaway 10/13 cash 100 card 200 gas 50 deposit 250",
+      "expect": {
+        "replyContains": [
+          "smart-reading budget"
+        ]
+      },
+      "noAi": true
+    },
+    {
+      "name": "Labeled cash/card does not use the AI, so it still saves and is not told again",
+      "text": "Rockaway 10/13 cash 110 card 210",
+      "expect": {
+        "replyContains": [
+          "Store Sales",
+          "110"
+        ],
+        "replyNotContains": [
+          "smart-reading budget"
+        ]
+      },
+      "noAi": true
+    }
+  ]
+}

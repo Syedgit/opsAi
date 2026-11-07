@@ -3,30 +3,89 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { sign, verify } from 'jsonwebtoken';
 import { getJwtSecret } from '../../lib/apiAuth';
+import {
+  DUPLICATE_EMAIL_ERROR,
+  INVALID_LOGIN_ERROR,
+  NO_PASSWORD_ERROR,
+  authActionFromRequest,
+  parseLoginInput,
+  parseSignupInput,
+  readJsonBody,
+} from '../../lib/authCredentials';
+import { WA_LINK_ERROR, verifyWhatsAppLogin } from '../../lib/whatsappLogin';
 
 const prisma = new PrismaClient();
+
+type StoreRow = { store: { storeId: string; storeName: string }; role: string };
+
+function publicUser(
+  user: { id: string; email: string; name: string | null },
+  stores: StoreRow[] = [],
+) {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    stores: stores.map((us) => ({
+      storeId: us.store.storeId,
+      storeName: us.store.storeName,
+      role: us.role,
+    })),
+  };
+}
+
+function signToken(user: { id: string; email: string }): string {
+  return sign({ typ: 'session', userId: user.id, email: user.email }, getJwtSecret(), { expiresIn: '7d' });
+}
+
+function isDuplicateEmail(error: unknown): boolean {
+  return Boolean(error && typeof error === 'object' && 'code' in error && error.code === 'P2002');
+}
 
 /**
  * Unified auth endpoint
  * POST /api/auth/login - Login
- * POST /api/auth/signup - Signup
+ * POST /api/auth/signup - Signup (returns a session token, same as login)
  * GET /api/auth/me - Get current user
  */
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
-  const path = req.url?.split('?')[0] || '';
-  
-  // Login
-  if (path.endsWith('/login') && req.method === 'POST') {
-    try {
-      const { email, password } = req.body;
+  const action = authActionFromRequest(req);
 
-      if (!email || !password) {
-        res.status(400).json({ error: 'Email and password are required' });
+  if (action === 'login' && req.method === 'POST') {
+    try {
+      const body = readJsonBody(req.body);
+      if (typeof body.link === 'string' && body.link.trim()) {
+        const link = verifyWhatsAppLogin(body.link.trim());
+        if (!link) {
+          res.status(401).json({ error: WA_LINK_ERROR });
+          return;
+        }
+        const linked = await prisma.user.findUnique({
+          where: { id: link.userId },
+          include: { stores: { include: { store: true } } },
+        });
+        const member = linked?.stores.find((row) => row.store.storeId === link.storeId);
+        const canOpen = member?.role === 'OWNER' || member?.role === 'MANAGER';
+        if (!linked || !linked.isActive || linked.email !== link.email || !canOpen) {
+          res.status(401).json({ error: WA_LINK_ERROR });
+          return;
+        }
+        res.status(200).json({
+          success: true,
+          token: signToken(linked),
+          user: publicUser(linked, linked.stores),
+        });
+        return;
+      }
+
+      const parsed = parseLoginInput(body);
+      if (!parsed.ok) {
+        res.status(parsed.status).json({ error: parsed.error });
         return;
       }
 
       const user = await prisma.user.findUnique({
-        where: { email: email.toLowerCase() },
+        where: { email: parsed.email },
         include: {
           stores: {
             include: { store: true },
@@ -35,43 +94,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       });
 
       if (!user || !user.isActive) {
-        res.status(401).json({ error: 'Invalid email or password' });
+        res.status(401).json({ error: INVALID_LOGIN_ERROR });
         return;
       }
 
       if (!user.password) {
-        res.status(401).json({ 
-          error: 'This account uses Google Sign-In. Please sign in with Google.',
-          useOAuth: true 
-        });
+        res.status(401).json({ error: NO_PASSWORD_ERROR });
         return;
       }
 
-      const isValidPassword = await bcrypt.compare(password, user.password);
+      const isValidPassword = await bcrypt.compare(parsed.password, user.password);
       if (!isValidPassword) {
-        res.status(401).json({ error: 'Invalid email or password' });
+        res.status(401).json({ error: INVALID_LOGIN_ERROR });
         return;
       }
-
-      const token = sign(
-        { userId: user.id, email: user.email },
-        getJwtSecret(),
-        { expiresIn: '7d' }
-      );
 
       res.status(200).json({
         success: true,
-        token,
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          stores: user.stores.map((us) => ({
-            storeId: us.store.storeId,
-            storeName: us.store.storeName,
-            role: us.role,
-          })),
-        },
+        token: signToken(user),
+        user: publicUser(user, user.stores),
       });
     } catch (error: unknown) {
       console.error('Login error:', error);
@@ -80,59 +121,55 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
-  // Signup
-  if (path.endsWith('/signup') && req.method === 'POST') {
+  if (action === 'signup' && req.method === 'POST') {
     try {
-      const { email, password, name } = req.body;
-
-      if (!email || !password) {
-        res.status(400).json({ error: 'Email and password are required' });
-        return;
-      }
-
-      if (password.length < 8) {
-        res.status(400).json({ error: 'Password must be at least 8 characters' });
+      const parsed = parseSignupInput(readJsonBody(req.body));
+      if (!parsed.ok) {
+        res.status(parsed.status).json({ error: parsed.error });
         return;
       }
 
       const existingUser = await prisma.user.findUnique({
-        where: { email: email.toLowerCase() },
+        where: { email: parsed.email },
       });
 
       if (existingUser) {
-        res.status(409).json({ error: 'User with this email already exists' });
+        res.status(409).json({ error: DUPLICATE_EMAIL_ERROR });
         return;
       }
 
-      const hashedPassword = await bcrypt.hash(password, 10);
+      const hashedPassword = await bcrypt.hash(parsed.password, 10);
       const user = await prisma.user.create({
         data: {
-          email: email.toLowerCase(),
+          email: parsed.email,
           password: hashedPassword,
-          name: name || null,
+          name: parsed.name,
+          provider: 'email',
         },
         select: {
           id: true,
           email: true,
           name: true,
-          createdAt: true,
         },
       });
 
       res.status(201).json({
         success: true,
-        user,
-        message: 'User created successfully',
+        token: signToken(user),
+        user: publicUser(user),
       });
     } catch (error: unknown) {
+      if (isDuplicateEmail(error)) {
+        res.status(409).json({ error: DUPLICATE_EMAIL_ERROR });
+        return;
+      }
       console.error('Signup error:', error);
       res.status(500).json({ error: 'Failed to create user' });
     }
     return;
   }
 
-  // Me (get current user)
-  if (path.endsWith('/me') && req.method === 'GET') {
+  if (action === 'me' && req.method === 'GET') {
     try {
       const authHeader = req.headers.authorization;
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -141,11 +178,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       }
 
       const token = authHeader.substring(7);
-      let decoded: { userId: string; email: string };
-      
+      let decoded: { userId: string; email: string; typ?: string };
+
       try {
-        decoded = verify(token, getJwtSecret()) as { userId: string; email: string };
-      } catch (error) {
+        decoded = verify(token, getJwtSecret()) as { userId: string; email: string; typ?: string };
+      } catch {
+        res.status(401).json({ error: 'Invalid or expired token' });
+        return;
+      }
+      if (decoded.typ && decoded.typ !== 'session') {
         res.status(401).json({ error: 'Invalid or expired token' });
         return;
       }
@@ -166,16 +207,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
       res.status(200).json({
         success: true,
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          stores: user.stores.map((us) => ({
-            storeId: us.store.storeId,
-            storeName: us.store.storeName,
-            role: us.role,
-          })),
-        },
+        user: publicUser(user, user.stores),
       });
     } catch (error: unknown) {
       console.error('Me endpoint error:', error);

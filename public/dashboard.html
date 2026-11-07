@@ -425,6 +425,22 @@
             align-items: center;
             gap: 12px;
         }
+
+        .logout-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-light);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .logout-btn:hover {
+            border-color: var(--danger);
+            color: var(--danger);
+        }
         
         .user-avatar {
             width: 40px;
@@ -975,6 +991,10 @@
                     <span class="menu-item-icon">📦</span>
                     <span>Orders</span>
                 </a>
+                <a href="/tasks" class="menu-item" id="tasksMenuItem">
+                    <span class="menu-item-icon">✅</span>
+                    <span>Tasks &amp; alerts</span>
+                </a>
             </div>
             
             <div class="menu-section">
@@ -1020,6 +1040,7 @@
                     <div style="font-weight: 600; font-size: 14px;">User</div>
                     <div style="font-size: 12px; color: var(--text-light);">Admin</div>
                 </div>
+                <button type="button" class="logout-btn" id="logoutBtn">Log out</button>
             </div>
         </div>
 
@@ -1125,7 +1146,7 @@
 
                 <div class="whatsapp-setup-card" id="whatsappSetupCard">
                     <h3>WhatsApp ops group</h3>
-                    <p>One opsAi number for all stores. Create your own group, add our business number, and message from your registered phone to connect.</p>
+                    <p>One opsAi number for all stores. Add it to an existing store group, or to a new one. Then message from your registered phone to connect.</p>
                     <div id="whatsappProvisionStatus" class="whatsapp-status none">Checking…</div>
                     <div id="whatsappProvisionBody">
                         <p id="whatsappProvisionMessage">Loading group status…</p>
@@ -1139,6 +1160,8 @@
                     <button class="nav-tab" data-tab="fuel">Fuel Sales</button>
                     <button class="nav-tab" data-tab="paidouts">Paid Outs</button>
                     <button class="nav-tab" data-tab="orders">Orders</button>
+                    <button class="nav-tab" data-tab="schedules">Schedule</button>
+                    <a class="nav-tab" id="tasksLink" href="/tasks" style="text-decoration: none; display: inline-block;">Tasks &amp; alerts &rarr;</a>
                 </div>
                 
                 <div class="content-area" id="contentArea">
@@ -1214,7 +1237,7 @@
                 <h1 class="page-title">Settings</h1>
                 <p class="page-subtitle">Configure your store settings</p>
                 <div class="content-area">
-                    <p>Settings page coming soon...</p>
+                    <p>Reminders, people (WhatsApp numbers, staff, a partner owner), and how this store sends reports are on <a href="/tasks">Tasks &amp; alerts → Store admin</a>. You can change the WhatsApp number you entered at signup there.</p>
                 </div>
             </div>
         </div>
@@ -1223,11 +1246,13 @@
     <script>
         
         // Authentication
-        // Check for token in URL (from OAuth callback)
+        // Check for token in URL (from OAuth callback) and store from a WhatsApp tap-link.
         const urlParams = new URLSearchParams(window.location.search);
         const tokenFromUrl = urlParams.get('token');
-        if (tokenFromUrl) {
-            localStorage.setItem('authToken', tokenFromUrl);
+        const storeFromUrl = urlParams.get('storeId');
+        if (storeFromUrl) sessionStorage.setItem('selectStoreId', storeFromUrl);
+        if (tokenFromUrl) localStorage.setItem('authToken', tokenFromUrl);
+        if (tokenFromUrl || storeFromUrl) {
             window.history.replaceState({}, document.title, '/dashboard');
         }
         
@@ -1434,10 +1459,10 @@
                 if (stepsEl) {
                     stepsEl.style.display = 'block';
                     stepsEl.innerHTML = [
-                        '<li>Create a WhatsApp group and add the opsAi business number.</li>',
+                        '<li>Open an existing WhatsApp group, or create one, and add the opsAi business number.</li>',
                         '<li>From your registered owner phone, send any message in that group.</li>',
                         '<li>opsAi will confirm when the group is linked.</li>',
-                        '<li>Invite staff to the group — they message from phones you register later.</li>',
+                        '<li>Staff already in the group can message once you add their WhatsApp on Store admin.</li>',
                     ].join('');
                 }
             } catch (e) {
@@ -1505,6 +1530,10 @@
                     }
                 }).catch(() => null);
                 
+                if (response && response.status === 403 && tab === 'schedules') {
+                    contentArea.innerHTML = '<div class="empty-state"><div class="empty-state-icon">\ud83d\udd12</div><h3>Schedules are for owners and managers</h3><p>Ask the store owner if you need to see staff hours.</p></div>';
+                    return;
+                }
                 if (!response || !response.ok) {
                     throw new Error(`API returned ${response?.status || 'no response'}`);
                 }
@@ -1521,15 +1550,16 @@
                     contentArea.innerHTML = `
                         <div class="empty-state">
                             <div class="empty-state-icon">📭</div>
-                            <h3>No ${tab} data found</h3>
-                            <p>Data will appear here once messages are processed via WhatsApp</p>
+                            <h3>No ${tab === 'schedules' ? 'schedules' : tab + ' data'} found</h3>
+                            <p>${tab === 'schedules' ? 'Send the weekly schedule sheet in WhatsApp and reply OK. Each person\'s hours will show here.' : 'Data will appear here once messages are processed via WhatsApp'}</p>
                         </div>
                     `;
                     return;
                 }
 
                 try {
-                    renderTable(contentArea, items, tab);
+                    if (tab === 'schedules') renderSchedules(contentArea, items);
+                    else renderTable(contentArea, items, tab);
                     console.log(`Successfully rendered ${items.length} ${tab} items`);
                 } catch (error) {
                     console.error('Error rendering table:', error);
@@ -1547,6 +1577,41 @@
                 console.error('Error loading data:', error);
                 contentArea.innerHTML = '<div class="empty-state">Error loading data. Please try again.</div>';
             }
+        }
+
+        // Hours only: there is no pay anywhere in a schedule record.
+        function fmtHours(value) {
+            const n = Number(value);
+            if (!Number.isFinite(n)) return '\u2014';
+            return (Math.round(n * 100) / 100) + 'h';
+        }
+
+        function renderSchedules(container, items) {
+            const weeks = items.map(function (item) {
+                const d = item.data || {};
+                const people = Array.isArray(d.employees) ? d.employees : [];
+                const issues = checkIssues(d);
+                const week = d.week_start ? 'Week of ' + fmtDay(d.week_start) : 'Week not shown';
+                const rows = people.map(function (e) {
+                    const days = (Array.isArray(e.shifts) ? e.shifts : []).map(function (sh) {
+                        return esc(sh.day) + ' ' + esc(sh.start) + '\u2013' + esc(sh.end);
+                    }).join(', ');
+                    return '<tr><td><strong>' + esc(e.name) + '</strong></td>' +
+                        '<td>' + esc(fmtHours(e.hours)) + (e.adjusted ? ' <span class="badge badge-pending">adjusted</span>' : '') + '</td>' +
+                        '<td style="color: var(--text-light);">' + (days || '\u2014') + '</td></tr>';
+                }).join('');
+                const warn = issues.length > 0
+                    ? '<div style="margin: 10px 0 0; font-size: 13px; color: #b45309;">\u26a0 ' + esc(issues.map(function (c) { return c.message; }).join(' ')) + '</div>'
+                    : '';
+                return '<div style="margin-bottom: 24px;">' +
+                    '<div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">' +
+                    '<h3 style="margin: 0;">' + esc(week) + '</h3>' +
+                    '<strong>Total ' + esc(fmtHours(d.total_hours)) + '</strong></div>' +
+                    '<table class="data-table"><thead><tr><th>Employee</th><th>Hours</th><th>Shifts</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+                    warn + '</div>';
+            });
+            container.innerHTML = weeks.join('') +
+                '<p style="font-size: 12px; color: var(--text-light);">Scheduled hours from the posted sheet, adjusted where the manager corrected them. No pay is calculated or stored.</p>';
         }
 
         // Render table based on type
@@ -2068,6 +2133,13 @@
             `;
         }
         
+        document.getElementById('logoutBtn')?.addEventListener('click', () => {
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('user');
+            localStorage.removeItem('skipOwnerOnboarding');
+            window.location.href = '/login';
+        });
+
         // Add event listeners for summary controls
         document.addEventListener('DOMContentLoaded', () => {
             const summaryPeriod = document.getElementById('summaryPeriod');
@@ -2371,7 +2443,7 @@
         });
 
         // Tab switching (for dashboard)
-        document.querySelectorAll('.nav-tab').forEach(tab => {
+        document.querySelectorAll('.nav-tab[data-tab]').forEach(tab => {
             tab.addEventListener('click', () => {
                 document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
                 tab.classList.add('active');
@@ -2382,10 +2454,20 @@
             });
         });
 
+        // The tasks page is its own screen; carry the selected store over.
+        document.getElementById('tasksLink').addEventListener('click', (e) => {
+            e.preventDefault();
+            location.href = '/tasks' + (currentStoreId ? '?storeId=' + encodeURIComponent(currentStoreId) : '');
+        });
+
         // Sidebar menu navigation
         document.querySelectorAll('.menu-item').forEach(item => {
             item.addEventListener('click', (e) => {
                 e.preventDefault();
+                if (item.id === 'tasksMenuItem') {
+                    location.href = '/tasks' + (currentStoreId ? '?storeId=' + encodeURIComponent(currentStoreId) : '');
+                    return;
+                }
                 const page = item.dataset.page;
                 showPage(page);
             });

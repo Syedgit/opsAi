@@ -1,7 +1,8 @@
 import type { PrismaClient } from '@prisma/client';
 import { PendingStatus } from '@prisma/client';
 import { format, startOfDay, endOfDay } from 'date-fns';
-import { sendWhatsAppMessage } from './whatsappMessaging';
+import { postToStoreGroups, sendWhatsAppMessage } from './whatsappMessaging';
+import { groupDashboardHint, sendPrivateDashboardLinks } from './whatsappLogin';
 import {
   cancelPendingAction,
   confirmPendingAction,
@@ -9,9 +10,21 @@ import {
   getLatestPendingBatch,
 } from './pendingActionService';
 import { describeDepositRule, matchStore } from './understanding/checks';
-import { applyFixToPayload } from './understanding/plan';
+import { applyFixToPayload, describeEntryPayload, scheduleGroupMessage } from './understanding/plan';
+import {
+  businessDayOf,
+  formatDaySummary,
+  loadDayActivity,
+  storeTypeOf,
+  summaryKindForStore,
+} from './understanding/daySummary';
+import { formatBagLine, formatSlipResult, isDepositStoreType, loadDepositBag } from './understanding/depositDue';
 import { DepositRuleSchema, clearDepositRule, saveDepositRule } from './understanding/profileStore';
 import { loadStoreProfiles } from './understanding/storeProfiles';
+import { describeOpenTasks } from './tasks/evidence';
+import { formatInvoiceDay, scheduleInvoicePaymentReminder } from './tasks/invoiceReminder';
+import { localDateString } from './tasks/time';
+import type { Invoice } from './understanding/schema';
 
 export interface CommandResult {
   success: boolean;
@@ -19,7 +32,7 @@ export interface CommandResult {
   storeId?: string;
 }
 
-const COMMAND_RE = /^(OK|CANCEL|FIX|STATUS|TODAY|WEEK|MONTH|HELP|SEND|STORE|RULE)(\s|$)/i;
+const COMMAND_RE = /^(OK|CANCEL|FIX|STATUS|TODAY|TASKS|WEEK|MONTH|HELP|SEND|STORE|RULE)(\s|$)/i;
 
 export function isWhatsAppCommand(text: string): boolean {
   return COMMAND_RE.test(text.trim());
@@ -44,6 +57,8 @@ export async function handleWhatsAppCommand(
       return handleStatus(prisma, phoneE164);
     case 'TODAY':
       return handleToday(prisma, phoneE164);
+    case 'TASKS':
+      return handleTasks(prisma, phoneE164);
     case 'RULE':
       return handleRule(prisma, phoneE164, parts.slice(1));
     case 'HELP':
@@ -71,6 +86,8 @@ async function handleOK(prisma: PrismaClient, phoneE164: string): Promise<Comman
   let sheetsWritten = 0;
   let sheetsFailed = 0;
   const learned: string[] = [];
+  const hoursPosted: string[] = [];
+  const invoiceReminders: string[] = [];
 
   for (const pending of batch) {
     await confirmPendingAction(prisma, pending.actionId);
@@ -90,6 +107,39 @@ async function handleOK(prisma: PrismaClient, phoneE164: string): Promise<Comman
         );
       } catch (e) {
         console.warn('Could not save deposit rule', e instanceof Error ? e.message : e);
+      }
+    }
+
+    const payload = pending.payloadJson as Record<string, unknown> | null;
+    if (payload?._kind === 'invoice' && payload.invoice) {
+      try {
+        const store = await prisma.storeConfig.findUnique({
+          where: { storeId: pending.storeId },
+          select: { storeName: true, timezone: true },
+        });
+        const timeZone = store?.timezone || 'America/New_York';
+        const now = new Date();
+        const result = await scheduleInvoicePaymentReminder(prisma, pending.storeId, payload.invoice as Invoice, {
+          today: localDateString(now, timeZone),
+          now,
+          timeZone,
+        });
+        if (result.scheduled) {
+          invoiceReminders.push(
+            `⏰ I'll remind the group on ${formatInvoiceDay(result.reminderDate)} to pay ${result.title.replace(/^Pay /, '')}.`
+          );
+        }
+      } catch (e) {
+        console.warn('Could not schedule invoice payment reminder', e instanceof Error ? e.message : e);
+      }
+    }
+
+    // A confirmed schedule is told back to the store's group: each person's hours, nothing about pay.
+    if ((pending.payloadJson as Record<string, unknown> | null)?._kind === 'work_schedule') {
+      const store = await prisma.storeConfig.findUnique({ where: { storeId: pending.storeId }, select: { storeName: true } });
+      const groupMessage = scheduleGroupMessage(pending.payloadJson as Record<string, unknown>, store?.storeName ?? pending.storeId);
+      if (groupMessage && (await postToStoreGroups(prisma, pending.storeId, groupMessage)) > 0) {
+        hoursPosted.push(store?.storeName ?? pending.storeId);
       }
     }
 
@@ -115,8 +165,82 @@ async function handleOK(prisma: PrismaClient, phoneE164: string): Promise<Comman
   }
 
   if (learned.length > 0) message += `\n${learned.join('\n')}`;
+  if (hoursPosted.length > 0) message += `\n📣 Posted the hours to the ${hoursPosted.join(' and ')} group.`;
+  if (invoiceReminders.length > 0) message += `\n${invoiceReminders.join('\n')}`;
+
+  const wrapUp = await maybePostDaySummary(prisma, batch);
+  if (wrapUp) message += `\n\n${wrapUp}`;
+
+  const bagNote = await maybeDepositBagNote(prisma, batch);
+  if (bagNote) message += `\n${bagNote}`;
 
   return { success: true, message, storeId: batch[0].storeId };
+}
+
+async function maybePostDaySummary(
+  prisma: PrismaClient,
+  batch: Array<{ storeId: string; type: string; payloadJson: unknown }>
+): Promise<string | null> {
+  const storeId = batch[0]?.storeId;
+  if (!storeId) return null;
+  try {
+    const store = await prisma.storeConfig.findUnique({
+      where: { storeId },
+      select: { storeId: true, storeName: true, timezone: true, setupJson: true, profileJson: true },
+    });
+    const rows = batch.map((p) => ({
+      type: p.type,
+      payload: (p.payloadJson ?? {}) as Record<string, unknown>,
+    }));
+    const kind = summaryKindForStore(storeTypeOf(store?.setupJson), rows);
+    if (!kind) return null;
+    const timeZone = store?.timezone?.trim() || 'America/New_York';
+    const now = new Date();
+    const day = businessDayOf(rows, now, timeZone);
+    const activity = await loadDayActivity(prisma, storeId, day, kind, now);
+    if (!activity) return null;
+    let text = formatDaySummary(activity);
+    if (!text) return null;
+    if (kind === 'store_day') {
+      const bag = await loadDepositBag(prisma, store ?? { storeId }, now, { includeTodayCloses: true });
+      const bagLine = formatBagLine(bag);
+      if (bagLine) text += `\n${bagLine}`;
+    }
+    const hasClose = rows.some((r) => r.type === 'STORE_SALES' || r.payload._kind === 'daily_close');
+    try {
+      const privateLinks = await sendPrivateDashboardLinks(prisma, storeId, store?.storeName || 'Store');
+      if (privateLinks > 0) text += `\n${groupDashboardHint()}`;
+    } catch (e) {
+      console.warn('Could not send private dashboard links', e instanceof Error ? e.message : e);
+    }
+    const posted = hasClose && (await postToStoreGroups(prisma, storeId, text)) > 0;
+    return posted ? `${text}\n📣 Posted to the group.` : text;
+  } catch (e) {
+    console.warn('Could not build the day summary', e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+async function maybeDepositBagNote(
+  prisma: PrismaClient,
+  batch: Array<{ storeId: string; type: string; payloadJson: unknown }>
+): Promise<string | null> {
+  const storeId = batch[0]?.storeId;
+  if (!storeId) return null;
+  const hasSlip = batch.some((p) => (p.payloadJson as Record<string, unknown> | null)?._kind === 'deposit_receipt');
+  if (!hasSlip) return null;
+  try {
+    const store = await prisma.storeConfig.findUnique({
+      where: { storeId },
+      select: { storeId: true, storeName: true, timezone: true, setupJson: true, profileJson: true },
+    });
+    if (!store || !isDepositStoreType(storeTypeOf(store.setupJson))) return null;
+    const bag = await loadDepositBag(prisma, store, new Date(), { includeTodayCloses: true });
+    return formatSlipResult(bag);
+  } catch (e) {
+    console.warn('Could not update the deposit bag', e instanceof Error ? e.message : e);
+    return null;
+  }
 }
 
 async function handleCancel(prisma: PrismaClient, phoneE164: string): Promise<CommandResult> {
@@ -169,16 +293,26 @@ async function handleFix(
       where: { actionId: pending.actionId },
       data: { payloadJson: fixed.payload as object },
     });
-    const warnings = (fixed.payload.checks as Array<{ status: string; message: string }>)
-      .filter((c) => c.status !== 'pass')
-      .map((c) => `⚠️ ${c.message}`);
+    const store = await prisma.storeConfig.findUnique({ where: { storeId: pending.storeId }, select: { storeName: true } });
+    const summary = describeEntryPayload(fixed.payload, store?.storeName ?? pending.storeId);
+    // Show the corrected entry so the owner can see the fix took; fall back to warnings alone for old-format entries.
+    const warnings = summary
+      ? ['', ...summary, '']
+      : (fixed.payload.checks as Array<{ status: string; message: string }>)
+          .filter((c) => c.status !== 'pass')
+          .map((c) => `⚠️ ${c.message}`);
     const suggested = DepositRuleSchema.safeParse(fixed.payload.suggested_deposit_rule);
     const teaching = suggested.success
       ? [`💡 OK also teaches me this store's deposit rule (${describeDepositRule(suggested.data)}).`]
       : [];
+    const vendorName = typeof fixed.payload.vendor === 'string' ? fixed.payload.vendor.trim() : '';
+    const nextStep =
+      fixed.payload._kind === 'order' && vendorName
+        ? `Reply OK if this is right so we can send this order to ${vendorName}, or FIX to change more.`
+        : 'Reply OK to save, or FIX to change more.';
     return {
       success: true,
-      message: [`🔧 Updated ${field}.`, ...warnings, ...teaching, 'Reply OK to save, or FIX to change more.'].join('\n'),
+      message: [`🔧 Updated ${field}.`, ...warnings, ...teaching, nextStep].join('\n'),
       storeId: pending.storeId,
     };
   }
@@ -281,6 +415,14 @@ async function handleRule(prisma: PrismaClient, phoneE164: string, args: string[
   };
 }
 
+async function handleTasks(prisma: PrismaClient, phoneE164: string): Promise<CommandResult> {
+  const member = await prisma.userDirectory.findUnique({ where: { phoneE164 }, select: { storeId: true, isActive: true } });
+  if (!member || !member.isActive || !member.storeId) {
+    return { success: false, message: 'Your number is not linked to a store. Ask the owner to add you from the dashboard.' };
+  }
+  return { success: true, message: await describeOpenTasks(prisma, member.storeId), storeId: member.storeId };
+}
+
 async function handleHelp(): Promise<CommandResult> {
   return {
     success: true,
@@ -293,9 +435,12 @@ async function handleHelp(): Promise<CommandResult> {
       'STATUS — show pending entry',
       'RULE — see each store\'s deposit rule',
       'TODAY — today\'s confirmed count',
+      'TASKS — what is still open for your shift',
       'HELP — this message',
       '',
       '📸 Send a photo or text for sales, invoices, orders, fuel, or paid-outs.',
+      '✅ Answer a task by sending its number with a photo or a few words, for example: 2 190F',
+      '📅 Owners and managers: send the weekly schedule sheet and I will add up each person\'s hours.',
     ].join('\n'),
   };
 }

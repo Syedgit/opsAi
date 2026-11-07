@@ -1,0 +1,104 @@
+{
+  "title": "Repeating tasks: old ones are marked missed, removed tasks stop nagging",
+  "why": "An hourly check that nobody answered is closed as missed when the next hour is due, so the team is never asked about stale tasks. Deleting a task in the dashboard cancels what is open and does not count against the score.",
+  "today": "2026-10-26T06:30:00-04:00",
+  "linkedGroups": [
+    "Rockaway"
+  ],
+  "taskTemplates": [
+    {
+      "store": "Rockaway",
+      "title": "Photo of food labels",
+      "category": "food_safety",
+      "startTime": "07:00",
+      "endTime": "09:00",
+      "repeatEveryMinutes": 60,
+      "evidence": "photo",
+      "points": 1
+    },
+    {
+      "store": "Rockaway",
+      "title": "Wipe the coffee counter",
+      "category": "cleanliness",
+      "startTime": "07:00",
+      "evidence": "none",
+      "points": 1
+    }
+  ],
+  "steps": [
+    {
+      "name": "07:00 two tasks are announced",
+      "at": "2026-10-26T07:00:10-04:00",
+      "tick": true,
+      "expect": {
+        "groupPosts": 1,
+        "groupPostContains": [
+          "1. Photo of food labels",
+          "2. Wipe the coffee counter"
+        ],
+        "taskCounts": {
+          "OPEN": 2
+        }
+      }
+    },
+    {
+      "name": "09:05 (after a long gap) the stale label checks are closed as missed; only the 09:00 one is asked, and the unanswered counter task is reminded and escalated",
+      "at": "2026-10-26T09:05:00-04:00",
+      "tick": true,
+      "expect": {
+        "groupPosts": 2,
+        "groupPostContains": [
+          "4. Photo of food labels",
+          "still open",
+          "Wipe the coffee counter"
+        ],
+        "replyCount": 1,
+        "replyContains": [
+          "not done yet",
+          "Wipe the coffee counter"
+        ],
+        "taskCounts": {
+          "MISSED": 2,
+          "OPEN": 2
+        }
+      }
+    },
+    {
+      "name": "The owner deletes the coffee counter task",
+      "removeTasks": "Wipe the coffee",
+      "at": "2026-10-26T09:10:00-04:00",
+      "tick": true,
+      "expect": {
+        "taskCounts": {
+          "CANCELLED": 1,
+          "OPEN": 1,
+          "MISSED": 2
+        },
+        "tasks": [
+          {
+            "title": "Wipe the coffee",
+            "status": "CANCELLED"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Staff sends the label photo: the only photo task is open, so it closes",
+      "from": "staff",
+      "at": "2026-10-26T09:12:00-04:00",
+      "image": "labels.png",
+      "noAi": true,
+      "expect": {
+        "replyContains": [
+          "done"
+        ],
+        "taskCounts": {
+          "OPEN": 0,
+          "DONE": 1,
+          "MISSED": 2,
+          "CANCELLED": 1
+        }
+      }
+    }
+  ]
+}

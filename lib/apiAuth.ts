@@ -29,7 +29,11 @@ export function getAuthUser(req: VercelRequest): AuthUser | null {
 
   const token = authHeader.substring(7);
   try {
-    return verify(token, getJwtSecret()) as AuthUser;
+    const payload = verify(token, getJwtSecret()) as AuthUser & { typ?: string };
+    if (!payload?.userId || !payload?.email) return null;
+    // WhatsApp tap-links are exchanged for a session; they are not Bearer tokens.
+    if (payload.typ && payload.typ !== 'session') return null;
+    return { userId: payload.userId, email: payload.email };
   } catch {
     return null;
   }

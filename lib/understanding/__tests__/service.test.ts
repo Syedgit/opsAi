@@ -59,6 +59,18 @@ beforeEach(() => {
 });
 
 describe('understandAndRespond', () => {
+  it('records what the AI used on the message log, for cost tracking', async () => {
+    const ai: MessageUnderstander & { understand: jest.Mock } = {
+      understand: jest.fn(async (input) => {
+        input.onUsage?.({ kind: 'extraction', model: 'gpt-4.1', inputTokens: 3000, outputTokens: 500 });
+        return sales;
+      }),
+    };
+    await understandAndRespond(prisma, { ...base, text: 'Rockaway cash 106 card 334 gas 1355', understander: ai });
+    const logged = (updateMessageLog as jest.Mock).mock.calls.at(-1)?.[2] as { extractedData: { usage: unknown[] } };
+    expect(logged.extractedData.usage).toEqual([{ kind: 'extraction', model: 'gpt-4.1', inputTokens: 3000, outputTokens: 500 }]);
+  });
+
   it('saves a pending entry and replies with the summary for a text message', async () => {
     const ai = understander(sales);
     const outcome = await understandAndRespond(prisma, { ...base, text: 'Rockaway cash 106 card 334 gas 1355', understander: ai });

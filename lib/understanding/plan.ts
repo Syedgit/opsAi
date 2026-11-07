@@ -1,3 +1,5 @@
+import { invoiceIsUnpaid, paymentDueReminderDate } from '../tasks/invoiceReminder';
+import { localDateString } from '../tasks/time';
 import {
   checkDailyClose,
   checkDepositReceipt,
@@ -11,7 +13,10 @@ import {
   type Check,
 } from './checks';
 import type { DepositRule, StoreProfile } from './profile';
-import type { DailyCloseReport, DepositReceipt, EquipmentIssue, Invoice, Understanding } from './schema';
+import { formatHours, hoursLines, summarizeSchedule, type ScheduleSummary } from './schedule';
+import { WorkScheduleSchema } from './schema';
+import type { DailyCloseReport, DepositReceipt, EquipmentIssue, Invoice, Order, OrderItem, Understanding, WorkSchedule } from './schema';
+import { describeVendorCatalog, matchOrderVendor, matchVendorName, VENDOR_CATEGORY_LABEL, type StoreVendor } from './vendors';
 
 /**
  * Turns a reading (Understanding) into saved-after-confirmation entries and a WhatsApp reply.
@@ -19,12 +24,13 @@ import type { DailyCloseReport, DepositReceipt, EquipmentIssue, Invoice, Underst
  *
  * Entries reuse the existing pending-action storage, so no schema change is needed:
  * daily close -> STORE_SALES, invoice -> INVOICE_EXPENSE, deposit slip -> UNKNOWN (hidden from
- * the current dashboard lists until it gets its own view). Legacy field names (cash, card, ...)
+ * the current dashboard lists until it gets its own view), staff schedule -> UNKNOWN tagged work_schedule
+ * (shown on the dashboard's Schedule tab). Legacy field names (cash, card, ...)
  * are kept in every payload so the dashboard keeps working.
  */
 
-export type PlannedActionType = 'STORE_SALES' | 'INVOICE_EXPENSE' | 'UNKNOWN';
-export type EntryKind = 'daily_close' | 'invoice' | 'deposit_receipt';
+export type PlannedActionType = 'STORE_SALES' | 'INVOICE_EXPENSE' | 'ORDER_REQUEST' | 'UNKNOWN';
+export type EntryKind = 'daily_close' | 'invoice' | 'deposit_receipt' | 'work_schedule' | 'order';
 
 export interface PlannedEntry {
   kind: EntryKind;
@@ -59,6 +65,8 @@ export interface PlanContext {
    * member's confirmation never changes how the owner's money is checked.
    */
   canTeachRules?: boolean;
+  /** True for owners and managers. Only they can post a schedule (it tells the whole group everyone's hours). */
+  canManageSchedules?: boolean;
 }
 
 /* --------------------------------- helpers -------------------------------- */
@@ -156,6 +164,7 @@ export function invoicePayload(invoice: Invoice, checks: Check[], needsReview: s
     tax: invoice.tax ?? 0,
     invoice_number: invoice.invoiceNumber,
     invoice_date: invoice.invoiceDate,
+    due_date: invoice.dueDate,
   };
 }
 
@@ -170,7 +179,85 @@ export function depositPayload(receipt: DepositReceipt, checks: Check[], needsRe
   };
 }
 
+function itemQty(item: OrderItem): number {
+  return item.quantity != null && Number.isFinite(item.quantity) ? item.quantity : 1;
+}
+
+export function orderPayload(
+  order: Order,
+  vendor: { name: string; category: string | null } | null,
+  catalog: StoreVendor[],
+  needsReview: string[] = [],
+  checks: Check[] = []
+): Record<string, unknown> {
+  const vendorName = vendor?.name ?? order.vendorHint?.trim() ?? 'Unknown';
+  return {
+    _kind: 'order',
+    order,
+    checks,
+    needs_review: needsReview,
+    vendor: vendorName,
+    vendor_category: vendor?.category ?? null,
+    vendors_catalog: catalog,
+    order_batch_id: vendorName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'order',
+    vendor_groups: [
+      {
+        vendor: vendorName,
+        items: order.items.map((i) => ({
+          name: i.description,
+          qty: itemQty(i),
+          unit: i.unit?.trim() || 'each',
+        })),
+      },
+    ],
+  };
+}
+
+export function schedulePayload(
+  schedule: WorkSchedule,
+  summary: ScheduleSummary,
+  needsReview: string[] = []
+): Record<string, unknown> {
+  return {
+    _kind: 'work_schedule',
+    // Re-parsed so that nothing outside the hours-only shape (a stray pay rate, say) can ever be saved.
+    schedule: WorkScheduleSchema.parse(schedule),
+    checks: summary.checks,
+    needs_review: needsReview,
+    week_start: summary.weekStart,
+    total_hours: summary.totalHours,
+    // Hours only, ready for the dashboard. There is no pay anywhere in this record.
+    employees: summary.employees.map((e) => ({
+      name: e.name,
+      hours: e.hours,
+      computed_hours: e.computedHours,
+      adjusted: e.adjusted,
+      shifts: e.shifts,
+    })),
+  };
+}
+
 /* ---------------------------------- lines --------------------------------- */
+
+function weekLabel(weekStart: string | null): string {
+  return weekStart ? `week of ${dateLabel(weekStart)}` : 'week not shown';
+}
+
+function scheduleLines(summary: ScheduleSummary, storeName: string): string[] {
+  const lines = [`📅 ${storeName} · ${weekLabel(summary.weekStart)}`, ...hoursLines(summary), `Total ${formatHours(summary.totalHours)}`];
+  for (const check of summary.checks) {
+    const line = checkLine(check);
+    if (line) lines.push(line);
+  }
+  return lines;
+}
+
+/** What goes to the store's WhatsApp group once the schedule is confirmed: hours only. */
+export function scheduleGroupMessage(payload: Record<string, unknown>, storeName: string): string | null {
+  if (payload._kind !== 'work_schedule') return null;
+  const summary = summarizeSchedule(payload.schedule as WorkSchedule);
+  return [`📅 ${storeName} · hours for ${weekLabel(summary.weekStart)}`, ...hoursLines(summary), `Total ${formatHours(summary.totalHours)}`, '', 'Hours come from the posted schedule.'].join('\n');
+}
 
 function dailyCloseLines(report: DailyCloseReport, storeName: string, checks: Check[]): string[] {
   const lines = [`🧾 ${storeName} · ${dateLabel(report.reportDate)}`];
@@ -200,13 +287,14 @@ function dailyCloseLines(report: DailyCloseReport, storeName: string, checks: Ch
   return lines;
 }
 
-function invoiceLines(invoice: Invoice, storeName: string, checks: Check[]): string[] {
+function invoiceLines(invoice: Invoice, storeName: string, checks: Check[], today?: string): string[] {
   const lines = [`🧾 Invoice · ${invoice.vendorName ?? 'Unknown vendor'} · ${storeName}`];
   const facts = [`Total ${formatMoney(invoice.total)}`];
   if (invoice.lineItems.length > 0) {
     facts.push(`${invoice.lineItems.length} line${invoice.lineItems.length === 1 ? '' : 's'}`);
   }
   if (invoice.invoiceDate) facts.push(dateLabel(invoice.invoiceDate));
+  if (invoice.dueDate) facts.push(`due ${dateLabel(invoice.dueDate)}`);
   if (invoice.paymentStatus === 'paid_cash') facts.push('paid cash');
   else if (invoice.paymentStatus === 'paid_other') facts.push('paid');
   else if (invoice.paymentStatus === 'unpaid') facts.push('unpaid');
@@ -217,6 +305,66 @@ function invoiceLines(invoice: Invoice, storeName: string, checks: Check[]): str
     const line = checkLine(check);
     if (line) lines.push(line);
   }
+
+  const reminder = invoiceReminderLine(invoice, today);
+  if (reminder) lines.push(reminder);
+  return lines;
+}
+
+function invoiceReminderLine(invoice: Invoice, today?: string): string | null {
+  if (!invoiceIsUnpaid(invoice) || !invoice.dueDate) return null;
+  const when = paymentDueReminderDate(invoice.dueDate, today ?? invoice.dueDate);
+  if (!when) return null;
+  if (today && when === today) {
+    return `⏰ Reply OK and I'll remind today (due ${dateLabel(invoice.dueDate)}).`;
+  }
+  return `⏰ Reply OK and I'll remind 3 days before, on ${dateLabel(when)}.`;
+}
+
+function qtyText(item: OrderItem): string {
+  const q = item.quantity != null ? String(item.quantity) : '';
+  const u = item.unit?.trim() || '';
+  const prefix = [q, u].filter(Boolean).join(' ');
+  return prefix ? `${prefix} ${item.description}` : item.description;
+}
+
+function vendorLabel(vendor: { name: string; category: string | null }): string {
+  if (!vendor.category) return vendor.name;
+  return `${vendor.name} (${VENDOR_CATEGORY_LABEL[vendor.category as keyof typeof VENDOR_CATEGORY_LABEL] ?? vendor.category})`;
+}
+
+function catalogHasVendor(vendor: { name: string } | null, catalog: StoreVendor[]): boolean {
+  if (!vendor) return false;
+  return catalog.some((v) => v.name.toLowerCase() === vendor.name.toLowerCase());
+}
+
+function orderConfirmAsk(vendor: { name: string } | null, matched: boolean): string {
+  const name = vendor?.name.trim();
+  if (matched && name && name.toLowerCase() !== 'unknown') {
+    return `Please confirm this list so we can send this order to ${name}.`;
+  }
+  return 'Please confirm this list. Reply FIX vendor HLA if that is who this order goes to.';
+}
+
+function orderLines(
+  order: Order,
+  storeName: string,
+  vendor: { name: string; category: string | null } | null,
+  catalog: StoreVendor[]
+): string[] {
+  const matched = catalogHasVendor(vendor, catalog);
+  const lines = [`📦 Order · ${storeName}`];
+  if (matched && vendor) {
+    lines.push(`Vendor: ${vendorLabel(vendor)}`);
+  } else if (catalog.length > 0) {
+    lines.push(`Vendor: not matched — reply FIX vendor HLA. Your vendors: ${describeVendorCatalog(catalog)}`);
+    if (order.vendorHint?.trim()) lines.push(`Sheet said: ${order.vendorHint.trim()}`);
+  } else {
+    lines.push('Vendor: unknown — add HLA / ABC / RPS at signup, or reply FIX vendor HLA');
+    if (order.vendorHint?.trim()) lines.push(`Sheet said: ${order.vendorHint.trim()}`);
+  }
+  for (const item of order.items) lines.push(`• ${qtyText(item)}`);
+  lines.push('', orderConfirmAsk(vendor, matched));
   return lines;
 }
 
@@ -330,6 +478,7 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
 
     case 'invoice': {
       const store = resolveStore(understanding.invoice.storeHint, ctx);
+      const today = localDateString(ctx.now, store.profile?.timezone || 'America/New_York');
       const dateCheck = checkReportDate(understanding.invoice.invoiceDate, ctx.now);
       const checks = [
         ...(store.warning ? [store.warning] : []),
@@ -346,7 +495,7 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
             actionType: 'INVOICE_EXPENSE',
             payload: invoicePayload(understanding.invoice, checks, understanding.needsReview),
             confidence: understanding.confidence,
-            lines: [...invoiceLines(understanding.invoice, store.storeName, checks), ...reviewLine(understanding.needsReview)],
+            lines: [...invoiceLines(understanding.invoice, store.storeName, checks, today), ...reviewLine(understanding.needsReview)],
             checks,
           },
         ],
@@ -374,6 +523,82 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
       return { entries, notice: null, equipment: null };
     }
 
+    case 'work_schedule': {
+      if (!ctx.canManageSchedules) {
+        return {
+          entries: [],
+          notice: '📅 That looks like a work schedule. Only the owner or a manager can post schedules, so please ask them to send it.',
+          equipment: null,
+        };
+      }
+      const store = resolveStore(understanding.schedule.storeHint, ctx);
+      const summary = summarizeSchedule(understanding.schedule);
+      if (summary.checks.some((c) => c.id === 'schedule_empty')) {
+        return {
+          entries: [],
+          notice: "📅 I couldn't read any shift times from that sheet. Try a clearer photo taken straight on, or type it like: Maria Mon 9am-5pm, Tue 9am-5pm.",
+          equipment: null,
+        };
+      }
+      const checks = [...(store.warning ? [store.warning] : []), ...summary.checks];
+      const withStoreCheck = { ...summary, checks };
+      return {
+        entries: [
+          {
+            kind: 'work_schedule',
+            storeId: store.storeId,
+            storeName: store.storeName,
+            actionType: 'UNKNOWN',
+            payload: schedulePayload(understanding.schedule, withStoreCheck, understanding.needsReview),
+            confidence: understanding.confidence,
+            lines: [...scheduleLines(withStoreCheck, store.storeName), ...reviewLine(understanding.needsReview)],
+            checks,
+          },
+        ],
+        notice: null,
+        equipment: null,
+      };
+    }
+
+    case 'order': {
+      const store = resolveStore(understanding.order.storeHint, ctx);
+      const catalog = store.profile?.vendors ?? [];
+      const match = matchOrderVendor(understanding.order, catalog);
+      const vendor = match.matched
+        ?? (understanding.order.vendorHint?.trim()
+          ? { name: understanding.order.vendorHint.trim(), category: null }
+          : null);
+      const checks = [...(store.warning ? [store.warning] : [])];
+      if (!match.matched) {
+        checks.push({
+          id: 'vendor_unmatched',
+          status: 'warn',
+          message: catalog.length > 0
+            ? `Could not match a vendor from your list (${describeVendorCatalog(catalog)}).`
+            : 'No vendors set for this store yet. Add HLA / ABC / RPS at signup, or reply FIX vendor HLA.',
+        });
+      }
+      return {
+        entries: [
+          {
+            kind: 'order',
+            storeId: store.storeId,
+            storeName: store.storeName,
+            actionType: 'ORDER_REQUEST',
+            payload: orderPayload(understanding.order, vendor, catalog, understanding.needsReview, checks),
+            confidence: understanding.confidence,
+            lines: [
+              ...orderLines(understanding.order, store.storeName, vendor, catalog),
+              ...reviewLine(understanding.needsReview),
+            ],
+            checks,
+          },
+        ],
+        notice: null,
+        equipment: null,
+      };
+    }
+
     case 'equipment_issue': {
       const issue = understanding.issue;
       const lines = [issue.equipment ? `🔧 Problem noted: ${issue.equipment}` : '🔧 Problem noted', issue.description];
@@ -391,16 +616,59 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
       return {
         entries: [],
         notice:
-          "❓ I couldn't read that as sales, an invoice, a deposit slip, or an equipment problem.\n\nTry a clearer photo, or type it like: Rockaway cash 298 card 1355 gas 1440. Reply HELP for commands.",
+          "❓ I couldn't read that as sales, an invoice, a deposit slip, an order list, or an equipment problem.\n\nTry a clearer photo, or type it like: Rockaway cash 298 card 1355 gas 1440. Reply HELP for commands.",
         equipment: null,
       };
   }
 }
 
+/**
+ * The same summary lines the sender saw for a saved entry, rebuilt from its stored payload
+ * (used to show the corrected entry after FIX). Null for entries that predate structured payloads.
+ */
+export function describeEntryPayload(payload: Record<string, unknown>, storeName: string): string[] | null {
+  const checks = (Array.isArray(payload.checks) ? payload.checks : []) as Check[];
+  switch (payload._kind) {
+    case 'daily_close':
+      return dailyCloseLines(payload.report as DailyCloseReport, storeName, checks);
+    case 'invoice':
+      return invoiceLines(payload.invoice as Invoice, storeName, checks, new Date().toISOString().slice(0, 10));
+    case 'deposit_receipt':
+      return depositLines(payload.receipt as DepositReceipt, storeName, checks);
+    case 'work_schedule': {
+      const summary = summarizeSchedule(payload.schedule as WorkSchedule);
+      // Keep the store-level warning (if any) that was raised when the entry was created.
+      const kept = checks.filter((c) => c.id.startsWith('store_'));
+      return scheduleLines({ ...summary, checks: [...kept, ...summary.checks] }, storeName);
+    }
+    case 'order': {
+      const order = payload.order as Order;
+      const catalog = Array.isArray(payload.vendors_catalog) ? (payload.vendors_catalog as StoreVendor[]) : [];
+      const vendor = payload.vendor
+        ? { name: String(payload.vendor), category: (payload.vendor_category as string | null) ?? null }
+        : null;
+      return orderLines(order, storeName, vendor, catalog);
+    }
+    default:
+      return null;
+  }
+}
+
+function orderReplyFooter(entry: PlannedEntry): string {
+  const name = String(entry.payload.vendor ?? '').trim();
+  const catalog = Array.isArray(entry.payload.vendors_catalog) ? (entry.payload.vendors_catalog as StoreVendor[]) : [];
+  const example = catalogHasVendor({ name }, catalog) ? name : 'HLA';
+  return `Reply OK if this is right, FIX vendor ${example}, or CANCEL.`;
+}
+
 export function formatEntriesReply(entries: PlannedEntry[]): string {
   const body = entries.map((e) => e.lines.join('\n')).join('\n\n');
   const footer =
-    entries.length > 1
+    entries.length === 1 && entries[0].kind === 'work_schedule'
+      ? "Reply OK to save and post the hours, FIX <name> <hours> to correct someone's total (like FIX maria 30), or CANCEL."
+      : entries.length === 1 && entries[0].kind === 'order'
+      ? orderReplyFooter(entries[0])
+      : entries.length > 1
       ? 'Reply OK to save all, or CANCEL to discard all.'
       : 'Reply OK to save, FIX <field> <value> to correct, or CANCEL.';
   return `${body}\n\n${footer}`;
@@ -482,8 +750,12 @@ export function applyFixToPayload(
       const date = parseIsoDate(value);
       if (!date) return { ok: false, message: 'Date format: FIX date 10/12 (month/day).' };
       invoice.invoiceDate = date;
+    } else if (key === 'due' || key === 'due_date' || key === 'duedate') {
+      const date = parseIsoDate(value);
+      if (!date) return { ok: false, message: 'Date format: FIX due 11/10 (month/day).' };
+      invoice.dueDate = date;
     } else {
-      return { ok: false, message: 'You can fix: total, vendor, date.' };
+      return { ok: false, message: 'You can fix: total, vendor, date, due.' };
     }
     return { ok: true, payload: invoicePayload(invoice, checkInvoice(invoice), review) };
   }
@@ -502,6 +774,48 @@ export function applyFixToPayload(
       return { ok: false, message: 'You can fix: total, date.' };
     }
     return { ok: true, payload: depositPayload(receipt, checkDepositReceipt(receipt), review) };
+  }
+
+  if (kind === 'order') {
+    if (key !== 'vendor') return { ok: false, message: 'You can fix: vendor. Example: FIX vendor HLA' };
+    const catalog = Array.isArray(payload.vendors_catalog) ? (payload.vendors_catalog as StoreVendor[]) : [];
+    const order = { ...(payload.order as Order), vendorHint: value.trim() || null };
+    const matched = matchVendorName(value, catalog);
+    const vendor = matched ?? (value.trim() ? { name: value.trim(), category: 'other' as const } : null);
+    const checks: Check[] = matched
+      ? []
+      : [{ id: 'vendor_unmatched', status: 'warn', message: catalog.length > 0
+          ? `Could not match a vendor from your list (${describeVendorCatalog(catalog)}).`
+          : 'No vendors set for this store yet. Add HLA / ABC / RPS at signup, or reply FIX vendor HLA.' }];
+    return { ok: true, payload: orderPayload(order, vendor, catalog, review, checks) };
+  }
+
+  if (kind === 'work_schedule') {
+    const parts = `${field} ${value}`.trim().split(/\s+/);
+    const hoursText = (parts.pop() ?? '').replace(/h(ours?)?$/i, '');
+    const wanted = parts.join(' ').toLowerCase();
+    if (!wanted || !/^\d+(\.\d+)?$/.test(hoursText)) {
+      return { ok: false, message: 'Usage: FIX <name> <hours>. Example: FIX maria 30' };
+    }
+    const hours = Number(hoursText);
+    if (hours > 200) return { ok: false, message: `${hours} hours is more than a week has room for. Example: FIX maria 30` };
+
+    const schedule = payload.schedule as WorkSchedule;
+    const exact = schedule.employees.filter((e) => e.name.trim().toLowerCase() === wanted);
+    const matches = exact.length > 0 ? exact : schedule.employees.filter((e) => e.name.trim().toLowerCase().startsWith(wanted));
+    if (matches.length === 0) {
+      return { ok: false, message: `I don't see "${parts.join(' ')}" on this schedule. Names: ${schedule.employees.map((e) => e.name).join(', ')}.` };
+    }
+    if (matches.length > 1) {
+      return { ok: false, message: `"${parts.join(' ')}" matches ${matches.map((e) => e.name).join(' and ')}. Type more of the name.` };
+    }
+    const updated: WorkSchedule = {
+      ...schedule,
+      employees: schedule.employees.map((e) => (e === matches[0] ? { ...e, adjustedHours: hours } : e)),
+    };
+    const summary = summarizeSchedule(updated);
+    const kept = (Array.isArray(payload.checks) ? (payload.checks as Check[]) : []).filter((c) => c.id.startsWith('store_'));
+    return { ok: true, payload: schedulePayload(updated, { ...summary, checks: [...kept, ...summary.checks] }, review) };
   }
 
   return { ok: false, message: 'This entry cannot be corrected with FIX.' };

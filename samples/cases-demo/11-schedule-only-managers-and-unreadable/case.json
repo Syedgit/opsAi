@@ -1,0 +1,39 @@
+{
+  "title": "Only owners and managers can post schedules; unreadable sheets save nothing",
+  "why": "A schedule tells the whole group everyone's hours, so staff cannot post one. A sheet with no readable shifts asks for a clearer photo.",
+  "today": "2026-10-26T09:00:00-04:00",
+  "linkedGroups": [
+    "Rockaway"
+  ],
+  "steps": [
+    {
+      "name": "Staff sends a schedule",
+      "from": "staff",
+      "text": "Rockaway week 10/26: Maria Mon 9a-5p, Sam Tue 9a-5p",
+      "expect": {
+        "replyContains": [
+          "Only the owner or a manager"
+        ],
+        "entries": [],
+        "status": {
+          "PENDING": 0
+        },
+        "groupPosts": 0
+      }
+    },
+    {
+      "name": "Owner sends a sheet with no times",
+      "text": "Schedule for week of 10/26 is on the board, 3 people",
+      "expect": {
+        "replyContains": [
+          "couldn't read any shift times"
+        ],
+        "entries": [],
+        "status": {
+          "PENDING": 0
+        },
+        "groupPosts": 0
+      }
+    }
+  ]
+}

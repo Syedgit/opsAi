@@ -1,0 +1,142 @@
+{
+  "title": "A task answer never swallows a business message, and an ignored task reaches the owner",
+  "why": "Staff typing a delivery note that starts with a number, or an owner sending a sales photo, must still go through normal reading. A task nobody answers is reminded in the group and then escalated to the owner and managers.",
+  "today": "2026-10-26T09:00:00-04:00",
+  "linkedGroups": [
+    "Rockaway"
+  ],
+  "taskTemplates": [
+    {
+      "store": "Rockaway",
+      "title": "Check the coffee station",
+      "category": "food_safety",
+      "startTime": "10:00",
+      "evidence": "photo",
+      "points": 2,
+      "escalateAfterMinutes": 30
+    }
+  ],
+  "steps": [
+    {
+      "name": "10:01 the task is announced",
+      "at": "2026-10-26T10:01:00-04:00",
+      "tick": true,
+      "expect": {
+        "groupPosts": 1,
+        "groupPostContains": [
+          "1. Check the coffee station"
+        ]
+      }
+    },
+    {
+      "name": "Staff reports a delivery that starts with a number: goes to the normal reading",
+      "from": "staff",
+      "at": "2026-10-26T10:05:00-04:00",
+      "text": "2 cases of milk arrived today",
+      "expect": {
+        "tasks": [
+          {
+            "title": "coffee",
+            "status": "OPEN",
+            "code": 1
+          }
+        ],
+        "taskCounts": {
+          "OPEN": 1,
+          "DONE": 0
+        },
+        "replyNotContains": [
+          "Task 1",
+          "needs a photo"
+        ]
+      }
+    },
+    {
+      "name": "Staff says done but this task needs a photo",
+      "from": "staff",
+      "at": "2026-10-26T10:10:00-04:00",
+      "text": "1 done",
+      "noAi": true,
+      "expect": {
+        "replyContains": [
+          "Task 1",
+          "needs a photo"
+        ],
+        "taskCounts": {
+          "OPEN": 1,
+          "DONE": 0
+        }
+      }
+    },
+    {
+      "name": "10:31 still nothing: reminder in the group and an alert to the owner",
+      "at": "2026-10-26T10:31:00-04:00",
+      "tick": true,
+      "expect": {
+        "groupPosts": 1,
+        "groupPostContains": [
+          "still open"
+        ],
+        "replyCount": 1,
+        "replyContains": [
+          "not done yet",
+          "Check the coffee station"
+        ]
+      }
+    },
+    {
+      "name": "The owner is only told once",
+      "at": "2026-10-26T10:50:00-04:00",
+      "tick": true,
+      "expect": {
+        "replyCount": 0
+      }
+    },
+    {
+      "name": "Owner sends a photo with no caption: normal reading, not a task answer",
+      "from": "owner",
+      "at": "2026-10-26T10:55:00-04:00",
+      "image": "photo.png",
+      "expect": {
+        "taskCounts": {
+          "OPEN": 1,
+          "DONE": 0
+        }
+      }
+    },
+    {
+      "name": "Owner sends the same kind of photo with the task number",
+      "from": "owner",
+      "at": "2026-10-26T10:56:00-04:00",
+      "image": "photo.png",
+      "text": "1",
+      "noAi": true,
+      "expect": {
+        "replyContains": [
+          "Task 1",
+          "done"
+        ],
+        "tasks": [
+          {
+            "title": "coffee",
+            "status": "DONE",
+            "evidenceType": "photo"
+          }
+        ],
+        "taskCounts": {
+          "OPEN": 0,
+          "DONE": 1
+        }
+      }
+    },
+    {
+      "name": "Closed means closed: no more reminders",
+      "at": "2026-10-26T12:00:00-04:00",
+      "tick": true,
+      "expect": {
+        "groupPosts": 0,
+        "replyCount": 0
+      }
+    }
+  ]
+}

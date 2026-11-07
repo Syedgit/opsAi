@@ -4,6 +4,7 @@
  *
  *   OPENAI_API_KEY                 required
  *   OPENAI_EXTRACTION_MODEL        required; must support image input for photo reading
+ *   OPENAI_TEXT_MODEL              optional; cheaper model for typed text only (photos keep OPENAI_EXTRACTION_MODEL)
  *   OPENAI_TRANSCRIPTION_MODEL     optional; enables voice notes
  *   AI_UNDERSTANDING=off           optional kill switch
  *
@@ -13,6 +14,8 @@
 export interface AiConfig {
   apiKey: string;
   extractionModel: string;
+  /** Model for text-only messages; null means use extractionModel. */
+  textModel: string | null;
   /** null disables voice notes only. */
   transcriptionModel: string | null;
 }
@@ -27,6 +30,7 @@ export function getAiConfig(env: NodeJS.ProcessEnv = process.env): AiConfig | nu
   return {
     apiKey,
     extractionModel,
+    textModel: env.OPENAI_TEXT_MODEL?.trim() || null,
     transcriptionModel: env.OPENAI_TRANSCRIPTION_MODEL?.trim() || null,
   };
 }

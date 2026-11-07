@@ -1,0 +1,105 @@
+{
+  "title": "A weekly schedule becomes hours per employee, on the dashboard and in the group",
+  "why": "Hours are added up by code (including a night shift across midnight), shown to the manager first, correctable with FIX, then saved and posted to the group. Pay in the sheet is never kept or repeated.",
+  "today": "2026-10-26T09:00:00-04:00",
+  "linkedGroups": [
+    "Rockaway"
+  ],
+  "steps": [
+    {
+      "name": "Owner sends the schedule (the sheet also lists pay rates)",
+      "text": "Rockaway schedule week of 10/26. Maria Mon Tue Wed 9a-5p $18/hr. Sam Thu 2p-10p $16/hr. Ali Fri 10p-6a $17/hr",
+      "expect": {
+        "replyCount": 1,
+        "replyContains": [
+          "Maria 24h",
+          "Sam 8h",
+          "Ali 8h",
+          "Total 40h",
+          "week of Mon, Oct 26",
+          "FIX <name> <hours>"
+        ],
+        "replyNotContains": [
+          "$",
+          "/hr"
+        ],
+        "groupPosts": 0,
+        "entries": [
+          {
+            "kind": "work_schedule",
+            "store": "Rockaway",
+            "date": "2026-10-26",
+            "employees": [
+              {
+                "name": "Maria",
+                "hours": 24
+              },
+              {
+                "name": "Sam",
+                "hours": 8
+              },
+              {
+                "name": "Ali",
+                "hours": 8
+              }
+            ],
+            "totalHours": 40,
+            "clean": true
+          }
+        ],
+        "status": {
+          "PENDING": 1
+        },
+        "dashboard": {
+          "Rockaway": {
+            "schedules": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "Sam left early: owner corrects his hours",
+      "text": "FIX sam 6",
+      "expect": {
+        "replyContains": [
+          "Sam 6h (adjusted)",
+          "Total 38h"
+        ],
+        "groupPosts": 0
+      }
+    },
+    {
+      "name": "Owner confirms; hours go to the group",
+      "text": "OK",
+      "expect": {
+        "replyContains": [
+          "Saved",
+          "Posted the hours to the Rockaway group"
+        ],
+        "groupPosts": 1,
+        "groupPostContains": [
+          "Rockaway",
+          "Maria 24h",
+          "Sam 6h (adjusted)",
+          "Ali 8h",
+          "Total 38h"
+        ],
+        "groupPostNotContains": [
+          "$",
+          "/hr",
+          "rate",
+          "wage"
+        ],
+        "status": {
+          "PENDING": 0,
+          "CONFIRMED": 1
+        },
+        "dashboard": {
+          "Rockaway": {
+            "schedules": 1
+          }
+        }
+      }
+    }
+  ]
+}
