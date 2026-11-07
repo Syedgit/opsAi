@@ -1,14 +1,9 @@
 # Test functions excluded from production
 api/test/
+api/**/__tests__/
 
-# Old mock files (deleted, but keeping here for reference)
-# api/stores/mock.ts
-# api/stores/mock-dashboard.ts
-# api/stores/mock-data.ts
-# api/stores/mock-detail.ts
-
-# Old HTML server functions (now using static files)
-# api/index.ts
-# api/dashboard.ts
-# api/privacy-policy.ts
-# api/terms-of-service.ts
+# Hobby plan: max 12 serverless functions per deploy. Keep only routes
+# needed for WhatsApp, login, onboarding, dashboard, and shift tasks.
+# Admin phone-assignment and auto-create groups stay in the repo for local/Pro.
+api/admin/
+api/stores/*/whatsapp-group-provision.ts
