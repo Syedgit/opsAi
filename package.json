@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "WhatsApp-based operations management system for convenience stores",
   "engines": {
-    "node": ">=20.19.0"
+    "node": ">=20.19.0 <25"
   },
   "main": "dist/index.js",
   "scripts": {
