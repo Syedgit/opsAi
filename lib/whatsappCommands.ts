@@ -32,10 +32,13 @@ export interface CommandResult {
   storeId?: string;
 }
 
-const COMMAND_RE = /^(OK|CANCEL|FIX|STATUS|TODAY|TASKS|WEEK|MONTH|HELP|SEND|STORE|RULE|DUE)(\s|$)/i;
+const COMMAND_RE = /^(OK|CANCEL|FIX|STATUS|TODAY|TASKS|WEEK|MONTH|HELP|SEND|RULE|DUE)(\s|$)/i;
+/** Old link command only — not "store sales" / "store cash" captions on a close photo. */
+const STORE_LINK_RE = /^STORE(\s+S\d+)?$/i;
 
 export function isWhatsAppCommand(text: string): boolean {
-  return COMMAND_RE.test(text.trim());
+  const trimmed = text.trim();
+  return COMMAND_RE.test(trimmed) || STORE_LINK_RE.test(trimmed);
 }
 
 export async function handleWhatsAppCommand(
@@ -484,7 +487,7 @@ async function handleHelp(): Promise<CommandResult> {
       '📸 Send a photo or text for sales, invoices, orders, fuel, or paid-outs.',
       '💵 Partial pay: Pepsi paid cash 500 remaining 400 send check Friday.',
       '✅ Answer a task by sending its number with a photo or a few words, for example: 2 190F',
-      '📅 Owners and managers: send the weekly schedule sheet and I will add up each person\'s hours.',
+      '📅 Send a photo of the 7-Eleven Shift Schedule in the group (Time In / Time Out). I add up hours from the sheet. Owners and managers reply OK to save it.',
     ].join('\n'),
   };
 }

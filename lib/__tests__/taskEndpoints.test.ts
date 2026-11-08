@@ -341,7 +341,13 @@ describe('Store setup (type, hours, shifts)', () => {
     expect(types.find((t) => t.id === 'convenience')?.modules).toMatchObject({ vendors: true, samples: true });
     expect(types[types.length - 1].blurb.toLowerCase()).toMatch(/other business/);
     const presets = body.pictureTemplatePresets as Array<{ id: string; title: string }>;
-    expect(presets.map((p) => p.id)).toEqual(['exxon_store_close', 'exxon_tender', 'notebook_store_sales']);
+    expect(presets.map((p) => p.id)).toEqual([
+      'exxon_store_close',
+      'exxon_tender',
+      'notebook_store_sales',
+      'vendor_invoice',
+      'shift_schedule',
+    ]);
     expect(body.pictureTemplates).toEqual([]);
   });
 

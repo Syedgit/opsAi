@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import { isMissingTable } from './prismaMissing';
 
 /**
  * Path A: when a registered store member messages from a group that is not yet mapped,
@@ -12,10 +13,16 @@ export async function tryAutoLinkGroupFromSender(
   const gid = groupId.trim();
   if (!gid) return null;
 
-  const existing = await prisma.storeWhatsAppGroup.findFirst({
-    where: { whatsappGroupId: gid, active: true },
-    select: { storeId: true },
-  });
+  let existing: { storeId: string } | null = null;
+  try {
+    existing = await prisma.storeWhatsAppGroup.findFirst({
+      where: { whatsappGroupId: gid, active: true },
+      select: { storeId: true },
+    });
+  } catch (error) {
+    if (!isMissingTable(error)) throw error;
+    return null;
+  }
   if (existing) {
     return { storeId: existing.storeId, linked: false };
   }

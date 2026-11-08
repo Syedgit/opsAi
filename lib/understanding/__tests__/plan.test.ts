@@ -66,10 +66,25 @@ describe('planUnderstanding: daily close', () => {
   it('shows the report in a readable summary', () => {
     const [rockaway] = planUnderstanding(twoStoreText, ctx).entries;
     expect(rockaway.lines[0]).toBe('🧾 Rockaway · Mon, Oct 12');
-    expect(rockaway.lines).toContain('Card $334 · Cash $106');
+    expect(rockaway.lines).toContain('Inside card $334 · Inside cash $106');
     expect(rockaway.lines).toContain('Gas $1,355');
     expect(rockaway.lines).toContain('Paid out: Lays $142');
     expect(rockaway.lines).toContain('Deposit $1,653');
+  });
+
+  it('subtracts same-day invoice cash from leftover cash, not from another store', () => {
+    const tillCash = [
+      { storeId: 'S001', label: 'LA PROVEEDORA LATINA LLC cash', amount: 1061.53, day: '2026-10-12' },
+    ];
+    const [rockaway, denville] = planUnderstanding(twoStoreText, { ...ctx, tillCash }).entries;
+    expect(rockaway.lines).toContain('Till cash already out: LA PROVEEDORA LATINA LLC cash $1,061.53');
+    expect(rockaway.lines.join('\n')).toContain('Payouts exceed cash by $1,097.53');
+    expect(denville.lines.join('\n')).not.toContain('PROVEEDORA');
+    const otherDay = planUnderstanding(twoStoreText, {
+      ...ctx,
+      tillCash: [{ ...tillCash[0], day: '2026-10-11' }],
+    }).entries[0];
+    expect(otherDay.lines.join('\n')).not.toContain('PROVEEDORA');
   });
 
   it('reads a person-name till payout and keeps a deposit typo as written', () => {
@@ -193,6 +208,27 @@ describe('planUnderstanding: other kinds', () => {
     expect(entry.payload).toMatchObject({ vendor: 'Empire Snacks LLC', amount: 136.8 });
     expect(entry.lines.join('\n')).toContain('⚠️ Line items do not add up to the invoice total.');
     expect(entry.lines.join('\n')).not.toContain("I'll remind");
+  });
+
+  it('does not ask to check payments.amount when paid cash already covers the total', () => {
+    const plan = planUnderstanding(
+      {
+        kind: 'invoice',
+        confidence: 0.9,
+        needsReview: ['payments.amount'],
+        invoice: {
+          vendorName: 'LA PROVEEDORA LATINA LLC',
+          invoiceNumber: '200242668',
+          invoiceDate: '2026-10-22',
+          lineItems: [{ description: 'item', quantity: 1, unitPrice: 1061.53, amount: 1061.53 }],
+          total: 1061.53,
+          paymentStatus: 'paid_cash',
+        },
+      },
+      ctx
+    );
+    expect(plan.entries[0].lines.join('\n')).toContain('paid cash');
+    expect(plan.entries[0].lines.join('\n')).not.toContain('Please check');
   });
 
   it('offers a 3-days-before reminder on an unpaid invoice with a due date', () => {
@@ -592,10 +628,40 @@ describe('planUnderstanding: work schedule', () => {
     expect(plan.entries[0].lines).toEqual(['📅 Rockaway · week of Mon, Oct 26', 'Maria 16h', 'Sam 8h', 'Total 24h']);
   });
 
+  it('turns a 7-Eleven Time In/Out sheet into hours and never keeps pay', () => {
+    const plan = planUnderstanding(
+      sheet(
+        [
+          {
+            name: 'Umar',
+            statedTotalHours: 72,
+            adjustedHours: null,
+            shifts: [day('Fri', '05:45', '16:06'), day('Sat', '05:53', '16:10')],
+          },
+          {
+            name: 'Raeen',
+            statedTotalHours: null,
+            adjustedHours: null,
+            shifts: [day('Fri', '21:00', '07:00')],
+          },
+        ],
+        { weekStart: '2026-10-30' }
+      ),
+      manager
+    );
+    expect(plan.entries[0].payload).toMatchObject({ _kind: 'work_schedule', week_start: '2026-10-30' });
+    expect(plan.entries[0].lines.join('\n')).toContain('Umar');
+    expect(plan.entries[0].lines.join('\n')).toContain('Raeen 10h');
+    expect(JSON.stringify(plan.entries[0].payload)).not.toMatch(/wage|salary|payroll|Pay Period|\$/i);
+  });
+
   it('only lets owners and managers post a schedule', () => {
     const plan = planUnderstanding(sheet([maria]), ctx);
     expect(plan.entries).toEqual([]);
     expect(plan.notice).toContain('Only the owner or a manager');
+    expect(plan.notice).toContain('Maria 16h');
+    expect(plan.notice).toContain('Total 16h');
+    expect(plan.notice).not.toMatch(/wage|salary|payroll|\$/i);
   });
 
   it('saves nothing when no shift can be read', () => {
@@ -667,7 +733,7 @@ describe('planUnderstanding: work schedule', () => {
   it('builds a group message of hours only', () => {
     const [e] = planUnderstanding(sheet([maria, sam]), manager).entries;
     expect(scheduleGroupMessage(e.payload, 'Rockaway')).toBe(
-      ['📅 Rockaway · hours for week of Mon, Oct 26', 'Maria 16h', 'Sam 8h', 'Total 24h', '', 'Hours come from the posted schedule.'].join('\n')
+      ['📅 Rockaway · hours for week of Mon, Oct 26', 'Maria 16h', 'Sam 8h', 'Total 24h', '', 'Hours come from the posted sheet.'].join('\n')
     );
     expect(scheduleGroupMessage({ _kind: 'daily_close' }, 'Rockaway')).toBeNull();
   });

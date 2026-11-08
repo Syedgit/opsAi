@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import { isMissingTable } from './prismaMissing';
 
 /**
  * Used by both Vercel functions (import from /lib) and the Express app.
@@ -37,12 +38,16 @@ export async function resolveStoreIdForIncomingMessage(
   const tryPhone = mode === 'phone_number' || mode === 'both';
 
   if (tryGroup && gid) {
-    const row = await prisma.storeWhatsAppGroup.findFirst({
-      where: { whatsappGroupId: gid, active: true },
-      select: { storeId: true },
-    });
-    if (row) {
-      return { storeId: row.storeId, source: 'group' };
+    try {
+      const row = await prisma.storeWhatsAppGroup.findFirst({
+        where: { whatsappGroupId: gid, active: true },
+        select: { storeId: true },
+      });
+      if (row) {
+        return { storeId: row.storeId, source: 'group' };
+      }
+    } catch (error) {
+      if (!isMissingTable(error)) throw error;
     }
     if (mode === 'group') {
       return { storeId: null, source: 'none' };

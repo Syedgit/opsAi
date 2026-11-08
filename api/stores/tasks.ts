@@ -22,10 +22,11 @@ import {
   saveVendors,
 } from '../../lib/understanding/profileStore';
 import {
-  PICTURE_PURPOSE_LABEL,
+  MAX_PICTURE_FIELDS,
+  PICTURE_FIELD_PURPOSES,
   PICTURE_TEMPLATE_KINDS,
-  PICTURE_TEMPLATE_PRESETS,
   describePictureTemplate,
+  pictureMapsBoard,
 } from '../../lib/understanding/pictureTemplate';
 import { sampleFromDailyClosePhoto } from '../../lib/understanding/closeSample';
 import { sampleFromInvoicePhoto } from '../../lib/understanding/invoiceSample';
@@ -81,9 +82,9 @@ const BodySchema = z.discriminatedUnion('action', [
       note: z.string().max(400).optional(),
       fields: z.array(z.object({
         label: z.string().max(80).optional(),
-        purpose: z.enum(['fuel', 'store_credit', 'cash', 'payout', 'ignore']),
+        purpose: z.enum(PICTURE_FIELD_PURPOSES),
         note: z.string().max(120).optional(),
-      })).max(8),
+      })).max(MAX_PICTURE_FIELDS),
     }),
   }),
   z.object({
@@ -154,11 +155,7 @@ function vendorCatalog(profileJson: unknown) {
 }
 
 function pictureMaps(profileJson: unknown) {
-  return {
-    pictureTemplates: parseStoredProfile(profileJson).pictureTemplates,
-    pictureTemplatePresets: PICTURE_TEMPLATE_PRESETS,
-    picturePurposes: Object.entries(PICTURE_PURPOSE_LABEL).map(([id, label]) => ({ id, label })),
-  };
+  return pictureMapsBoard(parseStoredProfile(profileJson).pictureTemplates);
 }
 
 function templateView(t: {

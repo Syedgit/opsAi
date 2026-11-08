@@ -39,4 +39,12 @@ describe('isWhatsAppCommand', () => {
   it('rejects regular messages', () => {
     expect(isWhatsAppCommand('Sales cash 100')).toBe(false);
   });
+
+  it('does not treat a handwritten close caption as the old STORE link command', () => {
+    expect(isWhatsAppCommand('store sales')).toBe(false);
+    expect(isWhatsAppCommand('Store sale')).toBe(false);
+    expect(isWhatsAppCommand('store cash 114')).toBe(false);
+    expect(isWhatsAppCommand('STORE')).toBe(true);
+    expect(isWhatsAppCommand('STORE S001')).toBe(true);
+  });
 });

@@ -271,15 +271,20 @@
             vertical-align: top;
         }
         .sched-grid th { background: var(--bg-light); font-size: 12px; font-weight: 600; }
-        .sched-grid input[type="time"] {
+        .sched-grid input.sched-shift {
             width: 100%;
-            min-width: 0;
-            padding: 4px;
+            min-width: 72px;
+            padding: 6px 4px;
             border: 1px solid var(--border);
             border-radius: 4px;
             font-size: 12px;
+            text-align: center;
         }
         .sched-name { font-weight: 600; min-width: 110px; }
+        .sched-hours { display: block; white-space: nowrap; font-weight: 600; font-size: 12px; margin-top: 4px; }
+        .sched-row-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+        .sched-row-actions button { padding: 2px 6px; font-size: 11px; }
+        .sched-week-total { width: 100%; font-weight: 600; margin: 0 0 8px; }
         .sched-wrap { overflow-x: auto; }
         .sched-add { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
         .sched-add input[type="text"] { flex: 1; min-width: 140px; padding: 8px; border: 1px solid var(--border); border-radius: 6px; }
@@ -1381,6 +1386,12 @@
         const SCHED_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
         let scheduleDraft = { weekStart: '', rows: [] };
 
+        function weekDays() {
+            const iso = scheduleDraft.weekStart;
+            const start = iso ? new Date(iso + 'T12:00:00Z').getUTCDay() : 0;
+            return [0, 1, 2, 3, 4, 5, 6].map(function (i) { return SCHED_DAYS[(start + i) % 7]; });
+        }
+
         function applyBusinessModules(modules) {
             currentModules = modules || { money: true, fuel: true, orders: true, schedules: true, tasks: true };
             document.querySelectorAll('[data-mod]').forEach(function (el) {
@@ -1633,6 +1644,97 @@
             return String(Number(match[1])).padStart(2, '0') + ':' + match[2];
         }
 
+        function parseClockJs(value) {
+            if (!value) return null;
+            const match = String(value).trim().toLowerCase().replace(/\./g, '').match(/^(\d{1,2})(?::(\d{2}))?\s*(a|p|am|pm)?$/);
+            if (!match) return null;
+            let hours = Number(match[1]);
+            const minutes = match[2] ? Number(match[2]) : 0;
+            const meridiem = match[3];
+            if (minutes > 59) return null;
+            if (meridiem) {
+                if (hours < 1 || hours > 12) return null;
+                if (meridiem.startsWith('p') && hours < 12) hours += 12;
+                if (meridiem.startsWith('a') && hours === 12) hours = 0;
+            } else if (hours > 23 || !match[2]) {
+                return null;
+            }
+            return hours * 60 + minutes;
+        }
+
+        function parseBareHourJs(raw, role) {
+            if (!/^\d{1,2}$/.test(raw)) return null;
+            const n = Number(raw);
+            if (n > 23) return null;
+            if (n > 12) return n * 60;
+            if (role === 'start') {
+                if (n >= 1 && n <= 6) return (n + 12) * 60;
+                if (n === 12) return 12 * 60;
+                return n * 60;
+            }
+            if (n === 12) return 12 * 60;
+            return (n + 12) * 60;
+        }
+
+        function minutesToHHMM(minutes) {
+            const wrapped = ((minutes % (24 * 60)) + 24 * 60) % (24 * 60);
+            const h = Math.floor(wrapped / 60);
+            const m = wrapped % 60;
+            return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+        }
+
+        function parseShiftRange(value) {
+            const text = String(value || '').trim().toLowerCase().replace(/\s+/g, '');
+            if (!text || text === 'off' || text === '-' || text === 'x') return null;
+            const match = text.match(/^(.+?)(?:-|–|to)(.+)$/);
+            if (!match) return null;
+            const startMins = parseClockJs(match[1]) != null ? parseClockJs(match[1]) : parseBareHourJs(match[1], 'start');
+            const endMins = parseClockJs(match[2]) != null ? parseClockJs(match[2]) : parseBareHourJs(match[2], 'end');
+            if (startMins == null || endMins == null) return null;
+            return { start: minutesToHHMM(startMins), end: minutesToHHMM(endMins) };
+        }
+
+        function formatClockJs(minutes) {
+            const h24 = Math.floor(minutes / 60) % 24;
+            const m = minutes % 60;
+            const suffix = h24 >= 12 ? 'p' : 'a';
+            const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+            return m === 0 ? (h12 + suffix) : (h12 + ':' + String(m).padStart(2, '0') + suffix);
+        }
+
+        function formatShiftRange(start, end) {
+            const startMins = parseClockJs(start);
+            const endMins = parseClockJs(end);
+            if (startMins == null || endMins == null) return '';
+            return formatClockJs(startMins) + '\u2013' + formatClockJs(endMins);
+        }
+
+        function cellMinutes(cell) {
+            const startMins = parseClockJs(cell && cell.start);
+            const endMins = parseClockJs(cell && cell.end);
+            if (startMins == null || endMins == null || startMins === endMins) return 0;
+            return endMins < startMins ? endMins + 24 * 60 - startMins : endMins - startMins;
+        }
+
+        function rowHours(row) {
+            let minutes = 0;
+            SCHED_DAYS.forEach(function (day) { minutes += cellMinutes(row.days[day]); });
+            return Math.round((minutes / 60) * 100) / 100;
+        }
+
+        function weekHours() {
+            return Math.round(scheduleDraft.rows.reduce(function (sum, row) { return sum + rowHours(row); }, 0) * 100) / 100;
+        }
+
+        function updateScheduleHours(container) {
+            scheduleDraft.rows.forEach(function (row, ri) {
+                const cell = container.querySelector('[data-row-hours="' + ri + '"]');
+                if (cell) cell.textContent = fmtHours(rowHours(row));
+            });
+            const total = document.getElementById('schedWeekTotal');
+            if (total) total.textContent = 'Week total ' + fmtHours(weekHours());
+        }
+
         function shiftDayKey(shift) {
             const three = String(shift.day || '').trim().slice(0, 3);
             const titled = three.charAt(0).toUpperCase() + three.slice(1).toLowerCase();
@@ -1681,9 +1783,10 @@
         }
 
         function draftEmployees() {
+            const days = weekDays();
             return scheduleDraft.rows.map(function (row) {
                 const shifts = [];
-                SCHED_DAYS.forEach(function (day, i) {
+                days.forEach(function (day, i) {
                     const cell = row.days[day] || {};
                     if (cell.start && cell.end) {
                         shifts.push({ day: day, date: addDaysIso(scheduleDraft.weekStart, i), start: cell.start, end: cell.end });
@@ -1698,20 +1801,27 @@
             const peopleOpts = (data.people || []).map(function (person) {
                 return '<option value="' + esc(person.name) + '"></option>';
             }).join('');
-            const head = SCHED_DAYS.map(function (day, i) {
+            const days = weekDays();
+            const head = days.map(function (day, i) {
                 const date = scheduleDraft.weekStart ? addDaysIso(scheduleDraft.weekStart, i) : '';
                 const num = date ? new Date(date + 'T12:00:00Z').getUTCDate() : '';
                 return '<th>' + esc(day) + (num ? '<div style="font-weight:400;color:var(--text-light)">' + esc(String(num)) + '</div>' : '') + '</th>';
             }).join('');
             const body = scheduleDraft.rows.map(function (row, ri) {
-                const cells = SCHED_DAYS.map(function (day) {
+                const cells = days.map(function (day) {
                     const cell = row.days[day] || { start: '', end: '' };
-                    return '<td><input type="time" data-row="' + ri + '" data-day="' + day + '" data-field="start" value="' + esc(cell.start) + '" aria-label="Start">' +
-                        '<input type="time" data-row="' + ri + '" data-day="' + day + '" data-field="end" value="' + esc(cell.end) + '" aria-label="End"></td>';
+                    const shown = formatShiftRange(cell.start, cell.end);
+                    return '<td><input type="text" class="sched-shift" data-row="' + ri + '" data-day="' + day + '" data-field="shift" value="' + esc(shown) + '" placeholder="9-5" inputmode="text" aria-label="' + esc(day) + ' hours"></td>';
                 }).join('');
                 return '<tr><td class="sched-name"><input type="text" data-row="' + ri + '" data-field="name" value="' + esc(row.name) + '" placeholder="Name" list="schedPeople">' +
-                    '<button type="button" class="btn btn-secondary" data-remove-row="' + ri + '" style="margin-top:6px;padding:4px 8px;font-size:12px;">Remove</button></td>' + cells + '</tr>';
+                    '<span class="sched-hours" data-row-hours="' + ri + '">' + esc(fmtHours(rowHours(row))) + '</span>' +
+                    '<div class="sched-row-actions"><button type="button" class="btn btn-secondary" data-fill-weekdays="' + ri + '">Weekdays 9–5</button>' +
+                    '<button type="button" class="btn btn-secondary" data-remove-row="' + ri + '">Remove</button></div></td>' +
+                    cells + '</tr>';
             }).join('');
+            const weekFromSheet = (data.schedules || []).some(function (item) {
+                return item.data && item.data.week_start === scheduleDraft.weekStart;
+            });
             const posted = (data.schedules || []).length
                 ? '<div id="schedHistory"></div>'
                 : '';
@@ -1723,11 +1833,15 @@
                 '<button type="button" class="btn btn-secondary" id="schedCopy">Copy last week</button>' +
                 '<button type="button" class="btn btn-primary" id="schedPublish">Publish week</button>' +
                 '<span class="sched-status" id="schedStatus"></span></div>' +
+                '<div class="sched-week-total" id="schedWeekTotal">Week total ' + esc(fmtHours(weekHours())) + '</div>' +
                 '<div class="sched-wrap"><table class="sched-grid"><thead><tr><th>Person</th>' + head + '</tr></thead><tbody>' + body + '</tbody></table></div>' +
                 '<div class="sched-add"><input type="text" id="schedNewName" list="schedPeople" placeholder="Add a person">' +
                 '<button type="button" class="btn btn-secondary" id="schedAddPerson">Add</button></div>' +
                 '<datalist id="schedPeople">' + peopleOpts + '</datalist>' +
-                '<p class="sched-note">Hours only. Publish posts this week to the store WhatsApp group. Pay is never calculated or stored.</p>' +
+                '<p class="sched-note">' + (weekFromSheet
+                    ? 'This week is from the sheet posted in WhatsApp. Edit here, or send a new photo of the 7-Eleven Shift Schedule in the group and I\'ll add up hours from Time In / Time Out.'
+                    : 'Send a photo of the 7-Eleven Shift Schedule in the WhatsApp group (Time In / Time Out, Friday through Thursday). I add up hours from the sheet and ignore Pay Period. Or type 9-5 here / tap Weekdays 9–5.') +
+                ' Hours only. Every Thursday owners and managers get this week\'s hours. Pay is never calculated or stored.</p>' +
                 posted;
             if (posted) renderSchedules(document.getElementById('schedHistory'), data.schedules);
             bindScheduleBoard(container, data);
@@ -1735,13 +1849,34 @@
 
         function bindScheduleBoard(container, data) {
             container.querySelectorAll('input[data-row]').forEach(function (input) {
-                input.addEventListener('change', function () {
+                const applyShift = function (tidy) {
                     const i = Number(input.getAttribute('data-row'));
                     const row = scheduleDraft.rows[i];
                     if (!row) return;
                     const field = input.getAttribute('data-field');
-                    if (field === 'name') row.name = input.value;
-                    else if (row.days[input.getAttribute('data-day')]) row.days[input.getAttribute('data-day')][field] = input.value;
+                    if (field === 'name') {
+                        row.name = input.value;
+                        return;
+                    }
+                    if (field !== 'shift') return;
+                    const day = input.getAttribute('data-day');
+                    if (!row.days[day]) row.days[day] = { start: '', end: '' };
+                    const parsed = parseShiftRange(input.value);
+                    row.days[day] = parsed ? { start: parsed.start, end: parsed.end } : { start: '', end: '' };
+                    if (tidy && parsed) input.value = formatShiftRange(parsed.start, parsed.end);
+                    updateScheduleHours(container);
+                };
+                input.addEventListener('input', function () { applyShift(false); });
+                input.addEventListener('change', function () { applyShift(true); });
+            });
+            container.querySelectorAll('[data-fill-weekdays]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    const row = scheduleDraft.rows[Number(btn.getAttribute('data-fill-weekdays'))];
+                    if (!row) return;
+                    ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].forEach(function (day) {
+                        row.days[day] = { start: '09:00', end: '17:00' };
+                    });
+                    renderScheduleBoard(container, data);
                 });
             });
             container.querySelectorAll('[data-remove-row]').forEach(function (btn) {

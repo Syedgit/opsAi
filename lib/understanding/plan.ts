@@ -4,6 +4,7 @@ import {
   describeBalance,
   looksLikePaymentUpdate,
   matchOpenInvoice,
+  paidOf,
   remainingOf,
   settleInvoice,
 } from './invoiceBalance';
@@ -24,6 +25,7 @@ import type { DepositRule, StoreProfile } from './profile';
 import { formatHours, hoursLines, summarizeSchedule, type ScheduleSummary } from './schedule';
 import { WorkScheduleSchema } from './schema';
 import type { DailyCloseReport, DepositReceipt, EquipmentIssue, Invoice, Order, OrderItem, Understanding, WorkSchedule } from './schema';
+import { extraTillForDay, type TillCashItem } from './daySummary';
 import { describeVendorCatalog, matchOrderVendor, matchVendorName, VENDOR_CATEGORY_LABEL, type StoreVendor } from './vendors';
 
 /**
@@ -77,6 +79,8 @@ export interface PlanContext {
   canManageSchedules?: boolean;
   /** Confirmed bills still owed, so a later "paid cash 500 remaining 400" updates the same invoice. */
   openInvoices?: Array<{ actionId: string; storeId: string; invoice: Invoice }>;
+  /** Same-day till cash already confirmed (invoice cash, typed paid-outs). Close payouts stay on the report. */
+  tillCash?: TillCashItem[];
 }
 
 /* --------------------------------- helpers -------------------------------- */
@@ -277,16 +281,22 @@ function scheduleLines(summary: ScheduleSummary, storeName: string): string[] {
 export function scheduleGroupMessage(payload: Record<string, unknown>, storeName: string): string | null {
   if (payload._kind !== 'work_schedule') return null;
   const summary = summarizeSchedule(payload.schedule as WorkSchedule);
-  return [`📅 ${storeName} · hours for ${weekLabel(summary.weekStart)}`, ...hoursLines(summary), `Total ${formatHours(summary.totalHours)}`, '', 'Hours come from the posted schedule.'].join('\n');
+  return [`📅 ${storeName} · hours for ${weekLabel(summary.weekStart)}`, ...hoursLines(summary), `Total ${formatHours(summary.totalHours)}`, '', 'Hours come from the posted sheet.'].join('\n');
 }
 
-function dailyCloseLines(report: DailyCloseReport, storeName: string, checks: Check[]): string[] {
+function dailyCloseLines(
+  report: DailyCloseReport,
+  storeName: string,
+  checks: Check[],
+  extraTill: Array<{ label: string; amount: number }> = []
+): string[] {
   const lines = [`🧾 ${storeName} · ${dateLabel(report.reportDate)}`];
 
   const sales: string[] = [];
-  if (report.cardSales != null) sales.push(`Card ${formatMoney(report.cardSales)}`);
-  if (report.cashSales != null) sales.push(`Cash ${formatMoney(report.cashSales)}`);
-  if (report.storeSalesTotal != null) sales.push(`Store total ${formatMoney(report.storeSalesTotal)}`);
+  const inside = report.fuelSales != null;
+  if (report.cardSales != null) sales.push(`${inside ? 'Inside card' : 'Card'} ${formatMoney(report.cardSales)}`);
+  if (report.cashSales != null) sales.push(`${inside ? 'Inside cash' : 'Cash'} ${formatMoney(report.cashSales)}`);
+  if (report.storeSalesTotal != null) sales.push(`${inside ? 'Inside total' : 'Store total'} ${formatMoney(report.storeSalesTotal)}`);
   if (sales.length > 0) lines.push(sales.join(' · '));
 
   const fuel: string[] = [];
@@ -297,6 +307,9 @@ function dailyCloseLines(report: DailyCloseReport, storeName: string, checks: Ch
 
   if (report.payouts.length > 0) {
     lines.push(`Paid out: ${report.payouts.map((p) => `${p.label} ${formatMoney(p.amount)}`).join(', ')}`);
+  }
+  if (extraTill.length > 0) {
+    lines.push(`Till cash already out: ${extraTill.map((p) => `${p.label} ${formatMoney(p.amount)}`).join(', ')}`);
   }
   if (report.reportedDayTotal != null) lines.push(`Day total ${formatMoney(report.reportedDayTotal)}`);
   if (report.reportedDeposit != null) lines.push(`Deposit ${formatMoney(report.reportedDeposit)}`);
@@ -465,16 +478,39 @@ function reviewLine(needsReview: string[]): string[] {
   return needsReview.length > 0 ? [`❓ Please check: ${needsReview.join(', ')}`] : [];
 }
 
+/** Drop payment-amount review when "paid cash" already means the full total was taken. */
+function invoiceReviewFields(needsReview: string[], invoice: Invoice): string[] {
+  return needsReview.filter((field) => {
+    const key = field.trim().toLowerCase();
+    if (key === 'payments.amount' || key === 'payments' || key === 'payment.amount') {
+      const paid = paidOf(invoice);
+      if (
+        paid > 0 &&
+        (invoice.paymentStatus === 'paid_cash' || invoice.paymentStatus === 'paid_other') &&
+        remainingOf(invoice) <= 0.005
+      ) {
+        return false;
+      }
+    }
+    return true;
+  });
+}
+
 export function planUnderstanding(understanding: Understanding, ctx: PlanContext): UnderstandingPlan {
   switch (understanding.kind) {
     case 'daily_close': {
       const entries = understanding.reports.map((report): PlannedEntry => {
         const store = resolveStore(report.storeHint, ctx);
+        const extraTill = extraTillForDay(
+          ctx.tillCash,
+          store.storeId,
+          report.reportDate ?? localDateString(ctx.now, store.profile?.timezone || 'America/New_York')
+        );
         const dateCheck = checkReportDate(report.reportDate, ctx.now);
         const checks = [
           ...(store.warning ? [store.warning] : []),
           ...(dateCheck ? [dateCheck] : []),
-          ...checkDailyClose(report, store.profile),
+          ...checkDailyClose(report, store.profile, extraTill),
         ];
         const suggestedRule = suggestDepositRule(report, store.profile, checks, ctx.canTeachRules);
         return {
@@ -485,7 +521,7 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
           payload: dailyClosePayload(report, checks, understanding.needsReview, suggestedRule),
           confidence: understanding.confidence,
           lines: [
-            ...dailyCloseLines(report, store.storeName, checks),
+            ...dailyCloseLines(report, store.storeName, checks, extraTill),
             ...reviewLine(understanding.needsReview),
             ...(suggestedRule
               ? [
@@ -523,6 +559,7 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
         : `🧾 Invoice · ${invoice.vendorName ?? 'Unknown vendor'} · ${store.storeName}`;
       const lines = invoiceLines(invoice, store.storeName, checks, today);
       if (updatesActionId) lines[0] = header;
+      const review = invoiceReviewFields(understanding.needsReview, invoice);
       return {
         entries: [
           {
@@ -530,9 +567,9 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
             storeId: store.storeId,
             storeName: store.storeName,
             actionType: 'INVOICE_EXPENSE',
-            payload: invoicePayload(invoice, checks, understanding.needsReview, { updatesActionId }),
+            payload: invoicePayload(invoice, checks, review, { updatesActionId }),
             confidence: understanding.confidence,
-            lines: [...lines, ...reviewLine(understanding.needsReview)],
+            lines: [...lines, ...reviewLine(review)],
             checks,
           },
         ],
@@ -561,19 +598,25 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
     }
 
     case 'work_schedule': {
-      if (!ctx.canManageSchedules) {
-        return {
-          entries: [],
-          notice: '📅 That looks like a work schedule. Only the owner or a manager can post schedules, so please ask them to send it.',
-          equipment: null,
-        };
-      }
       const store = resolveStore(understanding.schedule.storeHint, ctx);
       const summary = summarizeSchedule(understanding.schedule);
       if (summary.checks.some((c) => c.id === 'schedule_empty')) {
         return {
           entries: [],
-          notice: "📅 I couldn't read any shift times from that sheet. Try a clearer photo taken straight on, or type it like: Maria Mon 9am-5pm, Tue 9am-5pm.",
+          notice: "📅 I couldn't read any shift times from that sheet. Try a clearer photo of the roster taken straight on, or type it like: Maria Mon 9am-5pm, Tue 9am-5pm.",
+          equipment: null,
+        };
+      }
+      if (!ctx.canManageSchedules) {
+        return {
+          entries: [],
+          notice: [
+            `📅 I read this ${store.storeName} sheet (hours only).`,
+            ...hoursLines(summary),
+            `Total ${formatHours(summary.totalHours)}`,
+            '',
+            'Only the owner or a manager can save and post it. Ask them to send the same sheet in the group.',
+          ].join('\n'),
           equipment: null,
         };
       }
@@ -653,7 +696,7 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
       return {
         entries: [],
         notice:
-          "❓ I couldn't read that as sales, an invoice, a deposit slip, an order list, or an equipment problem.\n\nTry a clearer photo, or type it like: Rockaway cash 298 card 1355 gas 1440. Reply HELP for commands.",
+          "❓ I couldn't read that as sales, an invoice, a deposit slip, a schedule sheet, an order list, or an equipment problem.\n\nTry a clearer photo, or type it like: Rockaway cash 298 card 1355 gas 1440. Reply HELP for commands.",
         equipment: null,
       };
   }
@@ -702,7 +745,7 @@ export function formatEntriesReply(entries: PlannedEntry[]): string {
   const body = entries.map((e) => e.lines.join('\n')).join('\n\n');
   const footer =
     entries.length === 1 && entries[0].kind === 'work_schedule'
-      ? "Reply OK to save and post the hours, FIX <name> <hours> to correct someone's total (like FIX maria 30), or CANCEL."
+      ? "Reply OK to save and post the hours from this sheet, FIX <name> <hours> to correct someone's total (like FIX maria 30), or CANCEL."
       : entries.length === 1 && entries[0].kind === 'order'
       ? orderReplyFooter(entries[0])
       : entries.length > 1

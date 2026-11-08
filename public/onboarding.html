@@ -208,7 +208,7 @@
                 <img id="sampleClosePreview" alt="" style="display: none; max-width: 220px; margin-top: 8px; border-radius: 8px; border: 1px solid var(--border);">
                 <div id="pictureMapBlock" style="margin-top: 16px;">
                     <label>Picture map (what to take from that photo)</label>
-                    <div class="help-text">Pick a known layout, then change the labels to match this store. Fuel page and tender page are two maps — save this one now, add the other later on Tasks. The photo is not stored — only the map is.</div>
+                    <div class="help-text">Optional. Pick a known close layout (POS fuel page, tender page, or handwritten store sales). You can skip this and add more pages anytime under Tasks → Store admin — invoices and schedules too. The photo is not stored — only the map is.</div>
                     <div id="picPresetChips" style="margin: 8px 0;"></div>
                     <input type="text" id="picMapTitle" maxlength="80" placeholder="Name of this page" style="margin-bottom: 8px;">
                     <div id="picFieldList"></div>
@@ -690,12 +690,14 @@
             },
             {
                 id: 'notebook_store_sales', title: 'Handwritten store sales', kind: 'daily_close',
-                note: 'Read the footer totals only. Product lines are not an order.',
+                note: 'Gas site: inside shop (cigs, drinks) plus gas. Read footer totals only. Product lines are today’s inside sales, not an order.',
                 fields: [
                     { label: 'Store Credit', purpose: 'store_credit' },
                     { label: 'Store Cash', purpose: 'cash' },
                     { label: 'Gas', purpose: 'fuel' },
                     { label: 'ATM / named paid-out', purpose: 'payout' },
+                    { label: 'Total', purpose: 'inside_total' },
+                    { label: 'Net cash', purpose: 'day_total' },
                     { label: 'product lines (Marlboro, Lava, …)', purpose: 'ignore' },
                 ],
             },
@@ -741,7 +743,7 @@
             }
             if (e.target.id === 'addPicFieldBtn') {
                 const list = document.getElementById('picFieldList');
-                if (list.querySelectorAll('[data-pic-field]').length >= 8) return;
+                if (list.querySelectorAll('[data-pic-field]').length >= 12) return;
                 list.insertAdjacentHTML('beforeend', picFieldRow());
                 return;
             }

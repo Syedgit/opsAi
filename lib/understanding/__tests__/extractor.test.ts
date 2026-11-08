@@ -236,8 +236,10 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('Pay by');
     expect(prompt).toContain('"kind":"order"');
     expect(prompt).toContain('handwritten "store sales" notebook');
+    expect(prompt).toContain('inside shop (cigarettes, drinks, snacks)');
     expect(prompt).toContain('that page is the document');
     expect(prompt).toContain('footer totals only');
+    expect(prompt).toContain('do not list those product lines as an order');
     expect(prompt).toContain('Grand Total Store Sales Reading');
     expect(prompt).toContain('Total Fuel Sales');
     expect(prompt).toContain('Cash Acceptor Cash');
@@ -248,6 +250,11 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('"cash acceptor cash" means cash_sales');
     expect(prompt).toContain('remainingDue');
     expect(prompt).toContain('paid cash 500 remaining 400');
+    expect(prompt).toContain('Shift Schedule');
+    expect(prompt).toContain('Time In');
+    expect(prompt).toContain('Time Out');
+    expect(prompt).toContain('Pay Period');
+    expect(prompt).toContain('Friday through Thursday');
   });
 
   it('lists the store vendors the owner set at signup', () => {

@@ -188,6 +188,8 @@ function fakePrisma(templates: Row[]) {
     },
     userDirectory: { findMany: async () => [] },
     storeWhatsAppGroup: { findMany: async () => [] },
+    messageLog: { findUnique: async () => null, create: async () => ({}) },
+    pendingActions: { findMany: async () => [] },
   };
 }
 

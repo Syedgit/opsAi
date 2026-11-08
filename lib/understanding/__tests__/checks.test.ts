@@ -186,6 +186,18 @@ describe('checkDailyClose', () => {
     expect(leftover?.actual).toBe(765.14);
   });
 
+  it('also subtracts same-day invoice cash that is not on the close', () => {
+    const checks = checkDailyClose(
+      report({ cashSales: 2500, payouts: [{ label: 'Lays', amount: 142 }] }),
+      null,
+      [{ label: 'LA PROVEEDORA LATINA LLC cash', amount: 1061.53 }]
+    );
+    const leftover = checks.find((c) => c.id === 'cash_after_payouts');
+    expect(leftover?.status).toBe('pass');
+    expect(leftover?.expected).toBe(1296.47);
+    expect(leftover?.actual).toBe(2500);
+  });
+
   it('flags a deposit that no usual rule explains', () => {
     const check = checkDailyClose({ ...denville, reportedDeposit: 1000 }).find(
       (c) => c.id === 'deposit_unexplained'
@@ -301,6 +313,11 @@ describe('matchStore', () => {
   it('matches the exact spelling and a name with the brand', () => {
     expect(matchStore('Denville', stores).profile?.storeId).toBe('S002');
     expect(matchStore('DENVILLE EXXON', stores).profile?.storeId).toBe('S002');
+  });
+
+  it('matches a ship-to line like 20840-EXXON ROCKAWAY to Rockaway', () => {
+    expect(matchStore('20840-EXXON ROCKAWAY', stores).profile?.storeId).toBe('S001');
+    expect(matchStore('7-ELEVEN ROCKAWAY', stores).profile?.storeId).toBe('S001');
   });
 
   it('does not guess for an unknown name', () => {

@@ -4,6 +4,7 @@ import { startOfDay, endOfDay, startOfMonth, endOfMonth } from 'date-fns';
 import { getAuthUser, requireAuthUser } from '../../lib/apiAuth';
 import { requireStoreAccess, isMockRequested } from '../../lib/storeAccess';
 import { getGroupSetupMode, isGroupAutoProvisionEnabled } from '../../lib/whatsappGroupConfig';
+import { isMissingTable } from '../../lib/prismaMissing';
 import { logAppError, loggedHandler, serializeError } from '../../lib/requestLog';
 import { readStoredSetup } from '../../lib/tasks/storeSetup';
 import { dashboardModules } from '../../lib/businessProfile';
@@ -229,7 +230,7 @@ async function sendWhatsAppGroupStatus(req: VercelRequest, res: VercelResponse, 
       orderBy: { updatedAt: 'desc' },
     });
   } catch (error) {
-    logAppError('stores.whatsapp_group.provision', serializeError(error));
+    if (!isMissingTable(error)) logAppError('stores.whatsapp_group.provision', serializeError(error));
   }
   try {
     activeGroups = await prisma.storeWhatsAppGroup.findMany({
@@ -237,7 +238,7 @@ async function sendWhatsAppGroupStatus(req: VercelRequest, res: VercelResponse, 
       select: { id: true, whatsappGroupId: true, createdAt: true },
     });
   } catch (error) {
-    logAppError('stores.whatsapp_group.groups', serializeError(error));
+    if (!isMissingTable(error)) logAppError('stores.whatsapp_group.groups', serializeError(error));
   }
 
   res.json({

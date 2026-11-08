@@ -36,8 +36,10 @@ function dayLabel(date: string): string {
   return parsed.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
-function payloadOf(row: DayActivityRow): Record<string, unknown> {
-  return row.payload ?? {};
+function payloadOf(row: { payload?: Record<string, unknown>; payloadJson?: unknown }): Record<string, unknown> {
+  if (row.payload && typeof row.payload === 'object') return row.payload;
+  const json = row.payloadJson;
+  return json && typeof json === 'object' && !Array.isArray(json) ? (json as Record<string, unknown>) : {};
 }
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -91,7 +93,7 @@ export function collectPaidOuts(rows: DayActivityRow[]): Array<{ label: string; 
       const label = String(p.reason ?? p.label ?? 'paid out').trim().slice(0, 40) || 'paid out';
       out.push({ label, amount });
     }
-    if (row.type === 'INVOICE_EXPENSE' || p._kind === 'invoice') {
+    if ((row.type === 'INVOICE_EXPENSE' || p._kind === 'invoice') && p._kind !== 'invoice_payment') {
       const invoice = invoiceFromPayload(p);
       if (invoice) {
         const vendor = (invoice.vendorName ?? String(p.vendor ?? 'vendor')).trim() || 'vendor';
@@ -104,6 +106,66 @@ export function collectPaidOuts(rows: DayActivityRow[]): Array<{ label: string; 
   return out;
 }
 
+/** POS cash written on the close. Null when no close reported a cash figure. */
+export function closeCashOf(rows: DayActivityRow[]): number | null {
+  let cash = 0;
+  let found = false;
+  for (const row of rows) {
+    const p = payloadOf(row);
+    if (row.type === 'STORE_SALES' || p._kind === 'daily_close') {
+      const n = num(p.cash);
+      if (n != null) {
+        cash += n;
+        found = true;
+      }
+    }
+  }
+  return found ? round2(cash) : null;
+}
+
+export function paidOutTotal(paid: Array<{ amount: number }>): number {
+  return round2(paid.reduce((sum, p) => sum + p.amount, 0));
+}
+
+/** Close cash minus every till paid-out (close payouts, typed paid-outs, invoice cash). */
+export function cashAfterTillPaidOuts(rows: DayActivityRow[]): number | null {
+  const cash = closeCashOf(rows);
+  if (cash == null) return null;
+  return round2(cash - paidOutTotal(collectPaidOuts(rows)));
+}
+
+function leftoverLine(cash: number, paid: number): string {
+  return `Cash ${formatMoney(cash)} − paid outs ${formatMoney(paid)} = ${formatMoney(round2(cash - paid))}`;
+}
+
+export type TillCashItem = { storeId: string; label: string; amount: number; day: string | null };
+
+/** Confirmed invoice cash / typed paid-outs (not close payout lines — those live on the report). */
+export function tillCashItemsFromRows(
+  rows: Array<{ storeId: string; type: string; payloadJson?: unknown; payload?: Record<string, unknown>; createdAt?: Date }>,
+  timeZone: string
+): TillCashItem[] {
+  const items: TillCashItem[] = [];
+  for (const row of rows) {
+    const payload = payloadOf(row as DayActivityRow);
+    if (payload._kind === 'daily_close' || row.type === 'STORE_SALES') continue;
+    const day = payloadDate(payload) ?? (row.createdAt instanceof Date ? localDateString(row.createdAt, timeZone) : null);
+    for (const paid of collectPaidOuts([{ type: row.type, payload }])) {
+      items.push({ storeId: row.storeId, label: paid.label, amount: paid.amount, day });
+    }
+  }
+  return items;
+}
+
+export function extraTillForDay(
+  items: TillCashItem[] | undefined,
+  storeId: string,
+  day: string | null
+): Array<{ label: string; amount: number }> {
+  if (!items || items.length === 0 || !day) return [];
+  return items.filter((item) => item.storeId === storeId && item.day === day).map(({ label, amount }) => ({ label, amount }));
+}
+
 export function formatDaySummary(activity: DayActivity): string | null {
   return activity.kind === 'paid_outs' ? formatPaidOutSummary(activity) : formatStoreDaySummary(activity);
 }
@@ -111,12 +173,15 @@ export function formatDaySummary(activity: DayActivity): string | null {
 function formatPaidOutSummary(activity: DayActivity): string | null {
   const paid = collectPaidOuts(activity.rows);
   if (paid.length === 0) return null;
-  const total = round2(paid.reduce((sum, p) => sum + p.amount, 0));
-  return [
+  const total = paidOutTotal(paid);
+  const cash = closeCashOf(activity.rows);
+  const lines = [
     `💸 ${activity.storeName} · paid outs ${dayLabel(activity.day)}`,
     ...paid.map((p) => `• ${p.label} ${formatMoney(p.amount)}`),
     `Total ${formatMoney(total)}`,
-  ].join('\n');
+  ];
+  if (cash != null) lines.push(leftoverLine(cash, total));
+  return lines.join('\n');
 }
 
 function formatStoreDaySummary(activity: DayActivity): string | null {
@@ -165,16 +230,21 @@ function formatStoreDaySummary(activity: DayActivity): string | null {
   }
 
   const paid = collectPaidOuts(activity.rows);
+  const cashReported = closeCashOf(activity.rows);
 
   if (hasSales) {
     const bits = [];
-    if (cash) bits.push(`cash ${formatMoney(round2(cash))}`);
-    if (card) bits.push(`card ${formatMoney(round2(card))}`);
+    const inside = Boolean(fuel);
+    if (cash) bits.push(`${inside ? 'inside cash' : 'cash'} ${formatMoney(round2(cash))}`);
+    if (card) bits.push(`${inside ? 'inside card' : 'card'} ${formatMoney(round2(card))}`);
     if (fuel) bits.push(`gas ${formatMoney(round2(fuel))}`);
     lines.push(bits.length > 0 ? `Sales: ${bits.join(' · ')}` : 'Sales posted');
   }
   if (paid.length > 0) {
     lines.push(`Paid out: ${paid.map((p) => `${p.label} ${formatMoney(p.amount)}`).join(', ')}`);
+    if (cashReported != null) {
+      lines.push(`Cash after paid-outs ${formatMoney(round2(cashReported - paidOutTotal(paid)))}`);
+    }
   }
   if (invoices.length > 0) {
     lines.push(`Invoices: ${invoices.join(', ')}${invoices.length > 1 ? ` · total ${formatMoney(round2(invoiceTotal))}` : ''}`);
@@ -195,12 +265,7 @@ export function summaryKindForStore(
   batch: Array<{ type: string; payload: Record<string, unknown> }>
 ): DayActivity['kind'] | null {
   const hasClose = batch.some((r) => r.type === 'STORE_SALES' || r.payload._kind === 'daily_close');
-  const hasPaidOut = batch.some(
-    (r) =>
-      r.type === 'PAID_OUT' ||
-      (Array.isArray((r.payload.report as { payouts?: unknown[] } | undefined)?.payouts) &&
-        ((r.payload.report as { payouts: unknown[] }).payouts.length > 0))
-  );
+  const hasPaidOut = collectPaidOuts(batch).length > 0;
   if (storeType === 'convenience' || storeType === 'gas_station' || storeType === 'other') {
     return hasClose ? 'store_day' : null;
   }
@@ -263,4 +328,28 @@ export async function loadDayActivity(
 
 export function storeTypeOf(setupJson: unknown): string | null {
   return readStoredSetup(setupJson)?.storeType ?? null;
+}
+
+const TILL_CASH_LOOKBACK_MS = 4 * 24 * 60 * 60 * 1000;
+
+/** Same-day invoice cash and typed paid-outs already confirmed, so a later close can subtract them. */
+export async function loadConfirmedTillCash(
+  prisma: PrismaClient,
+  storeIds: string[],
+  now: Date = new Date(),
+  timeZone = 'America/New_York'
+): Promise<TillCashItem[]> {
+  if (storeIds.length === 0) return [];
+  const found = await prisma.pendingActions.findMany({
+    where: {
+      storeId: { in: storeIds },
+      status: PendingStatus.CONFIRMED,
+      type: { in: ['INVOICE_EXPENSE', 'PAID_OUT'] },
+      createdAt: { gte: new Date(now.getTime() - TILL_CASH_LOOKBACK_MS) },
+    },
+    select: { storeId: true, type: true, payloadJson: true, createdAt: true },
+    orderBy: { createdAt: 'asc' },
+    take: 200,
+  });
+  return tillCashItemsFromRows(found, timeZone);
 }

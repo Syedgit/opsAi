@@ -20,7 +20,7 @@
         "replyContains": ["Saved", "paid outs", "Lays $142", "Posted to the group"],
         "replyNotContains": ["Sales:"],
         "groupPosts": 1,
-        "groupPostContains": ["paid outs", "Lays $142"],
+        "groupPostContains": ["paid outs", "Lays $142", "Cash $106 − paid outs $142"],
         "groupPostNotContains": ["Sales:"],
         "status": { "PENDING": 0, "CONFIRMED": 1 }
       }

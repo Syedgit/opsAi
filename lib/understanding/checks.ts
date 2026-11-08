@@ -130,12 +130,16 @@ export function inferDepositRules(report: DailyCloseReport): DepositRule[] {
   return matches;
 }
 
-export function cashAfterPayouts(report: DailyCloseReport): number | null {
+export function cashAfterPayouts(report: DailyCloseReport, extraTill: Payout[] = []): number | null {
   if (report.cashSales == null) return null;
-  return Math.round((report.cashSales - sumPayouts(report.payouts)) * 100) / 100;
+  return Math.round((report.cashSales - sumPayouts(report.payouts) - sumPayouts(extraTill)) * 100) / 100;
 }
 
-export function checkDailyClose(report: DailyCloseReport, profile?: StoreProfile | null): Check[] {
+export function checkDailyClose(
+  report: DailyCloseReport,
+  profile?: StoreProfile | null,
+  extraTill: Payout[] = []
+): Check[] {
   const checks: Check[] = [];
 
   // Cash Acceptor Cash is all tender cash (including fuel). Do not require it to equal inside non-fuel.
@@ -156,8 +160,8 @@ export function checkDailyClose(report: DailyCloseReport, profile?: StoreProfile
     );
   }
 
-  const leftoverCash = cashAfterPayouts(report);
-  if (leftoverCash != null && report.payouts.length > 0 && report.cashSales != null) {
+  const leftoverCash = cashAfterPayouts(report, extraTill);
+  if (leftoverCash != null && (report.payouts.length > 0 || extraTill.length > 0) && report.cashSales != null) {
     checks.push({
       id: 'cash_after_payouts',
       status: leftoverCash >= 0 ? 'pass' : 'warn',
@@ -392,12 +396,17 @@ const STORE_STOPWORDS = new Set([
   'marathon',
   'speedway',
   'wawa',
+  '7eleven',
+  'seveneleven',
 ]);
 
 function normalizeStoreName(name: string): string {
   const raw = name.toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
   const words = raw.split(/\s+/).filter(Boolean);
-  const kept = words.filter((w) => !STORE_STOPWORDS.has(w));
+  const withoutBrand = words.filter((w) => !STORE_STOPWORDS.has(w));
+  // Ship-to lines like "20840-EXXON ROCKAWAY" keep the place name, drop store numbers and brand.
+  const withoutCodes = withoutBrand.filter((w) => !/^\d+$/.test(w));
+  const kept = withoutCodes.length > 0 ? withoutCodes : withoutBrand;
   // A store named only with brand words ("Exxon Mart") keeps them rather than becoming empty.
   return (kept.length > 0 ? kept : words).join('');
 }

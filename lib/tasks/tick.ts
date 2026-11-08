@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { postToStoreGroups, sendWhatsAppMessage } from '../whatsappMessaging';
 import { maybeMorningDepositText } from '../understanding/depositDue';
+import { maybeThursdayHoursText } from '../understanding/hoursDigest';
 import { alertMessage, escalationMessage, reminderMessage, type MessageRun } from './messages';
 import { dueSoFar } from './schedule';
 import { localDateString } from './time';
@@ -32,6 +33,7 @@ export interface TickResult {
   closed: number;
   errors: number;
   depositNudges: number;
+  hoursDigests: number;
 }
 
 interface TemplateRow {
@@ -287,8 +289,45 @@ async function tickMorningDeposits(
   }
 }
 
+async function tickThursdayHours(
+  prisma: PrismaClient,
+  now: Date,
+  options: { storeId?: string },
+  result: TickResult
+): Promise<void> {
+  const stores = await prisma.storeConfig.findMany({
+    where: { active: true, ...(options.storeId ? { storeId: options.storeId } : {}) },
+    select: { storeId: true, storeName: true, timezone: true, active: true },
+  });
+  for (const store of stores) {
+    try {
+      const due = await maybeThursdayHoursText(prisma, store, now);
+      if (!due) continue;
+      if ((await notifyManagers(prisma, store.storeId, due.text)) === 0) continue;
+      try {
+        await prisma.messageLog.create({
+          data: {
+            messageId: due.messageId,
+            phoneE164: 'opsai',
+            storeId: store.storeId,
+            messageType: 'hours_digest',
+            messageText: due.text,
+            processed: true,
+          },
+        });
+      } catch (error) {
+        if ((error as { code?: string }).code !== 'P2002') throw error;
+      }
+      result.hoursDigests += 1;
+    } catch (error) {
+      result.errors += 1;
+      logAppError('tick.hours', { storeId: store.storeId, ...serializeError(error) });
+    }
+  }
+}
+
 export async function runTaskTick(prisma: PrismaClient, now: Date = new Date(), options: { storeId?: string } = {}): Promise<TickResult> {
-  const result: TickResult = { stores: 0, created: 0, alerted: 0, reminded: 0, escalated: 0, closed: 0, errors: 0, depositNudges: 0 };
+  const result: TickResult = { stores: 0, created: 0, alerted: 0, reminded: 0, escalated: 0, closed: 0, errors: 0, depositNudges: 0, hoursDigests: 0 };
 
   const all = (await prisma.taskTemplate.findMany({ where: options.storeId ? { storeId: options.storeId } : {} })) as TemplateRow[];
   const activeByStore = new Map<string, TemplateRow[]>();
@@ -317,6 +356,12 @@ export async function runTaskTick(prisma: PrismaClient, now: Date = new Date(), 
   } catch (error) {
     result.errors += 1;
     logAppError('tick.deposit', serializeError(error));
+  }
+  try {
+    await tickThursdayHours(prisma, now, options, result);
+  } catch (error) {
+    result.errors += 1;
+    logAppError('tick.hours', serializeError(error));
   }
   logApp('tick.done', { store: options.storeId || 'all', ...result });
   return result;

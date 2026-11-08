@@ -479,9 +479,9 @@
             ? maps.map(function (t) {
                 return '<div class="pic-map"><div class="row"><strong>' + esc(t.title) + '</strong>' +
                     (board.canEdit ? '<button type="button" class="small danger" data-delete-pic="' + esc(t.id) + '">Remove</button>' : '') +
-                    '</div><div class="muted">' + esc(picSummary(t)) + '</div></div>';
+                    '</div><div class="muted">' + esc(kindLabel(t.kind) + ' · ' + picSummary(t)) + '</div></div>';
             }).join('')
-            : '<p class="muted">No picture map yet. Add one so WhatsApp photos use this store’s lines.</p>';
+            : '<p class="muted">No document map yet. Add one so WhatsApp photos use this store’s lines.</p>';
         const editor = board.canEdit ? pictureMapEditor() : '';
         return '<div class="card"><h2>Report samples</h2>' +
             '<p class="muted card-help">Teach opsAi how ' + storeLabel + ' reports. Pick this store in the list above, then paste a message or attach the picture you actually send.</p>' +
@@ -494,10 +494,21 @@
                   '<input type="file" id="sampleInvoicePhoto" accept="image/jpeg,image/png,image/webp,image/gif">' +
                   '<div style="margin-top: 10px;"><button type="submit" class="primary">Save samples</button></div></form>'
                 : '<div class="muted">' + (s.dailyClose ? '<p>' + esc(s.dailyClose) + '</p>' : '') + (s.invoice ? '<p>' + esc(s.invoice) + '</p>' : '') + '</div>') +
-            '<h3 style="font-size:15px;margin:18px 0 8px;">Picture maps</h3>' +
-            '<p class="muted" style="margin-bottom:8px;">Upload a close photo, pick a known layout, then mark what to take and what to ignore. Fuel page and tender page are two maps. The file is not stored — only the map is.</p>' +
+            '<h3 style="font-size:15px;margin:18px 0 8px;">Document maps</h3>' +
+            '<p class="muted" style="margin-bottom:8px;">Each store’s paperwork looks different. Add a close, invoice, or schedule page anytime — onboarding can skip this. Pick a starter layout, rename the lines to match this store, and say what each line means. The photo is preview only; we keep the map, not the file.</p>' +
             mapList + editor +
             '</div>';
+    }
+
+    function kindLabel(id) {
+        const list = board.pictureTemplateKinds || [];
+        const hit = list.find(function (k) { return k.id === id; });
+        return hit ? hit.label : id;
+    }
+
+    function currentPicKind() {
+        const sel = document.getElementById('picMapKind');
+        return (sel && sel.value) || 'daily_close';
     }
 
     function purposeLabel(id) {
@@ -516,15 +527,25 @@
         return parts.join(' · ');
     }
 
+    function purposesForKind(kind) {
+        const all = board.picturePurposes || [
+            { id: 'fuel', label: 'Fuel / gas', kinds: ['daily_close'] },
+            { id: 'store_credit', label: 'Inside card (store credit)', kinds: ['daily_close'] },
+            { id: 'cash', label: 'Inside cash (till / acceptor)', kinds: ['daily_close'] },
+            { id: 'payout', label: 'Comes off cash (named paid-out)', kinds: ['daily_close'] },
+            { id: 'ignore', label: 'Ignore this line', kinds: ['daily_close', 'invoice', 'work_schedule'] },
+        ];
+        return all.filter(function (p) {
+            if (!p.kinds || !p.kinds.length) return true;
+            return p.kinds.indexOf(kind) >= 0;
+        });
+    }
+
     function purposeSelect(selected) {
-        return (board.picturePurposes || [
-            { id: 'fuel', label: 'Fuel' },
-            { id: 'store_credit', label: 'Store credit (inside card)' },
-            { id: 'cash', label: 'Cash (acceptor / till)' },
-            { id: 'payout', label: 'Comes off cash (invoice / paid-out)' },
-            { id: 'ignore', label: 'Ignore (not today’s sales)' },
-        ]).map(function (p) {
-            return '<option value="' + esc(p.id) + '"' + (p.id === selected ? ' selected' : '') + '>' + esc(p.label) + '</option>';
+        const options = purposesForKind(currentPicKind());
+        const value = options.some(function (p) { return p.id === selected; }) ? selected : (options[0] ? options[0].id : 'ignore');
+        return options.map(function (p) {
+            return '<option value="' + esc(p.id) + '"' + (p.id === value ? ' selected' : '') + '>' + esc(p.label) + '</option>';
         }).join('');
     }
 
@@ -539,22 +560,32 @@
 
     function pictureMapEditor() {
         const presets = board.pictureTemplatePresets || [];
+        const kinds = board.pictureTemplateKinds || [
+            { id: 'daily_close', label: 'Close / store sales' },
+            { id: 'invoice', label: 'Invoice' },
+            { id: 'work_schedule', label: 'Shift schedule' },
+        ];
         const chips = presets.map(function (p) {
             return '<button type="button" class="small pic-preset" data-pic-preset="' + esc(p.id) + '">' + esc(p.title) + '</button>';
+        }).join('');
+        const kindOpts = kinds.map(function (k) {
+            return '<option value="' + esc(k.id) + '"' + (k.id === 'daily_close' ? ' selected' : '') + '>' + esc(k.label) + '</option>';
         }).join('');
         return '<form id="pictureMapForm" style="margin-top:12px;">' +
             '<label>Photo (preview only — not saved)</label>' +
             '<input type="file" id="picMapPhoto" accept="image/jpeg,image/png,image/webp,image/gif">' +
             '<img id="picMapPreview" alt="" style="display:none;max-width:240px;margin:8px 0;border-radius:8px;border:1px solid var(--border);">' +
-            '<p class="muted" style="margin:8px 0;">Start from a known layout, then change the labels to match this store’s screen.</p>' +
+            '<p class="muted" style="margin:8px 0;">Start from a known layout, then change the labels to match this store. Add another page later if they send a second sheet.</p>' +
             chips +
+            '<label style="margin-top:10px;">What this page is</label>' +
+            '<select id="picMapKind">' + kindOpts + '</select>' +
             '<label style="margin-top:10px;">Name of this page</label>' +
-            '<input type="text" id="picMapTitle" maxlength="80" placeholder="Exxon Store Close (fuel page)">' +
-            '<label style="margin-top:8px;">What to take</label>' +
+            '<input type="text" id="picMapTitle" maxlength="80" placeholder="Handwritten store sales">' +
+            '<label style="margin-top:8px;">Lines to read</label>' +
             '<div id="picFieldList">' + picFieldRow() + '</div>' +
             '<button type="button" class="small" id="addPicFieldBtn">+ Add line</button>' +
             '<label style="margin-top:10px;">One sentence for the reader (optional)</label>' +
-            '<textarea id="picMapNote" maxlength="400" placeholder="Cash is the acceptor line, not the Cash row."></textarea>' +
+            '<textarea id="picMapNote" maxlength="400" placeholder="Inside shop is Store Credit / Store Cash. Gas is the GAS line. Product lines are not an order."></textarea>' +
             '<div style="margin-top:10px;"><button type="submit" class="primary">Save picture map</button></div></form>';
     }
 
@@ -933,6 +964,8 @@
             const title = document.getElementById('picMapTitle');
             const note = document.getElementById('picMapNote');
             const list = document.getElementById('picFieldList');
+            const kind = document.getElementById('picMapKind');
+            if (kind && preset.kind) kind.value = preset.kind;
             if (title) title.value = preset.title;
             if (note) note.value = preset.note || '';
             if (list) list.innerHTML = (preset.fields || []).map(picFieldRow).join('') || picFieldRow();
@@ -941,7 +974,7 @@
         if (el.id === 'addPicFieldBtn') {
             const list = document.getElementById('picFieldList');
             if (!list) return;
-            if (list.querySelectorAll('[data-pic-field]').length >= 8) { note('err', 'A picture map can have up to 8 lines.'); return; }
+            if (list.querySelectorAll('[data-pic-field]').length >= 12) { note('err', 'A picture map can have up to 12 lines.'); return; }
             list.insertAdjacentHTML('beforeend', picFieldRow());
             return;
         }
@@ -991,6 +1024,13 @@
             if (!file) { preview.style.display = 'none'; preview.removeAttribute('src'); return; }
             preview.src = URL.createObjectURL(file);
             preview.style.display = 'block';
+            return;
+        }
+        if (e.target.id === 'picMapKind') {
+            document.querySelectorAll('#picFieldList [data-pic-field] select').forEach(function (sel) {
+                const keep = sel.value;
+                sel.innerHTML = purposeSelect(keep);
+            });
             return;
         }
         if (e.target.id === 'reportFile') {
@@ -1053,9 +1093,10 @@
             }).filter(function (f) { return f.label.trim(); }) : [];
             const title = (document.getElementById('picMapTitle') || {}).value || '';
             const picNote = (document.getElementById('picMapNote') || {}).value || '';
+            const kind = (document.getElementById('picMapKind') || {}).value || 'daily_close';
             if (await act({
                 action: 'save_picture_template',
-                template: { kind: 'daily_close', title: title, note: picNote, fields: fields },
+                template: { kind: kind, title: title, note: picNote, fields: fields },
             }, function (r) {
                 return r.summary ? 'Picture map saved. ' + r.summary : 'Picture map saved for this store.';
             })) load();

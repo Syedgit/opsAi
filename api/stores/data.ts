@@ -3,9 +3,11 @@ import { PrismaClient } from '@prisma/client';
 import { requireStoreAccess, isMockRequested } from '../../lib/storeAccess';
 import { logAppError, loggedHandler, serializeError } from '../../lib/requestLog';
 import { loadStoreTeam } from '../../lib/tasks/people';
-import { localDateString, weekdayOf } from '../../lib/tasks/time';
+import { localDateString } from '../../lib/tasks/time';
 import { publishDashboardSchedule, type PublishScheduleInput } from '../../lib/publishSchedule';
 import { flattenTillPaidOuts } from '../../lib/understanding/tillPaidOuts';
+import { storeTypeOf } from '../../lib/understanding/daySummary';
+import { scheduleWeekStartOf } from '../../lib/understanding/schedule';
 
 const prisma = new PrismaClient();
 
@@ -170,12 +172,10 @@ function serializeMockData(data: any[]): any[] {
   }));
 }
 
-function sundayWeekStart(timeZone: string, now = new Date()): string {
+function weekStartForStore(timeZone: string, setupJson: unknown, now = new Date()): string {
   const today = localDateString(now, timeZone);
-  const back = weekdayOf(today);
-  const noon = new Date(`${today}T12:00:00Z`);
-  noon.setUTCDate(noon.getUTCDate() - back);
-  return noon.toISOString().slice(0, 10);
+  const startsOn = storeTypeOf(setupJson) === 'seven_eleven' ? 5 : 0;
+  return scheduleWeekStartOf(today, startsOn);
 }
 
 /**
@@ -226,7 +226,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       };
       const store = await prisma.storeConfig.findUnique({
         where: { storeId },
-        select: { storeName: true, timezone: true },
+        select: { storeName: true, timezone: true, setupJson: true },
       });
       const ownerPhone = await prisma.userDirectory.findFirst({
         where: { storeId, isActive: true, role: 'OWNER' },
@@ -236,7 +236,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         storeId,
         storeName: store?.storeName || storeId,
         phoneE164: ownerPhone?.phoneE164 || `dashboard:${access.user.userId}`,
-        weekStart: String(body.weekStart || sundayWeekStart(store?.timezone || 'America/New_York')),
+        weekStart: String(body.weekStart || weekStartForStore(store?.timezone || 'America/New_York', store?.setupJson)),
         employees: Array.isArray(body.employees) ? body.employees : [],
         postToGroup: body.postToGroup !== false,
       });
@@ -325,13 +325,13 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
     if (type === 'schedules') {
       const store = await prisma.storeConfig.findUnique({
         where: { storeId },
-        select: { timezone: true },
+        select: { timezone: true, setupJson: true },
       });
       const team = await loadStoreTeam(prisma, storeId);
       res.json({
         schedules: formatted,
         people: team.whatsapp.map((p) => ({ name: p.name || p.phoneE164, phoneE164: p.phoneE164 })),
-        weekStart: sundayWeekStart(store?.timezone || 'America/New_York'),
+        weekStart: weekStartForStore(store?.timezone || 'America/New_York', store?.setupJson),
       });
       return;
     }

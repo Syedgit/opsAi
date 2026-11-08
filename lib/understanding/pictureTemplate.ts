@@ -1,17 +1,32 @@
 /**
- * Owner-taught picture maps: what to take (and ignore) on a close/invoice photo
- * for this store. The file is not kept; the labels drive later AI reads.
+ * Owner-taught document maps: what to take (and ignore) on a store's paperwork.
+ * Each store's close / invoice / schedule can look different. Onboarding can save one
+ * starter map; Store admin can add more anytime. The photo is not kept — labels drive later reads.
  */
 import { z } from 'zod';
 
-export const PICTURE_TEMPLATE_KINDS = ['daily_close', 'invoice', 'deposit_receipt', 'order'] as const;
+export const PICTURE_TEMPLATE_KINDS = ['daily_close', 'invoice', 'deposit_receipt', 'order', 'work_schedule'] as const;
 export type PictureTemplateKind = (typeof PICTURE_TEMPLATE_KINDS)[number];
 
-export const PICTURE_FIELD_PURPOSES = ['fuel', 'store_credit', 'cash', 'payout', 'ignore'] as const;
+export const PICTURE_FIELD_PURPOSES = [
+  'fuel',
+  'store_credit',
+  'cash',
+  'inside_total',
+  'payout',
+  'day_total',
+  'deposit',
+  'vendor',
+  'invoice_total',
+  'due_date',
+  'paid',
+  'hours',
+  'ignore',
+] as const;
 export type PictureFieldPurpose = (typeof PICTURE_FIELD_PURPOSES)[number];
 
-export const MAX_PICTURE_TEMPLATES = 6;
-export const MAX_PICTURE_FIELDS = 8;
+export const MAX_PICTURE_TEMPLATES = 10;
+export const MAX_PICTURE_FIELDS = 12;
 
 export const PictureFieldSchema = z.object({
   label: z.string().trim().min(1).max(80),
@@ -30,20 +45,60 @@ export const PictureTemplateSchema = z.object({
 export type PictureTemplate = z.infer<typeof PictureTemplateSchema>;
 export type PictureField = z.infer<typeof PictureFieldSchema>;
 
+export const PICTURE_KIND_LABEL: Record<PictureTemplateKind, string> = {
+  daily_close: 'Close / store sales',
+  invoice: 'Invoice',
+  work_schedule: 'Shift schedule',
+  deposit_receipt: 'Bank deposit',
+  order: 'Order list',
+};
+
 export const PICTURE_PURPOSE_LABEL: Record<PictureFieldPurpose, string> = {
-  fuel: 'Fuel',
-  store_credit: 'Store credit (inside card)',
-  cash: 'Cash (acceptor / till)',
-  payout: 'Comes off cash (invoice / paid-out)',
-  ignore: 'Ignore (not today’s sales)',
+  fuel: 'Fuel / gas',
+  store_credit: 'Inside card (store credit)',
+  cash: 'Inside cash (till / acceptor)',
+  inside_total: 'Inside total (shop, not gas)',
+  payout: 'Comes off cash (named paid-out)',
+  day_total: 'Net cash / day total',
+  deposit: 'Bank deposit',
+  vendor: 'Vendor name',
+  invoice_total: 'Invoice total',
+  due_date: 'Due date',
+  paid: 'Already paid / remaining',
+  hours: 'Shift hours (Time In / Out)',
+  ignore: 'Ignore this line',
 };
 
 const PURPOSE_PROMPT: Record<PictureFieldPurpose, string> = {
   fuel: 'fuelSales',
-  store_credit: 'cardSales / store credit (inside non-fuel)',
-  cash: 'cashSales (Cash Acceptor Cash / till cash)',
+  store_credit: 'cardSales / store credit (inside shop)',
+  cash: 'cashSales (till cash / Cash Acceptor Cash)',
+  inside_total: 'storeSalesTotal (inside shop, not gas)',
   payout: 'a payout that comes off cash — never wages or pay rates',
-  ignore: 'ignore (not today’s sales)',
+  day_total: 'reportedDayTotal (Net cash)',
+  deposit: 'reportedDeposit',
+  vendor: 'vendorName',
+  invoice_total: 'invoice total',
+  due_date: 'dueDate / payBy',
+  paid: 'payments / remainingDue',
+  hours: 'work_schedule hours (Time In / Time Out). Never pay.',
+  ignore: 'ignore (not a number we store)',
+};
+
+const PURPOSE_KINDS: Record<PictureFieldPurpose, PictureTemplateKind[]> = {
+  fuel: ['daily_close'],
+  store_credit: ['daily_close'],
+  cash: ['daily_close'],
+  inside_total: ['daily_close'],
+  payout: ['daily_close'],
+  day_total: ['daily_close'],
+  deposit: ['daily_close', 'deposit_receipt'],
+  vendor: ['invoice', 'order'],
+  invoice_total: ['invoice'],
+  due_date: ['invoice'],
+  paid: ['invoice'],
+  hours: ['work_schedule'],
+  ignore: [...PICTURE_TEMPLATE_KINDS],
 };
 
 export interface PictureTemplatePreset {
@@ -82,16 +137,59 @@ export const PICTURE_TEMPLATE_PRESETS: PictureTemplatePreset[] = [
     id: 'notebook_store_sales',
     title: 'Handwritten store sales',
     kind: 'daily_close',
-    note: 'Read the footer totals only. Product lines are not an order.',
+    note: 'Gas site: inside shop (cigs, drinks) plus gas. Read footer totals only. Product lines are today’s inside sales, not an order.',
     fields: [
       { label: 'Store Credit', purpose: 'store_credit' },
       { label: 'Store Cash', purpose: 'cash' },
       { label: 'Gas', purpose: 'fuel' },
       { label: 'ATM / named paid-out', purpose: 'payout' },
+      { label: 'Total', purpose: 'inside_total' },
+      { label: 'Net cash', purpose: 'day_total' },
       { label: 'product lines (Marlboro, Lava, …)', purpose: 'ignore' },
     ],
   },
+  {
+    id: 'vendor_invoice',
+    title: 'Vendor invoice',
+    kind: 'invoice',
+    note: 'Read vendor, total, due date, and what was already paid. Line items are the bill, not an order list.',
+    fields: [
+      { label: 'Vendor', purpose: 'vendor' },
+      { label: 'Total', purpose: 'invoice_total' },
+      { label: 'Due date', purpose: 'due_date' },
+      { label: 'Paid / remaining', purpose: 'paid' },
+    ],
+  },
+  {
+    id: 'shift_schedule',
+    title: 'Shift schedule',
+    kind: 'work_schedule',
+    note: 'Hours only. Time In / Time Out. Skip days marked off. Ignore any printed period header.',
+    fields: [
+      { label: 'Time In', purpose: 'hours' },
+      { label: 'Time Out', purpose: 'hours' },
+      { label: 'Total Hours', purpose: 'hours' },
+      { label: 'printed period header', purpose: 'ignore' },
+    ],
+  },
 ];
+
+export function purposesForKind(kind: PictureTemplateKind): PictureFieldPurpose[] {
+  return PICTURE_FIELD_PURPOSES.filter((p) => PURPOSE_KINDS[p].includes(kind));
+}
+
+export function pictureMapsBoard(templates: PictureTemplate[]) {
+  return {
+    pictureTemplates: templates,
+    pictureTemplatePresets: PICTURE_TEMPLATE_PRESETS,
+    pictureTemplateKinds: Object.entries(PICTURE_KIND_LABEL).map(([id, label]) => ({ id, label })),
+    picturePurposes: PICTURE_FIELD_PURPOSES.map((id) => ({
+      id,
+      label: PICTURE_PURPOSE_LABEL[id],
+      kinds: PURPOSE_KINDS[id],
+    })),
+  };
+}
 
 export function newPictureTemplateId(): string {
   return `pic_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -123,12 +221,13 @@ export function cleanPictureTemplate(input: {
   fields: Array<{ label?: string; purpose: PictureFieldPurpose; note?: string }>;
 }): PictureTemplate | null {
   const title = input.title.trim().slice(0, 80) || 'Picture map';
+  const kind = PICTURE_TEMPLATE_KINDS.includes(input.kind) ? input.kind : 'daily_close';
   const fields = input.fields.map(cleanField).filter((f): f is PictureField => Boolean(f)).slice(0, MAX_PICTURE_FIELDS);
   if (fields.length === 0) return null;
   const note = input.note?.trim().slice(0, 400) || undefined;
   return {
     id: input.id?.trim() || newPictureTemplateId(),
-    kind: input.kind,
+    kind,
     title,
     ...(note ? { note } : {}),
     fields,

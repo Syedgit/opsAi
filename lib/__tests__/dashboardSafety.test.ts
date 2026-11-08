@@ -34,6 +34,9 @@ describe('dashboard.html', () => {
     expect(body).toContain('esc(week)');
     expect(body).not.toMatch(/wage|salary|payroll|rate|\$/i);
     expect(html).toContain('esc(row.name)');
+    expect(html).toContain('sched-shift');
+    expect(html).toContain('Weekdays 9–5');
+    expect(html).toContain('Every Thursday');
     expect(html).not.toMatch(/wage|salary|payroll/i);
   });
 
@@ -77,9 +80,10 @@ describe('tasks.html', () => {
   });
 
   it('lets the owner teach a picture map without storing the photo', () => {
-    expect(tasks).toContain('Picture maps');
+    expect(tasks).toContain('Document maps');
     expect(tasks).toContain('Save picture map');
-    expect(tasks).toContain('The file is not stored');
+    expect(tasks).toContain('we keep the map, not the file');
+    expect(tasks).toContain('invoice, or schedule');
   });
 
   it('is allowed to show proof photos by the content security policy', () => {

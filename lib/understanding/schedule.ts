@@ -43,6 +43,50 @@ export function formatClock(minutes: number): string {
   return m === 0 ? `${h12}${suffix}` : `${h12}:${String(m).padStart(2, '0')}${suffix}`;
 }
 
+function minutesToHHMM(minutes: number): string {
+  const wrapped = ((minutes % (24 * 60)) + 24 * 60) % (24 * 60);
+  const h = Math.floor(wrapped / 60);
+  const m = wrapped % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+/** Bare "9" or "17": morning start 7–11 is AM, 1–6 is PM; an end time 1–11 is PM. */
+function parseBareHour(raw: string, role: 'start' | 'end'): number | null {
+  if (!/^\d{1,2}$/.test(raw)) return null;
+  const n = Number(raw);
+  if (n > 23) return null;
+  if (n > 12) return n * 60;
+  if (role === 'start') {
+    if (n >= 1 && n <= 6) return (n + 12) * 60;
+    if (n === 12) return 12 * 60;
+    return n * 60;
+  }
+  if (n === 12) return 12 * 60;
+  return (n + 12) * 60;
+}
+
+/**
+ * One cell of a roster: "9-5", "9a-5p", "2-10", "09:00-17:00". Empty / off is null.
+ * Does not invent overnight times when both sides are missing.
+ */
+export function parseShiftRange(value: string | null | undefined): { start: string; end: string } | null {
+  const text = (value ?? '').trim().toLowerCase().replace(/\s+/g, '');
+  if (!text || text === 'off' || text === '-' || text === 'x') return null;
+  const match = text.match(/^(.+?)(?:-|–|to)(.+)$/);
+  if (!match) return null;
+  const startMins = parseClock(match[1]) ?? parseBareHour(match[1], 'start');
+  const endMins = parseClock(match[2]) ?? parseBareHour(match[2], 'end');
+  if (startMins == null || endMins == null) return null;
+  return { start: minutesToHHMM(startMins), end: minutesToHHMM(endMins) };
+}
+
+export function formatShiftRange(start: string | null | undefined, end: string | null | undefined): string {
+  const startMins = parseClock(start ?? '');
+  const endMins = parseClock(end ?? '');
+  if (startMins == null || endMins == null) return '';
+  return `${formatClock(startMins)}–${formatClock(endMins)}`;
+}
+
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
@@ -64,6 +108,20 @@ function addDays(iso: string, days: number): string {
   const d = new Date(`${iso}T12:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+/**
+ * First day of the schedule week containing `isoDate`.
+ * 0 = Sunday (dashboard default). 5 = Friday (7-Eleven printed Shift Schedule).
+ */
+export function scheduleWeekStartOf(isoDate: string, weekStartsOn = 0): string {
+  const startIndex = ((weekStartsOn % 7) + 7) % 7;
+  const dayIndex = new Date(`${isoDate}T12:00:00Z`).getUTCDay();
+  return addDays(isoDate, -((dayIndex - startIndex + 7) % 7));
+}
+
+export function weekContainsDate(weekStart: string, isoDate: string): boolean {
+  return isoDate >= weekStart && isoDate <= addDays(weekStart, 6);
 }
 
 /** The shift's calendar date: the printed date, else the first matching weekday on or after the week start. */

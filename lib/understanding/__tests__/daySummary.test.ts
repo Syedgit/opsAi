@@ -1,8 +1,12 @@
+import { settleInvoice } from '../invoiceBalance';
 import {
   businessDayOf,
+  cashAfterTillPaidOuts,
   collectPaidOuts,
+  extraTillForDay,
   formatDaySummary,
   summaryKindForStore,
+  tillCashItemsFromRows,
   type DayActivity,
 } from '../daySummary';
 
@@ -23,6 +27,25 @@ const invoice = {
   payload: { _kind: 'invoice', vendor: 'Pepsi', amount: 184.2, invoice: { paymentStatus: 'paid_cash' } },
 };
 
+const proveedora = {
+  type: 'INVOICE_EXPENSE',
+  payload: {
+    _kind: 'invoice',
+    vendor: 'LA PROVEEDORA LATINA LLC',
+    amount: 1061.53,
+    invoice_date: '2026-10-12',
+    invoice: settleInvoice({
+      vendorName: 'LA PROVEEDORA LATINA LLC',
+      invoiceNumber: '200242668',
+      invoiceDate: '2026-10-12',
+      storeHint: 'Rockaway',
+      lineItems: [],
+      total: 1061.53,
+      paymentStatus: 'paid_cash',
+    }),
+  },
+};
+
 const paidOut = { type: 'PAID_OUT', payload: { amount: 50, reason: 'ice from till' } };
 
 describe('summaryKindForStore', () => {
@@ -34,6 +57,7 @@ describe('summaryKindForStore', () => {
   it('only totals paid-outs for a 7-Eleven', () => {
     expect(summaryKindForStore('seven_eleven', [close])).toBe('paid_outs');
     expect(summaryKindForStore('seven_eleven', [paidOut])).toBe('paid_outs');
+    expect(summaryKindForStore('seven_eleven', [proveedora])).toBe('paid_outs');
   });
 
   it('does nothing until the store type is set', () => {
@@ -53,8 +77,9 @@ describe('formatDaySummary', () => {
     };
     const text = formatDaySummary(activity);
     expect(text).toContain('📋 Corner · Mon, Oct 12');
-    expect(text).toContain('Sales: cash $106 · card $334 · gas $1,355');
+    expect(text).toContain('Sales: inside cash $106 · inside card $334 · gas $1,355');
     expect(text).toContain('Paid out: Lays $142');
+    expect(text).toContain('Cash after paid-outs -$36');
     expect(text).toContain('Invoices: Pepsi $184.20 paid cash');
     expect(text).toContain('Deposit $1,653');
     expect(text).toContain('Inspection 92%');
@@ -71,15 +96,67 @@ describe('formatDaySummary', () => {
     };
     const text = formatDaySummary(activity);
     expect(text).toBe(
-      ['💸 Rockaway · paid outs Mon, Oct 12', '• Lays $142', '• ice from till $50', 'Total $192'].join('\n')
+      [
+        '💸 Rockaway · paid outs Mon, Oct 12',
+        '• Lays $142',
+        '• ice from till $50',
+        'Total $192',
+        'Cash $106 − paid outs $192 = -$86',
+      ].join('\n')
     );
     expect(text).not.toMatch(/salary|wage|\$18/i);
+  });
+
+  it('subtracts invoice cash from leftover on a non-7-Eleven wrap-up', () => {
+    const activity: DayActivity = {
+      storeName: 'Rockaway',
+      day: '2026-10-12',
+      kind: 'store_day',
+      rows: [{ ...close, payload: { ...close.payload, cash: 2500 } }, proveedora],
+      inspection: null,
+    };
+    const text = formatDaySummary(activity);
+    expect(text).toContain('Paid out: Lays $142, LA PROVEEDORA LATINA LLC cash $1,061.53');
+    expect(text).toContain('Cash after paid-outs $1,296.47');
+  });
+
+  it('subtracts a cash-paid invoice from Rockaway cash at end of day', () => {
+    const activity: DayActivity = {
+      storeName: 'Rockaway',
+      day: '2026-10-12',
+      kind: 'paid_outs',
+      rows: [{ ...close, payload: { ...close.payload, cash: 2500 } }, proveedora],
+      inspection: null,
+    };
+    const text = formatDaySummary(activity);
+    expect(text).toContain('• Lays $142');
+    expect(text).toContain('• LA PROVEEDORA LATINA LLC cash $1,061.53');
+    expect(text).toContain('Cash $2,500 − paid outs $1,203.53 = $1,296.47');
+    expect(cashAfterTillPaidOuts(activity.rows)).toBe(1296.47);
   });
 });
 
 describe('collectPaidOuts', () => {
   it('keeps the sender label and does not invent a salary line', () => {
     expect(collectPaidOuts([paidOut])).toEqual([{ label: 'ice from till', amount: 50 }]);
+  });
+
+  it('counts cash on a vendor invoice as till money out', () => {
+    expect(collectPaidOuts([proveedora])).toEqual([
+      { label: 'LA PROVEEDORA LATINA LLC cash', amount: 1061.53 },
+    ]);
+  });
+
+  it('skips a later payment update so the original invoice is not counted twice', () => {
+    expect(
+      collectPaidOuts([
+        proveedora,
+        {
+          type: 'INVOICE_EXPENSE',
+          payload: { _kind: 'invoice_payment', vendor: 'LA PROVEEDORA LATINA LLC', invoice: proveedora.payload.invoice },
+        },
+      ])
+    ).toEqual([{ label: 'LA PROVEEDORA LATINA LLC cash', amount: 1061.53 }]);
   });
 
   it('repeats "salary paidout" only when the sender wrote that label', () => {
@@ -94,6 +171,30 @@ describe('collectPaidOuts', () => {
         },
       ])
     ).toEqual([{ label: 'salary paidout', amount: 200 }]);
+  });
+});
+
+describe('tillCashItemsFromRows', () => {
+  it('keeps invoice cash on the invoice date so a later close can subtract it', () => {
+    const items = tillCashItemsFromRows(
+      [
+        {
+          storeId: 'S001',
+          type: 'INVOICE_EXPENSE',
+          payloadJson: proveedora.payload,
+          createdAt: new Date('2026-10-12T18:00:00Z'),
+        },
+      ],
+      'America/New_York'
+    );
+    expect(items).toEqual([
+      { storeId: 'S001', label: 'LA PROVEEDORA LATINA LLC cash', amount: 1061.53, day: '2026-10-12' },
+    ]);
+    expect(extraTillForDay(items, 'S001', '2026-10-12')).toEqual([
+      { label: 'LA PROVEEDORA LATINA LLC cash', amount: 1061.53 },
+    ]);
+    expect(extraTillForDay(items, 'S001', '2026-10-13')).toEqual([]);
+    expect(extraTillForDay(items, 'S002', '2026-10-12')).toEqual([]);
   });
 });
 

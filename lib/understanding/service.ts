@@ -6,6 +6,7 @@ import { downloadWhatsAppMedia } from '../whatsappMedia';
 import { UnderstandingUnavailableError, type MessageUnderstander } from './extractor';
 import { formatEntriesReply, planUnderstanding } from './plan';
 import { loadOpenInvoices } from '../tasks/invoiceReminder';
+import { loadConfirmedTillCash } from './daySummary';
 import { loadStoreProfiles } from './storeProfiles';
 import { transcribeAudio } from './transcribe';
 import type { AiUsageRecord } from './usage';
@@ -125,6 +126,14 @@ export async function understandAndRespond(prisma: PrismaClient, params: Underst
       profiles.map((p) => p.storeId)
     ).catch((error) => {
       console.warn('Could not load open invoices', error instanceof Error ? error.message : error);
+      return [];
+    }),
+    tillCash: await loadConfirmedTillCash(
+      prisma,
+      profiles.map((p) => p.storeId),
+      now
+    ).catch((error) => {
+      console.warn('Could not load till cash', error instanceof Error ? error.message : error);
       return [];
     }),
   });

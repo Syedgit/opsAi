@@ -64,4 +64,25 @@ describe('resolveStoreIdForIncomingMessage', () => {
     const result = await resolveStoreIdForIncomingMessage(prisma, 'unknown', 'phone-123');
     expect(result).toEqual({ storeId: null, source: 'none' });
   });
+
+  it('falls through to phone when the group table was never created', async () => {
+    process.env.WHATSAPP_STORE_ROUTING = 'both';
+    const prisma = {
+      storeWhatsAppGroup: {
+        findFirst: async () => {
+          throw Object.assign(new Error('The table `public.store_whatsapp_groups` does not exist in the current database.'), {
+            code: 'P2021',
+          });
+        },
+      },
+      storeConfig: {
+        findUnique: async () => ({ storeId: 'S001', active: true }),
+      },
+    } as unknown as PrismaClient;
+
+    await expect(resolveStoreIdForIncomingMessage(prisma, 'g1', 'phone-123')).resolves.toEqual({
+      storeId: 'S001',
+      source: 'phone_number',
+    });
+  });
 });

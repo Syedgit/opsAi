@@ -116,7 +116,7 @@ describe('OK posts an end-of-day wrap-up', () => {
     (postToStoreGroups as jest.Mock).mockResolvedValue(1);
 
     const result = await handleWhatsAppCommand(prisma, PHONE, 'OK');
-    expect(result.message).toContain('Sales: cash $106 · card $334 · gas $1,355');
+    expect(result.message).toContain('Sales: inside cash $106 · inside card $334 · gas $1,355');
     expect(result.message).toContain('Paid out: Lays $142');
     expect(result.message).toContain('To deposit:');
     expect(result.message).toContain('Posted to the group');
@@ -177,6 +177,16 @@ describe('OK posts an end-of-day wrap-up', () => {
     expect(result.message).not.toContain('Sales:');
     expect(result.message).not.toContain('paid outs');
     expect(postToStoreGroups).not.toHaveBeenCalled();
+  });
+});
+
+describe('STORE command', () => {
+  it('still refuses the old link command, but not a store-sales caption', async () => {
+    const { prisma } = makePrisma();
+    const refused = await handleWhatsAppCommand(prisma, PHONE, 'STORE S001');
+    expect(refused.success).toBe(false);
+    expect(refused.message).toContain('disabled for security');
+    expect(isWhatsAppCommand('store sales')).toBe(false);
   });
 });
 

@@ -25,10 +25,9 @@ import { parseLoginInput, parseSignupInput, readJsonBody } from '../lib/authCred
 import { dashboardModules } from '../lib/businessProfile';
 import {
   MAX_PICTURE_TEMPLATES,
-  PICTURE_PURPOSE_LABEL,
-  PICTURE_TEMPLATE_PRESETS,
   cleanPictureTemplate,
   describePictureTemplate,
+  pictureMapsBoard,
   type PictureTemplate,
 } from '../lib/understanding/pictureTemplate';
 
@@ -254,11 +253,7 @@ let savedSetup: StoreSetup | null = null;
 let savedPictureTemplates: PictureTemplate[] = [];
 
 function pictureMapsPayload() {
-  return {
-    pictureTemplates: savedPictureTemplates,
-    pictureTemplatePresets: PICTURE_TEMPLATE_PRESETS,
-    picturePurposes: Object.entries(PICTURE_PURPOSE_LABEL).map(([id, label]) => ({ id, label })),
-  };
+  return pictureMapsBoard(savedPictureTemplates);
 }
 
 function tasksApi(req: http.IncomingMessage, res: http.ServerResponse, url: URL, body: string): void {
@@ -451,7 +446,7 @@ async function api(req: http.IncomingMessage, res: http.ServerResponse, url: URL
       return sendJson(res, 200, {
         schedules: previewSchedules[storeId] || [],
         people: previewPeople[storeId] || [],
-        weekStart: '2026-11-01',
+        weekStart: storeId === 'S001' ? '2026-10-30' : '2026-11-01',
       }), true;
     }
     if (type === 'paidouts') {
