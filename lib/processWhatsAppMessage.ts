@@ -55,7 +55,7 @@ export async function processWhatsAppMessage(
   input: ProcessWhatsAppMessageInput
 ): Promise<void> {
   const { messageId, phoneE164, messageText = '', mediaId, mediaType } = input;
-  const from = maskPhone(phoneE164);
+  const from = maskPhone(phoneE164) ?? '***';
 
   // Only one worker may process a message, even if Meta delivers it twice.
   const claimed = await claimMessage(prisma, {
