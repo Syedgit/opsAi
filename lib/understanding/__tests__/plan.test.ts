@@ -216,7 +216,52 @@ describe('planUnderstanding: other kinds', () => {
     const text = plan.entries[0].lines.join('\n');
     expect(text).toContain('due Wed, Oct 28');
     expect(text).toContain("I'll remind 3 days before, on Sun, Oct 25");
-    expect(plan.entries[0].payload).toMatchObject({ due_date: '2026-10-28' });
+    expect(text).toContain('$850 still due');
+    expect(plan.entries[0].payload).toMatchObject({ due_date: '2026-10-28', paid: 'N', remaining: 850 });
+  });
+
+  it('merges a later cash payment onto the open vendor bill', () => {
+    const open = {
+      vendorName: 'Pepsi',
+      invoiceNumber: '88',
+      invoiceDate: '2026-10-12',
+      dueDate: '2026-10-28',
+      lineItems: [],
+      total: 900,
+      paymentStatus: 'unpaid' as const,
+    };
+    const plan = planUnderstanding(
+      {
+        kind: 'invoice',
+        confidence: 0.9,
+        needsReview: [],
+        invoice: {
+          vendorName: 'Pepsi',
+          invoiceNumber: null,
+          invoiceDate: null,
+          lineItems: [],
+          total: 500,
+          paymentStatus: 'paid_cash',
+          payments: [{ amount: 500, method: 'cash' }],
+          remainingDue: 400,
+          remainingMethod: 'check',
+          payBy: '2026-10-17',
+        },
+      },
+      { ...ctx, openInvoices: [{ actionId: 'inv-1', storeId: 'S001', invoice: open }] }
+    );
+    const entry = plan.entries[0];
+    expect(entry.payload).toMatchObject({
+      _kind: 'invoice_payment',
+      updates_action_id: 'inv-1',
+      remaining: 400,
+      paid: 'N',
+      remaining_method: 'check',
+      due_date: '2026-10-17',
+    });
+    expect(entry.lines[0]).toContain('Payment on Pepsi');
+    expect(entry.lines.join('\n')).toContain('$400 still due');
+    expect(entry.lines.join('\n')).toContain('check');
   });
 
   it('reminds today when the due date is fewer than 3 days away', () => {
@@ -417,6 +462,32 @@ describe('applyFixToPayload', () => {
     if (result.ok) {
       expect(result.payload.due_date).toBe(`${new Date().getUTCFullYear()}-10-28`);
       expect((result.payload.invoice as { dueDate: string }).dueDate).toBe(`${new Date().getUTCFullYear()}-10-28`);
+    }
+  });
+
+  it('fixes remaining due on an invoice', () => {
+    const [invoiceEntry] = planUnderstanding(
+      {
+        kind: 'invoice',
+        confidence: 0.9,
+        needsReview: [],
+        invoice: {
+          vendorName: 'Pepsi',
+          invoiceNumber: null,
+          invoiceDate: '2026-10-12',
+          lineItems: [],
+          total: 900,
+          paymentStatus: 'unpaid',
+          remainingDue: 400,
+        },
+      },
+      ctx
+    ).entries;
+    const result = applyFixToPayload(invoiceEntry.payload, 'remaining', '300', NOW);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.payload.remaining).toBe(300);
+      expect(result.payload.paid).toBe('N');
     }
   });
 

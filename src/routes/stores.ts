@@ -5,6 +5,7 @@ import { generateBusinessSummary, BusinessSummary } from '../services/aiSummariz
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, format } from 'date-fns';
 import { isGroupAutoProvisionEnabled } from '../../lib/whatsappGroupConfig';
 import { startWhatsAppGroupProvision } from '../../lib/whatsappGroupProvision';
+import { flattenTillPaidOuts, sourceActionId } from '../../lib/understanding/tillPaidOuts';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -428,6 +429,20 @@ router.get('/data', async (req: Request, res: Response) => {
         return;
     }
 
+    if (type === 'paidouts') {
+      const tillRows = await prisma.pendingActions.findMany({
+        where: {
+          storeId,
+          status: 'CONFIRMED',
+          type: { in: ['PAID_OUT', 'STORE_SALES', 'INVOICE_EXPENSE'] },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+      });
+      res.json({ paidouts: flattenTillPaidOuts(tillRows) });
+      return;
+    }
+
     const data = await prisma.pendingActions.findMany({
       where: {
         storeId,
@@ -438,7 +453,12 @@ router.get('/data', async (req: Request, res: Response) => {
       take: 100,
     });
 
-    const formatted = data.map((item) => ({
+    const rows =
+      type === 'invoices'
+        ? data.filter((item) => (item.payloadJson as { _kind?: string } | null)?._kind !== 'invoice_payment')
+        : data;
+
+    const formatted = rows.map((item) => ({
       id: item.actionId,
       date: item.createdAt,
       data: item.payloadJson,
@@ -480,12 +500,24 @@ router.get('/detail', async (req: Request, res: Response) => {
       return;
     }
 
+    const lookupId = type === 'paidouts' ? sourceActionId(id) : id;
     const item = await prisma.pendingActions.findFirst({
-      where: { actionId: id, storeId, type: dbType as any },
+      where: type === 'paidouts' ? { actionId: lookupId, storeId } : { actionId: lookupId, storeId, type: dbType as any },
     });
 
     if (!item) {
       res.status(404).json({ error: 'Item not found' });
+      return;
+    }
+
+    if (type === 'paidouts') {
+      const flat = flattenTillPaidOuts([item]);
+      const hit = flat.find((row) => row.id === id) ?? flat[0];
+      if (!hit) {
+        res.status(404).json({ error: 'Item not found' });
+        return;
+      }
+      res.json({ item: hit });
       return;
     }
 

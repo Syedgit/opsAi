@@ -57,6 +57,17 @@ export const InvoiceLineSchema = z.object({
 });
 export type InvoiceLine = z.infer<typeof InvoiceLineSchema>;
 
+export const INVOICE_PAYMENT_METHODS = ['cash', 'check', 'other'] as const;
+export type InvoicePaymentMethod = (typeof INVOICE_PAYMENT_METHODS)[number];
+
+export const InvoicePaymentSchema = z.object({
+  amount,
+  method: z.enum(INVOICE_PAYMENT_METHODS),
+  date: isoDate.nullable().optional(),
+  note: z.string().trim().max(120).optional(),
+});
+export type InvoicePayment = z.infer<typeof InvoicePaymentSchema>;
+
 export const InvoiceSchema = z.object({
   vendorName: z.string().nullable(),
   invoiceNumber: z.string().nullable(),
@@ -68,6 +79,13 @@ export const InvoiceSchema = z.object({
   tax: optionalAmount,
   total: amount,
   paymentStatus: z.enum(['paid_cash', 'paid_other', 'unpaid', 'unknown']).default('unknown'),
+  /** Cash / check / other amounts already given. Never wages. */
+  payments: z.array(InvoicePaymentSchema).max(20).optional(),
+  /** What is still owed, when the sender wrote it. */
+  remainingDue: optionalAmount,
+  /** When the remainder should be paid (promised date). Falls back to dueDate. */
+  payBy: isoDate.nullable().optional(),
+  remainingMethod: z.enum(INVOICE_PAYMENT_METHODS).nullable().optional(),
 });
 export type Invoice = z.infer<typeof InvoiceSchema>;
 

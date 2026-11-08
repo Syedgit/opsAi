@@ -9,8 +9,8 @@ import {
   getLatestPendingAction,
   getLatestPendingBatch,
 } from './pendingActionService';
-import { describeDepositRule, matchStore } from './understanding/checks';
-import { applyFixToPayload, describeEntryPayload, scheduleGroupMessage } from './understanding/plan';
+import { describeDepositRule, matchStore, type Check } from './understanding/checks';
+import { applyFixToPayload, describeEntryPayload, invoicePayload, scheduleGroupMessage } from './understanding/plan';
 import {
   businessDayOf,
   formatDaySummary,
@@ -22,7 +22,7 @@ import { formatBagLine, formatSlipResult, isDepositStoreType, loadDepositBag } f
 import { DepositRuleSchema, clearDepositRule, saveDepositRule } from './understanding/profileStore';
 import { loadStoreProfiles } from './understanding/storeProfiles';
 import { describeOpenTasks } from './tasks/evidence';
-import { formatInvoiceDay, scheduleInvoicePaymentReminder } from './tasks/invoiceReminder';
+import { describeOpenBills, formatInvoiceDay, loadOpenInvoices, scheduleInvoicePaymentReminder } from './tasks/invoiceReminder';
 import { localDateString } from './tasks/time';
 import type { Invoice } from './understanding/schema';
 
@@ -32,7 +32,7 @@ export interface CommandResult {
   storeId?: string;
 }
 
-const COMMAND_RE = /^(OK|CANCEL|FIX|STATUS|TODAY|TASKS|WEEK|MONTH|HELP|SEND|STORE|RULE)(\s|$)/i;
+const COMMAND_RE = /^(OK|CANCEL|FIX|STATUS|TODAY|TASKS|WEEK|MONTH|HELP|SEND|STORE|RULE|DUE)(\s|$)/i;
 
 export function isWhatsAppCommand(text: string): boolean {
   return COMMAND_RE.test(text.trim());
@@ -63,6 +63,8 @@ export async function handleWhatsAppCommand(
       return handleRule(prisma, phoneE164, parts.slice(1));
     case 'HELP':
       return handleHelp();
+    case 'DUE':
+      return handleDue(prisma, phoneE164);
     case 'STORE':
       return {
         success: false,
@@ -111,7 +113,31 @@ async function handleOK(prisma: PrismaClient, phoneE164: string): Promise<Comman
     }
 
     const payload = pending.payloadJson as Record<string, unknown> | null;
-    if (payload?._kind === 'invoice' && payload.invoice) {
+    if ((payload?._kind === 'invoice' || payload?._kind === 'invoice_payment') && payload.invoice) {
+      if (payload._kind === 'invoice_payment' && typeof payload.updates_action_id === 'string') {
+        try {
+          const original = await prisma.pendingActions.findFirst({
+            where: { actionId: payload.updates_action_id, storeId: pending.storeId },
+          });
+          const invoice = payload.invoice as Invoice;
+          const checks = Array.isArray(payload.checks) ? (payload.checks as Check[]) : [];
+          const review = Array.isArray(payload.needs_review) ? (payload.needs_review as string[]) : [];
+          if (original) {
+            const origPayload = (original.payloadJson ?? {}) as Record<string, unknown>;
+            await prisma.pendingActions.update({
+              where: { actionId: original.actionId },
+              data: { payloadJson: { ...origPayload, ...invoicePayload(invoice, checks, review), _kind: 'invoice' } as object },
+            });
+          } else {
+            await prisma.pendingActions.update({
+              where: { actionId: pending.actionId },
+              data: { payloadJson: { ...payload, ...invoicePayload(invoice, checks, review), _kind: 'invoice' } as object },
+            });
+          }
+        } catch (e) {
+          console.warn('Could not merge invoice payment', e instanceof Error ? e.message : e);
+        }
+      }
       try {
         const store = await prisma.storeConfig.findUnique({
           where: { storeId: pending.storeId },
@@ -423,6 +449,22 @@ async function handleTasks(prisma: PrismaClient, phoneE164: string): Promise<Com
   return { success: true, message: await describeOpenTasks(prisma, member.storeId), storeId: member.storeId };
 }
 
+async function handleDue(prisma: PrismaClient, phoneE164: string): Promise<CommandResult> {
+  const member = await prisma.userDirectory.findUnique({
+    where: { phoneE164 },
+    select: { role: true, storeId: true, isActive: true },
+  });
+  if (!member?.isActive || !member.storeId) {
+    return { success: false, message: 'Your number is not linked to a store yet.' };
+  }
+  const canAll = member.role === 'OWNER' || member.role === 'MANAGER';
+  const profiles = await loadStoreProfiles(prisma, member.storeId, { includeOwnerSiblings: canAll });
+  const storeIds = canAll ? profiles.map((p) => p.storeId) : [member.storeId];
+  const open = await loadOpenInvoices(prisma, storeIds);
+  const names = Object.fromEntries(profiles.map((p) => [p.storeId, p.storeName]));
+  return { success: true, message: describeOpenBills(open, names, storeIds.length > 1), storeId: member.storeId };
+}
+
 async function handleHelp(): Promise<CommandResult> {
   return {
     success: true,
@@ -436,9 +478,11 @@ async function handleHelp(): Promise<CommandResult> {
       'RULE — see each store\'s deposit rule',
       'TODAY — today\'s confirmed count',
       'TASKS — what is still open for your shift',
+      'DUE — vendor bills still owed',
       'HELP — this message',
       '',
       '📸 Send a photo or text for sales, invoices, orders, fuel, or paid-outs.',
+      '💵 Partial pay: Pepsi paid cash 500 remaining 400 send check Friday.',
       '✅ Answer a task by sending its number with a photo or a few words, for example: 2 190F',
       '📅 Owners and managers: send the weekly schedule sheet and I will add up each person\'s hours.',
     ].join('\n'),

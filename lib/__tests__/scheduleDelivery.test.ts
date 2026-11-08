@@ -83,8 +83,11 @@ describe('postToStoreGroups', () => {
   it('reuses the owner\'s one other group when this store has none (shared Rockaway + Denville chat)', async () => {
     const prisma = makePrisma([]);
     (prisma.userStore.findMany as jest.Mock)
-      .mockResolvedValueOnce([{ userId: 'u1' }])
-      .mockResolvedValueOnce([{ storeId: 'S001' }, { storeId: 'S002' }]);
+      .mockResolvedValueOnce([{ userId: 'u1', role: 'OWNER' }])
+      .mockResolvedValueOnce([
+        { storeId: 'S001', role: 'OWNER' },
+        { storeId: 'S002', role: 'OWNER' },
+      ]);
     (prisma.storeWhatsAppGroup.findMany as jest.Mock)
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([{ whatsappGroupId: 'g-shared', storeId: 'S001' }]);
@@ -95,8 +98,12 @@ describe('postToStoreGroups', () => {
   it('does not guess when sibling stores each have their own group', async () => {
     const prisma = makePrisma([]);
     (prisma.userStore.findMany as jest.Mock)
-      .mockResolvedValueOnce([{ userId: 'u1' }])
-      .mockResolvedValueOnce([{ storeId: 'S001' }, { storeId: 'S002' }, { storeId: 'S003' }]);
+      .mockResolvedValueOnce([{ userId: 'u1', role: 'OWNER' }])
+      .mockResolvedValueOnce([
+        { storeId: 'S001', role: 'OWNER' },
+        { storeId: 'S002', role: 'OWNER' },
+        { storeId: 'S003', role: 'OWNER' },
+      ]);
     (prisma.storeWhatsAppGroup.findMany as jest.Mock)
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([

@@ -7,6 +7,7 @@ import { getGroupSetupMode, isGroupAutoProvisionEnabled } from '../../lib/whatsa
 import { logAppError, loggedHandler, serializeError } from '../../lib/requestLog';
 import { readStoredSetup } from '../../lib/tasks/storeSetup';
 import { dashboardModules } from '../../lib/businessProfile';
+import { flattenTillPaidOuts, sourceActionId } from '../../lib/understanding/tillPaidOuts';
 
 const prisma = new PrismaClient();
 
@@ -149,12 +150,24 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         return;
       }
 
+      const lookupId = type === 'paidouts' ? sourceActionId(id) : id;
       const item = await prisma.pendingActions.findFirst({
-        where: { actionId: id, storeId, type: dbType as any },
+        where: type === 'paidouts' ? { actionId: lookupId, storeId } : { actionId: lookupId, storeId, type: dbType as 'STORE_SALES' | 'INVOICE_EXPENSE' | 'FUEL_SALES' | 'PAID_OUT' | 'ORDER_REQUEST' },
       });
 
       if (!item) {
         res.status(404).json({ error: 'Item not found' });
+        return;
+      }
+
+      if (type === 'paidouts') {
+        const flat = flattenTillPaidOuts([item]);
+        const hit = flat.find((row) => row.id === id) ?? flat[0];
+        if (!hit) {
+          res.status(404).json({ error: 'Item not found' });
+          return;
+        }
+        res.json({ item: hit });
         return;
       }
 

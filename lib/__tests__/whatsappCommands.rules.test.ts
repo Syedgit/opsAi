@@ -12,12 +12,12 @@ jest.mock('../googleSheetsWrite', () => ({ writeConfirmedActionToSheets: jest.fn
 const rule = { includeCardSales: true, includeFuelSales: true, subtractPayouts: true, floatLeftInRegister: 0 };
 const PHONE = '+15550001111';
 
-function pendingRow(payload: Record<string, unknown>, storeId = 'S001') {
+function pendingRow(payload: Record<string, unknown>, storeId = 'S001', type = 'STORE_SALES') {
   return {
     actionId: 'a1',
     phoneE164: PHONE,
     storeId,
-    type: 'STORE_SALES',
+    type,
     payloadJson: payload,
     messageIdInbound: 'm1',
     status: 'PENDING',
@@ -37,6 +37,12 @@ function makePrisma(options: { role?: string; pending?: ReturnType<typeof pendin
       findFirst: jest.fn().mockResolvedValue(pending[0] ?? null),
       findMany: jest.fn().mockResolvedValue(pending),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      update: jest.fn().mockResolvedValue({}),
+    },
+    taskTemplate: {
+      findMany: jest.fn().mockResolvedValue([]),
+      create: jest.fn().mockResolvedValue({ id: 't1' }),
+      update: jest.fn().mockResolvedValue({}),
     },
     userStore: { findMany: jest.fn().mockResolvedValue([]) },
     storeConfig: {
@@ -221,5 +227,85 @@ describe('RULE command', () => {
     expect(result.success).toBe(false);
     expect(result.message).toContain('Only owners and managers');
     expect(update).not.toHaveBeenCalled();
+  });
+});
+
+describe('invoice remaining', () => {
+  it('recognises DUE as a command', () => {
+    expect(isWhatsAppCommand('DUE')).toBe(true);
+  });
+
+  it('lists bills still owed', async () => {
+    const { prisma } = makePrisma();
+    (prisma.pendingActions.findMany as jest.Mock).mockResolvedValue([
+      {
+        actionId: 'inv-1',
+        storeId: 'S001',
+        payloadJson: {
+          _kind: 'invoice',
+          vendor: 'Pepsi',
+          invoice: {
+            vendorName: 'Pepsi',
+            invoiceNumber: '88',
+            invoiceDate: '2026-10-12',
+            dueDate: '2026-10-28',
+            lineItems: [],
+            total: 900,
+            paymentStatus: 'unpaid',
+            remainingDue: 400,
+            remainingMethod: 'check',
+            payBy: '2026-10-17',
+          },
+        },
+      },
+    ]);
+    const result = await handleWhatsAppCommand(prisma, PHONE, 'DUE');
+    expect(result.success).toBe(true);
+    expect(result.message).toContain('Pepsi #88');
+    expect(result.message).toContain('$400 remaining check');
+  });
+
+  it('merges a payment OK onto the original invoice', async () => {
+    const original = {
+      actionId: 'inv-1',
+      storeId: 'S001',
+      type: 'INVOICE_EXPENSE',
+      status: 'CONFIRMED',
+      payloadJson: { _kind: 'invoice', vendor: 'Pepsi', invoice: { vendorName: 'Pepsi', total: 900, paymentStatus: 'unpaid', lineItems: [] } },
+    };
+    const payment = pendingRow(
+      {
+        _kind: 'invoice_payment',
+        updates_action_id: 'inv-1',
+        vendor: 'Pepsi',
+        remaining: 400,
+        invoice: {
+          vendorName: 'Pepsi',
+          invoiceNumber: '88',
+          invoiceDate: '2026-10-12',
+          dueDate: '2026-11-20',
+          lineItems: [],
+          total: 900,
+          paymentStatus: 'unpaid',
+          payments: [{ amount: 500, method: 'cash' }],
+          remainingDue: 400,
+          remainingMethod: 'check',
+          payBy: '2026-11-20',
+        },
+      },
+      'S001',
+      'INVOICE_EXPENSE'
+    );
+    const { prisma } = makePrisma({ pending: [payment] });
+    (prisma.pendingActions.findFirst as jest.Mock).mockImplementation(async ({ where }: { where: { actionId?: string } }) => {
+      if (where.actionId === 'inv-1') return original;
+      return payment;
+    });
+    const result = await handleWhatsAppCommand(prisma, PHONE, 'OK');
+    expect(result.success).toBe(true);
+    expect((prisma.pendingActions.update as jest.Mock).mock.calls[0][0].where).toEqual({ actionId: 'inv-1' });
+    expect((prisma.pendingActions.update as jest.Mock).mock.calls[0][0].data.payloadJson.remaining).toBe(400);
+    expect((prisma.pendingActions.update as jest.Mock).mock.calls[0][0].data.payloadJson._kind).toBe('invoice');
+    expect((prisma.taskTemplate.create as jest.Mock).mock.calls[0][0].data.title).toContain('$400');
   });
 });

@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { PendingStatus } from '@prisma/client';
 import { formatMoney } from './checks';
+import { invoiceFromPayload, remainingOf, stillDue, tillCashPayments } from './invoiceBalance';
 import { readStoredSetup } from '../tasks/storeSetup';
 import { addDaysLocal, localDateString, localToUtc } from '../tasks/time';
 
@@ -90,6 +91,15 @@ export function collectPaidOuts(rows: DayActivityRow[]): Array<{ label: string; 
       const label = String(p.reason ?? p.label ?? 'paid out').trim().slice(0, 40) || 'paid out';
       out.push({ label, amount });
     }
+    if (row.type === 'INVOICE_EXPENSE' || p._kind === 'invoice') {
+      const invoice = invoiceFromPayload(p);
+      if (invoice) {
+        const vendor = (invoice.vendorName ?? String(p.vendor ?? 'vendor')).trim() || 'vendor';
+        for (const payment of tillCashPayments(invoice)) {
+          out.push({ label: `${vendor} cash`, amount: payment.amount });
+        }
+      }
+    }
   }
   return out;
 }
@@ -130,18 +140,22 @@ function formatStoreDaySummary(activity: DayActivity): string | null {
       fuel += num(p.fuel_sales) ?? 0;
       if (num(p.deposit) != null) deposit += num(p.deposit) as number;
     }
-    if (row.type === 'INVOICE_EXPENSE' || p._kind === 'invoice') {
+    if ((row.type === 'INVOICE_EXPENSE' || p._kind === 'invoice') && p._kind !== 'invoice_payment') {
       const amount = num(p.amount) ?? num(p.total) ?? 0;
       invoiceTotal += amount;
       const vendor = String(p.vendor ?? 'Invoice').trim() || 'Invoice';
+      const parsed = invoiceFromPayload(p);
+      const left = parsed && stillDue(parsed) ? ` · ${formatMoney(remainingOf(parsed))} still due` : '';
       const invoice = p.invoice as { paymentStatus?: string } | undefined;
       const paid =
-        invoice?.paymentStatus === 'paid_cash'
-          ? ' paid cash'
-          : invoice?.paymentStatus === 'paid_other'
-            ? ' paid'
-            : '';
-      invoices.push(`${vendor} ${formatMoney(amount)}${paid}`);
+        left
+          ? ''
+          : invoice?.paymentStatus === 'paid_cash'
+            ? ' paid cash'
+            : invoice?.paymentStatus === 'paid_other'
+              ? ' paid'
+              : '';
+      invoices.push(`${vendor} ${formatMoney(amount)}${paid}${left}`);
     }
     if (p._kind === 'deposit_receipt') {
       const amount = num(p.amount);

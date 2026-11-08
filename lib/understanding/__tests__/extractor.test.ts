@@ -102,6 +102,32 @@ describe('parseModelOutput', () => {
     expect(withDue.kind).toBe('invoice');
     if (withDue.kind === 'invoice') expect(withDue.invoice.dueDate).toBe('2026-10-28');
 
+    const partial = parseModelOutput(
+      JSON.stringify({
+        kind: 'invoice',
+        invoice: {
+          vendorName: 'Pepsi',
+          invoiceNumber: '88',
+          invoiceDate: '2026-10-12',
+          lineItems: [],
+          total: 900,
+          paymentStatus: 'unpaid',
+          payments: [{ amount: 500, method: 'cash' }],
+          remainingDue: 400,
+          remainingMethod: 'check',
+          payBy: '2026-10-17',
+        },
+        confidence: 0.9,
+        needsReview: [],
+      })
+    );
+    expect(partial.kind).toBe('invoice');
+    if (partial.kind === 'invoice') {
+      expect(partial.invoice.remainingDue).toBe(400);
+      expect(partial.invoice.remainingMethod).toBe('check');
+      expect(partial.invoice.payments).toEqual([{ amount: 500, method: 'cash' }]);
+    }
+
     const withoutDue = parseModelOutput(
       JSON.stringify({
         kind: 'invoice',
@@ -220,6 +246,8 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('Usual gas-station POS close');
     expect(prompt).toContain('"store credit" means card_sales');
     expect(prompt).toContain('"cash acceptor cash" means cash_sales');
+    expect(prompt).toContain('remainingDue');
+    expect(prompt).toContain('paid cash 500 remaining 400');
   });
 
   it('lists the store vendors the owner set at signup', () => {

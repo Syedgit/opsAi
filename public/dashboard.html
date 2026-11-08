@@ -1239,7 +1239,7 @@
             
             <div id="paidoutsPage" class="page" style="display: none;" data-mod="money">
                 <h1 class="page-title">Paid Outs</h1>
-                <p class="page-subtitle">Employee paid out transactions</p>
+                <p class="page-subtitle">Cash taken from the till — vendor payouts and invoice cash.</p>
                 <div class="content-area" id="paidoutsContent"></div>
             </div>
             
@@ -1336,6 +1336,15 @@
         function money(value) {
             const n = Number(value);
             return '$' + (Number.isFinite(n) ? n.toFixed(2) : '0.00');
+        }
+        function invoiceRemaining(d) {
+            if (typeof d.remaining === 'number' && Number.isFinite(d.remaining)) return Math.max(0, d.remaining);
+            if (d.paid === 'Y') return 0;
+            const n = Number(d.amount);
+            return Number.isFinite(n) ? n : 0;
+        }
+        function invoiceIsPaid(d) {
+            return invoiceRemaining(d) <= 0.005;
         }
         // 'YYYY-MM-DD' is a calendar day, not a moment in time: do not let the timezone move it.
         function fmtDay(value) {
@@ -1943,23 +1952,24 @@
                     }
                 });
             } else if (type === 'invoices') {
-                tableHTML += '<th>Date</th><th>Vendor</th><th>Invoice #</th><th>Amount</th><th>Category</th><th>Due Date</th><th>Paid</th><th>Actions</th></tr></thead><tbody>';
+                tableHTML += '<th>Date</th><th>Vendor</th><th>Invoice #</th><th>Amount</th><th>Remaining</th><th>Due Date</th><th>Paid</th><th>Actions</th></tr></thead><tbody>';
                 items.forEach((item, index) => {
                     try {
                         const d = item.data || {};
                         const dateStr = item.date ? (typeof item.date === 'string' ? item.date : item.date.toISOString()) : new Date().toISOString();
                         const displayDate = new Date(dateStr).toLocaleDateString();
-                        const dueDateStr = d.due_date ? (typeof d.due_date === 'string' ? d.due_date : new Date(d.due_date).toISOString()) : null;
-                        const displayDueDate = dueDateStr ? new Date(dueDateStr).toLocaleDateString() : 'N/A';
+                        const displayDueDate = d.due_date ? fmtDay(d.due_date) : 'N/A';
+                        const paid = invoiceIsPaid(d);
+                        const left = invoiceRemaining(d);
                         tableHTML += `
                             <tr onclick="viewDetail('invoices', '${item.id}')" style="cursor: pointer;">
                                 <td>${displayDate}</td>
                                 <td><strong>${esc(d.vendor || 'N/A')}</strong></td>
                                 <td>${esc(d.invoice_number || 'N/A')}</td>
-                                <td>$${esc(d.amount || 0)}</td>
-                                <td>${esc(d.category || 'N/A')}</td>
+                                <td>${money(d.amount)}</td>
+                                <td>${paid ? '\u2014' : money(left)}</td>
                                 <td>${displayDueDate}</td>
-                                <td><span class="badge ${d.paid === 'Y' ? 'badge-success' : 'badge-pending'}">${esc(d.paid || 'N')}</span></td>
+                                <td><span class="badge ${paid ? 'badge-success' : 'badge-pending'}">${paid ? 'Paid' : 'Open'}</span></td>
                                 <td><button onclick="event.stopPropagation(); viewDetail('invoices', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
                             </tr>
                         `;
@@ -2120,6 +2130,8 @@
                     ${d.notes ? `<div style="padding: 16px; background: var(--bg); border-radius: 8px; margin-top: 20px;"><strong>Notes:</strong> ${esc(d.notes)}</div>` : ''}
                 `;
             } else if (type === 'invoices') {
+                const paid = invoiceIsPaid(d);
+                const left = invoiceRemaining(d);
                 modalHTML += `
                     <div style="margin-bottom: 20px;">
                         <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Invoice Number</div>
@@ -2132,23 +2144,27 @@
                         </div>
                         <div>
                             <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Amount</div>
-                            <div style="font-size: 24px; font-weight: 700; color: var(--primary);">$${esc(d.amount || 0)}</div>
+                            <div style="font-size: 24px; font-weight: 700; color: var(--primary);">${money(d.amount)}</div>
                         </div>
                         <div>
-                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Category</div>
-                            <div style="font-size: 16px; font-weight: 600;">${esc(d.category || 'N/A')}</div>
+                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Paid so far</div>
+                            <div style="font-size: 16px; font-weight: 600;">${money(d.amount_paid)}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Remaining</div>
+                            <div style="font-size: 16px; font-weight: 600;">${paid ? 'Paid' : money(left)}${!paid && d.remaining_method ? ` \u00b7 ${esc(d.remaining_method)}` : ''}</div>
                         </div>
                         <div>
                             <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Status</div>
-                            <span class="badge ${d.paid === 'Y' ? 'badge-success' : 'badge-pending'}">${d.paid === 'Y' ? 'Paid' : 'Pending'}</span>
+                            <span class="badge ${paid ? 'badge-success' : 'badge-pending'}">${paid ? 'Paid' : 'Open'}</span>
                         </div>
                         <div>
                             <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Date</div>
                             <div style="font-size: 16px;">${new Date(item.date).toLocaleDateString()}</div>
                         </div>
                         <div>
-                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Due Date</div>
-                            <div style="font-size: 16px;">${d.due_date ? new Date(d.due_date).toLocaleDateString() : 'N/A'}</div>
+                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Pay remaining by</div>
+                            <div style="font-size: 16px;">${d.due_date ? fmtDay(d.due_date) : 'N/A'}</div>
                         </div>
                     </div>
                     ${d.notes ? `<div style="padding: 16px; background: var(--bg); border-radius: 8px; margin-top: 20px;"><strong>Notes:</strong> ${esc(d.notes)}</div>` : ''}

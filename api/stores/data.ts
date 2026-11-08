@@ -5,6 +5,7 @@ import { logAppError, loggedHandler, serializeError } from '../../lib/requestLog
 import { loadStoreTeam } from '../../lib/tasks/people';
 import { localDateString, weekdayOf } from '../../lib/tasks/time';
 import { publishDashboardSchedule, type PublishScheduleInput } from '../../lib/publishSchedule';
+import { flattenTillPaidOuts } from '../../lib/understanding/tillPaidOuts';
 
 const prisma = new PrismaClient();
 
@@ -282,6 +283,20 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         return;
     }
 
+    if (type === 'paidouts') {
+      const tillRows = await prisma.pendingActions.findMany({
+        where: {
+          storeId,
+          status: 'CONFIRMED',
+          type: { in: ['PAID_OUT', 'STORE_SALES', 'INVOICE_EXPENSE'] },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+      });
+      res.json({ paidouts: flattenTillPaidOuts(tillRows) });
+      return;
+    }
+
     const data = await prisma.pendingActions.findMany({
       where: {
         storeId,
@@ -296,7 +311,9 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
     const rows =
       type === 'schedules'
         ? data.filter((item) => (item.payloadJson as { _kind?: string } | null)?._kind === 'work_schedule').slice(0, 52)
-        : data;
+        : type === 'invoices'
+          ? data.filter((item) => (item.payloadJson as { _kind?: string } | null)?._kind !== 'invoice_payment')
+          : data;
 
     const formatted = rows.map((item) => ({
       id: item.actionId,

@@ -111,12 +111,16 @@ async function groupsForStore(
   const own = await prisma.storeWhatsAppGroup.findMany({ where: { storeId, active: true } });
   if (own.length > 0) return own;
 
-  const owners = await prisma.userStore.findMany({ where: { storeId, role: 'OWNER' }, select: { userId: true } });
+  const owners = (await prisma.userStore.findMany({ where: { storeId }, select: { userId: true, role: true } })).filter(
+    (row) => row.role === 'OWNER'
+  );
   if (owners.length === 0) return [];
-  const siblings = await prisma.userStore.findMany({
-    where: { userId: { in: owners.map((o) => o.userId) }, role: 'OWNER' },
-    select: { storeId: true },
-  });
+  const siblings = (
+    await prisma.userStore.findMany({
+      where: { userId: { in: owners.map((o) => o.userId) } },
+      select: { storeId: true, role: true },
+    })
+  ).filter((row) => row.role === 'OWNER');
   const otherIds = [...new Set(siblings.map((s) => s.storeId).filter((id) => id !== storeId))];
   if (otherIds.length === 0) return [];
   const shared = await prisma.storeWhatsAppGroup.findMany({ where: { storeId: { in: otherIds }, active: true } });

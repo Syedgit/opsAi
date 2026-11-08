@@ -1,4 +1,12 @@
 import { invoiceIsUnpaid, paymentDueReminderDate } from '../tasks/invoiceReminder';
+import {
+  applyPayments,
+  describeBalance,
+  looksLikePaymentUpdate,
+  matchOpenInvoice,
+  remainingOf,
+  settleInvoice,
+} from './invoiceBalance';
 import { localDateString } from '../tasks/time';
 import {
   checkDailyClose,
@@ -67,6 +75,8 @@ export interface PlanContext {
   canTeachRules?: boolean;
   /** True for owners and managers. Only they can post a schedule (it tells the whole group everyone's hours). */
   canManageSchedules?: boolean;
+  /** Confirmed bills still owed, so a later "paid cash 500 remaining 400" updates the same invoice. */
+  openInvoices?: Array<{ actionId: string; storeId: string; invoice: Invoice }>;
 }
 
 /* --------------------------------- helpers -------------------------------- */
@@ -153,9 +163,15 @@ export function dailyClosePayload(
   };
 }
 
-export function invoicePayload(invoice: Invoice, checks: Check[], needsReview: string[] = []): Record<string, unknown> {
+export function invoicePayload(
+  invoice: Invoice,
+  checks: Check[],
+  needsReview: string[] = [],
+  extra: { updatesActionId?: string } = {},
+): Record<string, unknown> {
+  const remaining = remainingOf(invoice);
   return {
-    _kind: 'invoice',
+    _kind: extra.updatesActionId ? 'invoice_payment' : 'invoice',
     invoice,
     checks,
     needs_review: needsReview,
@@ -164,7 +180,12 @@ export function invoicePayload(invoice: Invoice, checks: Check[], needsReview: s
     tax: invoice.tax ?? 0,
     invoice_number: invoice.invoiceNumber,
     invoice_date: invoice.invoiceDate,
-    due_date: invoice.dueDate,
+    due_date: invoice.payBy || invoice.dueDate,
+    paid: remaining <= 0.005 ? 'Y' : 'N',
+    remaining,
+    amount_paid: invoice.payments?.reduce((sum, p) => sum + p.amount, 0) ?? 0,
+    remaining_method: invoice.remainingMethod ?? null,
+    ...(extra.updatesActionId ? { updates_action_id: extra.updatesActionId } : {}),
   };
 }
 
@@ -295,9 +316,8 @@ function invoiceLines(invoice: Invoice, storeName: string, checks: Check[], toda
   }
   if (invoice.invoiceDate) facts.push(dateLabel(invoice.invoiceDate));
   if (invoice.dueDate) facts.push(`due ${dateLabel(invoice.dueDate)}`);
-  if (invoice.paymentStatus === 'paid_cash') facts.push('paid cash');
-  else if (invoice.paymentStatus === 'paid_other') facts.push('paid');
-  else if (invoice.paymentStatus === 'unpaid') facts.push('unpaid');
+  if (invoice.payBy && invoice.payBy !== invoice.dueDate) facts.push(`pay remaining ${dateLabel(invoice.payBy)}`);
+  facts.push(describeBalance(invoice));
   lines.push(facts.join(' · '));
   if (invoice.invoiceNumber) lines.push(`Invoice # ${invoice.invoiceNumber}`);
 
@@ -312,13 +332,16 @@ function invoiceLines(invoice: Invoice, storeName: string, checks: Check[], toda
 }
 
 function invoiceReminderLine(invoice: Invoice, today?: string): string | null {
-  if (!invoiceIsUnpaid(invoice) || !invoice.dueDate) return null;
-  const when = paymentDueReminderDate(invoice.dueDate, today ?? invoice.dueDate);
+  const due = invoice.payBy || invoice.dueDate;
+  if (!invoiceIsUnpaid(invoice) || !due) return null;
+  const when = paymentDueReminderDate(due, today ?? due);
   if (!when) return null;
+  const left = remainingOf(invoice);
+  const how = invoice.remainingMethod ? ` (${invoice.remainingMethod})` : '';
   if (today && when === today) {
-    return `⏰ Reply OK and I'll remind today (due ${dateLabel(invoice.dueDate)}).`;
+    return `⏰ Reply OK and I'll remind today to pay ${formatMoney(left)}${how}.`;
   }
-  return `⏰ Reply OK and I'll remind 3 days before, on ${dateLabel(when)}.`;
+  return `⏰ Reply OK and I'll remind 3 days before, on ${dateLabel(when)}, to pay ${formatMoney(left)}${how}.`;
 }
 
 function qtyText(item: OrderItem): string {
@@ -479,13 +502,27 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
     case 'invoice': {
       const store = resolveStore(understanding.invoice.storeHint, ctx);
       const today = localDateString(ctx.now, store.profile?.timezone || 'America/New_York');
-      const dateCheck = checkReportDate(understanding.invoice.invoiceDate, ctx.now);
+      let invoice = settleInvoice(understanding.invoice);
+      let updatesActionId: string | undefined;
+      if (looksLikePaymentUpdate(invoice)) {
+        const hit = matchOpenInvoice(invoice, ctx.openInvoices ?? [], store.storeId);
+        if (hit) {
+          invoice = applyPayments(hit.invoice, invoice);
+          updatesActionId = hit.actionId;
+        }
+      }
+      const dateCheck = checkReportDate(invoice.invoiceDate, ctx.now);
       const checks = [
         ...(store.warning ? [store.warning] : []),
         // A missing invoice date is common and not worth interrupting for; only bad dates are flagged.
         ...(dateCheck && dateCheck.id !== 'date_missing' ? [dateCheck] : []),
-        ...checkInvoice(understanding.invoice),
+        ...checkInvoice(invoice),
       ];
+      const header = updatesActionId
+        ? `🧾 Payment on ${invoice.vendorName ?? 'vendor'} · ${store.storeName}`
+        : `🧾 Invoice · ${invoice.vendorName ?? 'Unknown vendor'} · ${store.storeName}`;
+      const lines = invoiceLines(invoice, store.storeName, checks, today);
+      if (updatesActionId) lines[0] = header;
       return {
         entries: [
           {
@@ -493,9 +530,9 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
             storeId: store.storeId,
             storeName: store.storeName,
             actionType: 'INVOICE_EXPENSE',
-            payload: invoicePayload(understanding.invoice, checks, understanding.needsReview),
+            payload: invoicePayload(invoice, checks, understanding.needsReview, { updatesActionId }),
             confidence: understanding.confidence,
-            lines: [...invoiceLines(understanding.invoice, store.storeName, checks, today), ...reviewLine(understanding.needsReview)],
+            lines: [...lines, ...reviewLine(understanding.needsReview)],
             checks,
           },
         ],
@@ -738,8 +775,8 @@ export function applyFixToPayload(
     return { ok: true, payload: dailyClosePayload(report, checks, review, inferred.length === 1 ? inferred[0] : null) };
   }
 
-  if (kind === 'invoice') {
-    const invoice = { ...(payload.invoice as Invoice) };
+  if (kind === 'invoice' || kind === 'invoice_payment') {
+    const invoice = { ...(payload.invoice as Invoice), payments: [...((payload.invoice as Invoice).payments ?? [])] };
     if (key === 'amount' || key === 'total') {
       const amount = parseMoney(value);
       if (amount == null) return { ok: false, message: `"${value}" is not a number. Example: FIX total 136.08` };
@@ -750,14 +787,29 @@ export function applyFixToPayload(
       const date = parseIsoDate(value);
       if (!date) return { ok: false, message: 'Date format: FIX date 10/12 (month/day).' };
       invoice.invoiceDate = date;
-    } else if (key === 'due' || key === 'due_date' || key === 'duedate') {
+    } else if (key === 'due' || key === 'due_date' || key === 'duedate' || key === 'payby' || key === 'pay_by') {
       const date = parseIsoDate(value);
       if (!date) return { ok: false, message: 'Date format: FIX due 11/10 (month/day).' };
-      invoice.dueDate = date;
+      if (key === 'payby' || key === 'pay_by') invoice.payBy = date;
+      else invoice.dueDate = date;
+    } else if (key === 'remaining') {
+      const amount = parseMoney(value);
+      if (amount == null) return { ok: false, message: `"${value}" is not a number. Example: FIX remaining 400` };
+      invoice.remainingDue = amount;
+    } else if (key === 'paid') {
+      const amount = parseMoney(value);
+      if (amount == null) return { ok: false, message: `"${value}" is not a number. Example: FIX paid 500` };
+      invoice.payments = [{ amount, method: 'cash' }];
+    } else if (key === 'method' || key === 'how') {
+      const how = value.trim().toLowerCase();
+      if (how === 'cash' || how === 'check' || how === 'other') invoice.remainingMethod = how;
+      else return { ok: false, message: 'FIX method cash, check, or other.' };
     } else {
-      return { ok: false, message: 'You can fix: total, vendor, date, due.' };
+      return { ok: false, message: 'You can fix: total, vendor, date, due, remaining, paid, method.' };
     }
-    return { ok: true, payload: invoicePayload(invoice, checkInvoice(invoice), review) };
+    const settled = settleInvoice(invoice);
+    const extra = typeof payload.updates_action_id === 'string' ? { updatesActionId: payload.updates_action_id } : {};
+    return { ok: true, payload: invoicePayload(settled, checkInvoice(settled), review, extra) };
   }
 
   if (kind === 'deposit_receipt') {

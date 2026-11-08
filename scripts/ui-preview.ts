@@ -13,6 +13,7 @@ import fs from 'fs';
 import http from 'http';
 import path from 'path';
 import { dailyClosePayload, invoicePayload, planUnderstanding } from '../lib/understanding/plan';
+import { flattenTillPaidOuts, sourceActionId } from '../lib/understanding/tillPaidOuts';
 import { buildDefaultProfile } from '../lib/understanding/profile';
 import type { Understanding } from '../lib/understanding/schema';
 import { describeSchedule } from '../lib/tasks/schedule';
@@ -158,6 +159,35 @@ for (const [date, card, cash, gas, payout] of demo) {
   };
   const entry = planUnderstanding(understanding, ctx).entries[0];
   items.push({ id: `p${++seq}`, date: '2026-10-12T14:00:00-04:00', storeId: entry.storeId, type: 'invoices', data: { ...entry.payload, paid: 'Y', category: 'Snacks' }, confidence: entry.confidence });
+}
+{
+  const understanding: Understanding = {
+    kind: 'invoice',
+    confidence: 0.9,
+    needsReview: [],
+    invoice: {
+      vendorName: 'Pepsi',
+      invoiceNumber: '88',
+      invoiceDate: '2026-10-12',
+      dueDate: '2026-10-28',
+      storeHint: 'Rockaway',
+      lineItems: [],
+      total: 900,
+      paymentStatus: 'unpaid',
+      remainingDue: 400,
+      remainingMethod: 'check',
+      payBy: '2026-10-17',
+    },
+  };
+  const entry = planUnderstanding(understanding, ctx).entries[0];
+  items.push({
+    id: `p${++seq}`,
+    date: '2026-10-12T16:00:00-04:00',
+    storeId: entry.storeId,
+    type: 'invoices',
+    data: entry.payload,
+    confidence: entry.confidence,
+  });
 }
 // Keep imports used (also handy for readers): payload builders are what the pipeline stores.
 void dailyClosePayload;
@@ -424,12 +454,41 @@ async function api(req: http.IncomingMessage, res: http.ServerResponse, url: URL
         weekStart: '2026-11-01',
       }), true;
     }
+    if (type === 'paidouts') {
+      const till = flattenTillPaidOuts(
+        items
+          .filter((i) => i.storeId === storeId)
+          .map((i) => ({
+            actionId: i.id,
+            type: i.type === 'sales' ? 'STORE_SALES' : i.type === 'invoices' ? 'INVOICE_EXPENSE' : 'PAID_OUT',
+            createdAt: new Date(i.date),
+            payloadJson: i.data,
+            confidence: i.confidence,
+          }))
+      );
+      return sendJson(res, 200, { paidouts: till }), true;
+    }
     const list = type === 'sales' || type === 'invoices' ? forStore(storeId, type) : [];
     return sendJson(res, 200, { [type]: shaped(list) }), true;
   }
 
   if (p === '/api/stores/detail') {
     const id = url.searchParams.get('id');
+    if (type === 'paidouts' && id) {
+      const source = items.find((i) => i.id === sourceActionId(id) && i.storeId === storeId);
+      if (!source) return sendJson(res, 404, { error: 'Item not found' }), true;
+      const till = flattenTillPaidOuts([
+        {
+          actionId: source.id,
+          type: source.type === 'sales' ? 'STORE_SALES' : source.type === 'invoices' ? 'INVOICE_EXPENSE' : 'PAID_OUT',
+          createdAt: new Date(source.date),
+          payloadJson: source.data,
+          confidence: source.confidence,
+        },
+      ]);
+      const hit = till.find((row) => row.id === id) ?? till[0];
+      return hit ? (sendJson(res, 200, { item: hit }), true) : (sendJson(res, 404, { error: 'Item not found' }), true);
+    }
     const item = items.find((i) => i.id === id && i.storeId === storeId);
     return item ? (sendJson(res, 200, { item: shaped([item])[0] }), true) : (sendJson(res, 404, { error: 'Item not found' }), true);
   }

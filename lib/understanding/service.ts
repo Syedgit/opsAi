@@ -5,6 +5,7 @@ import { sendWhatsAppMessage } from '../whatsappMessaging';
 import { downloadWhatsAppMedia } from '../whatsappMedia';
 import { UnderstandingUnavailableError, type MessageUnderstander } from './extractor';
 import { formatEntriesReply, planUnderstanding } from './plan';
+import { loadOpenInvoices } from '../tasks/invoiceReminder';
 import { loadStoreProfiles } from './storeProfiles';
 import { transcribeAudio } from './transcribe';
 import type { AiUsageRecord } from './usage';
@@ -119,6 +120,13 @@ export async function understandAndRespond(prisma: PrismaClient, params: Underst
     multiStoreSender,
     canTeachRules: canReportForAllStores,
     canManageSchedules: canReportForAllStores,
+    openInvoices: await loadOpenInvoices(
+      prisma,
+      profiles.map((p) => p.storeId)
+    ).catch((error) => {
+      console.warn('Could not load open invoices', error instanceof Error ? error.message : error);
+      return [];
+    }),
   });
   const heard = transcript ? `🎙️ I heard: "${transcript}"\n\n` : '';
 

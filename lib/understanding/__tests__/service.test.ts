@@ -18,7 +18,7 @@ import { downloadWhatsAppMedia } from '../../whatsappMedia';
 import { transcribeAudio } from '../transcribe';
 
 const prisma = {
-  pendingActions: { count: jest.fn().mockResolvedValue(3) },
+  pendingActions: { count: jest.fn().mockResolvedValue(3), findMany: jest.fn().mockResolvedValue([]) },
   userDirectory: { findUnique: jest.fn().mockResolvedValue({ role: 'OWNER' }) },
   userStore: { findMany: jest.fn().mockResolvedValue([]) },
   storeConfig: {
@@ -197,6 +197,34 @@ describe('understandAndRespond', () => {
     // Staff never look up the owner's other stores.
     expect(prisma.userStore.findMany).not.toHaveBeenCalled();
     expect((sendWhatsAppMessage as jest.Mock).mock.calls[0][2]).not.toContain('No store name found');
+  });
+
+  it('still reads a message when the owner-store lookup fails', async () => {
+    (prisma.userStore.findMany as jest.Mock).mockRejectedValueOnce(new Error('varchar = UserRole'));
+    const outcome = await understandAndRespond(prisma, {
+      ...base,
+      text: 'Rockaway cash 106 card 334 gas 1355',
+      understander: understander(sales),
+    });
+    expect(outcome).toBe('handled');
+    expect(sendWhatsAppMessage).toHaveBeenCalled();
+    expect((sendWhatsAppMessage as jest.Mock).mock.calls[0][2]).toContain('Rockaway');
+  });
+
+  it('looks up an owner\'s other stores without comparing role in SQL', async () => {
+    // Production user_stores.role is VARCHAR; Prisma UserRole is a Postgres enum.
+    (prisma.userStore.findMany as jest.Mock)
+      .mockResolvedValueOnce([{ userId: 'u1', role: 'OWNER' }])
+      .mockResolvedValueOnce([
+        { storeId: 'S001', role: 'OWNER' },
+        { storeId: 'S002', role: 'OWNER' },
+        { storeId: 'S002', role: 'STAFF' },
+      ]);
+    await understandAndRespond(prisma, { ...base, text: 'cash 100', understander: understander(sales) });
+    const wheres = (prisma.userStore.findMany as jest.Mock).mock.calls.map((c) => c[0].where);
+    expect(wheres[0]).toEqual({ storeId: 'S001' });
+    expect(wheres[1]).toEqual({ userId: { in: ['u1'] } });
+    for (const where of wheres) expect(where.role).toBeUndefined();
   });
 
   it('welcomes the first report from a store and explains how to correct it', async () => {

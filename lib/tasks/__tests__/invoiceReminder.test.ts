@@ -1,10 +1,12 @@
 import {
+  describeOpenBills,
   invoiceIsUnpaid,
   invoiceReminderKey,
   invoiceReminderTitle,
   paymentDueReminderDate,
   scheduleInvoicePaymentReminder,
 } from '../invoiceReminder';
+import { settleInvoice } from '../../understanding/invoiceBalance';
 import type { Invoice } from '../../understanding/schema';
 
 const unpaid: Invoice = {
@@ -42,22 +44,37 @@ describe('who gets a reminder', () => {
     expect(invoiceIsUnpaid({ paymentStatus: 'unknown' })).toBe(true);
   });
 
-  it('names the vendor and invoice number', () => {
-    expect(invoiceReminderTitle(unpaid)).toBe('Pay Pepsi #88');
+  it('names the vendor, invoice number and remaining', () => {
+    expect(invoiceReminderTitle(unpaid)).toBe('Pay Pepsi #88 $850');
     expect(invoiceReminderTitle({ vendorName: 'Pepsi', invoiceNumber: null })).toBe('Pay Pepsi invoice');
-    expect(invoiceReminderKey(unpaid)).toBe('invoice-due:pepsi:88:2026-10-28');
+    expect(invoiceReminderKey(unpaid)).toBe('invoice-due:pepsi:88');
+  });
+
+  it('lists open bills for DUE', () => {
+    const text = describeOpenBills(
+      [{ actionId: 'a1', storeId: 'S001', invoice: settleInvoice({ ...unpaid, remainingDue: 400, remainingMethod: 'check', payBy: '2026-10-17' }) }],
+      { S001: 'Rockaway' },
+      true
+    );
+    expect(text).toContain('Pepsi #88 · Rockaway: $400 remaining check due Sat, Oct 17');
   });
 });
 
 function fakePrisma(existing: Array<{ instructions: string | null }> = []) {
   const created: Array<Record<string, unknown>> = [];
+  const updated: Array<{ id: string; data: Record<string, unknown> }> = [];
   return {
     created,
+    updated,
     taskTemplate: {
       findMany: async () => existing.map((t, i) => ({ id: `t${i}`, instructions: t.instructions })),
       create: async ({ data }: { data: Record<string, unknown> }) => {
         created.push(data);
         return { id: `new-${created.length}`, ...data };
+      },
+      update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+        updated.push({ id: where.id, data });
+        return { id: where.id, ...data };
       },
     },
   };
@@ -69,7 +86,7 @@ describe('scheduleInvoicePaymentReminder', () => {
   it('creates a one-off task 3 days before the due date', async () => {
     const db = fakePrisma();
     const result = await scheduleInvoicePaymentReminder(db as never, 'S001', unpaid, opts);
-    expect(result).toEqual({ scheduled: true, reminderDate: '2026-10-25', title: 'Pay Pepsi #88' });
+    expect(result).toEqual({ scheduled: true, reminderDate: '2026-10-25', title: 'Pay Pepsi #88 $850' });
     expect(db.created[0]).toMatchObject({
       storeId: 'S001',
       frequency: 'once',
@@ -77,7 +94,8 @@ describe('scheduleInvoicePaymentReminder', () => {
       startTime: '10:00',
       category: 'reports',
     });
-    expect(String(db.created[0].instructions)).toContain('invoice-due:pepsi:88:2026-10-28');
+    expect(String(db.created[0].instructions)).toContain('invoice-due:pepsi:88');
+    expect(String(db.created[0].instructions)).toContain('$850 remaining');
     expect(String(db.created[0].instructions)).toContain('Due Wed, Oct 28');
   });
 
@@ -88,11 +106,29 @@ describe('scheduleInvoicePaymentReminder', () => {
     expect(db.created).toHaveLength(0);
   });
 
-  it('does not duplicate a reminder for the same invoice', async () => {
+  it('updates the reminder when remaining changes', async () => {
     const db = fakePrisma([{ instructions: 'invoice-due:pepsi:88:2026-10-28\nPay Pepsi' }]);
-    const result = await scheduleInvoicePaymentReminder(db as never, 'S001', unpaid, opts);
-    expect(result).toEqual({ scheduled: false, reason: 'duplicate' });
+    const result = await scheduleInvoicePaymentReminder(
+      db as never,
+      'S001',
+      settleInvoice({ ...unpaid, remainingDue: 400, remainingMethod: 'check', payBy: '2026-10-17' }),
+      opts
+    );
+    expect(result).toEqual({ scheduled: true, reminderDate: '2026-10-14', title: 'Pay Pepsi #88 $400' });
     expect(db.created).toHaveLength(0);
+    expect(db.updated[0].data.instructions).toContain('$400 remaining by check');
+  });
+
+  it('turns the reminder off once the remaining is paid', async () => {
+    const db = fakePrisma([{ instructions: 'invoice-due:pepsi:88\nPay Pepsi' }]);
+    const result = await scheduleInvoicePaymentReminder(
+      db as never,
+      'S001',
+      { ...unpaid, paymentStatus: 'paid_cash', remainingDue: 0 },
+      opts
+    );
+    expect(result).toEqual({ scheduled: false, reason: 'paid' });
+    expect(db.updated[0]).toEqual({ id: 't0', data: { active: false } });
   });
 
   it('reminds today at the next couple of minutes when the due date is close', async () => {

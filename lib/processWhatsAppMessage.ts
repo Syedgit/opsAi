@@ -77,6 +77,32 @@ export async function processWhatsAppMessage(
     hasGroup: Boolean(input.groupId),
   });
 
+  try {
+    await handleInboundWhatsApp(prisma, input, from);
+  } catch (error) {
+    // Meta will not re-run a claimed message, so the sender must hear that it failed.
+    logAppError('wa.message.fail', { messageId, from, ...serializeError(error) });
+    try {
+      await sendWhatsAppMessage(
+        prisma,
+        phoneE164,
+        "😕 I couldn't finish reading that. Please send the photo or numbers again in a minute.",
+        input.storeId ?? undefined
+      );
+      await updateMessageLog(prisma, messageId, { classification: 'ERROR', processed: true });
+    } catch (sendError) {
+      logAppError('wa.fail_reply', { messageId, ...serializeError(sendError) });
+    }
+  }
+}
+
+async function handleInboundWhatsApp(
+  prisma: PrismaClient,
+  input: ProcessWhatsAppMessageInput,
+  from: string
+): Promise<void> {
+  const { messageId, phoneE164, messageText = '', mediaId, mediaType } = input;
+
   let storeId = input.storeId ?? null;
   let groupJustLinked = false;
 
