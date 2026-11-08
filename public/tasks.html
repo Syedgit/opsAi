@@ -12,11 +12,11 @@
             --bg: #f5f7fa; --card: #fff; --text: #1a1a1a; --light: #666; --border: #e0e0e0;
             --ok: #10b981; --warn: #f59e0b; --bad: #ef4444;
         }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; background: var(--bg); color: var(--text); }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: var(--bg); color: var(--text); }
         header { background: linear-gradient(90deg, var(--primary-dark), var(--secondary)); color: #fff; padding: 14px 20px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
         header a { color: #fff; text-decoration: none; opacity: .85; font-size: 14px; }
         header h1 { font-size: 18px; flex: 1; }
-        header select { padding: 8px 10px; border-radius: 6px; border: none; font-size: 14px; max-width: 100%; }
+        header select { padding: 8px 10px; border-radius: 6px; border: none; font-size: 14px; width: auto; min-width: 220px; max-width: 100%; font-family: inherit; }
         main { max-width: 1000px; margin: 0 auto; padding: 20px 16px 60px; }
         .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
         .tab { padding: 10px 18px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); cursor: pointer; font-size: 14px; }
@@ -37,7 +37,7 @@
         .b-open { background: #fef3c7; color: #92400e; } .b-late { background: #fee2e2; color: #991b1b; }
         .b-done { background: #d1fae5; color: #065f46; } .b-missed { background: #fee2e2; color: #991b1b; }
         .b-off { background: #e5e7eb; color: #374151; }
-        button { cursor: pointer; font-size: 14px; border-radius: 8px; padding: 8px 14px; border: 1px solid var(--border); background: #fff; }
+        button { cursor: pointer; font-size: 14px; border-radius: 8px; padding: 8px 14px; border: 1px solid var(--border); background: #fff; font-family: inherit; }
         button.primary { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
         button.danger { color: var(--bad); }
         button.small { padding: 4px 10px; font-size: 12px; }
@@ -45,7 +45,7 @@
         .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
         label { display: block; font-size: 12px; color: var(--light); margin-bottom: 4px; }
-        input[type=text], input[type=time], input[type=number], select, textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-family: inherit; }
+        input[type=text], input[type=time], input[type=number], input[type=email], select, textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-family: inherit; }
         textarea { min-height: 60px; resize: vertical; }
         .days label { display: inline-flex; align-items: center; gap: 4px; margin-right: 10px; color: var(--text); font-size: 14px; }
         .notice { padding: 10px 14px; border-radius: 8px; font-size: 14px; margin-bottom: 14px; }
@@ -74,6 +74,13 @@
         .count { font-weight: 600; color: var(--light); font-size: 13px; }
         .preset-group { background: #f8fafc; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
         .danger-card { border-color: #fecaca; }
+        body.admin-page main { max-width: 1080px; }
+        .admin-view .card {
+            padding: 20px 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .admin-view .card h2 { font-size: 18px; font-weight: 700; color: var(--secondary); }
+        .admin-view .count { background: var(--bg); border-radius: 999px; padding: 2px 9px; font-size: 12px; }
         @media (max-width: 800px) { .admin-grid { grid-template-columns: 1fr; } }
         @media (max-width: 640px) {
             td, th { padding: 8px 4px; }
@@ -672,7 +679,10 @@
     function render() {
         if (view === 'inspection' && !isSevenEleven()) view = 'today';
         document.querySelectorAll('.tab').forEach(function (t) { if (t.dataset.view === 'inspection') t.style.display = isSevenEleven() ? '' : 'none'; });
-        document.getElementById('content').innerHTML = view === 'today' ? renderToday() : view === 'inspection' ? renderInspection() : renderSetup();
+        document.body.classList.toggle('admin-page', view === 'setup');
+        const content = document.getElementById('content');
+        content.className = view === 'setup' ? 'admin-view' : '';
+        content.innerHTML = view === 'today' ? renderToday() : view === 'inspection' ? renderInspection() : renderSetup();
         document.querySelectorAll('.tab').forEach(function (t) { t.classList.toggle('active', t.dataset.view === view); });
     }
 
