@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { getAuthUser, signSession } from '../../lib/apiAuth';
 import { clearSessionCookie, setSessionCookie } from '../../lib/authCookie';
+import { noteOwnerLogin } from '../../lib/ceoUsage';
 import {
   AUTH_LOCKED,
   clearAuthFailures,
@@ -58,13 +59,14 @@ function rejectLocked(res: VercelResponse, retryAfterSec: number): void {
   res.status(429).json({ error: AUTH_LOCKED });
 }
 
-function issueSession(
+async function issueSession(
   req: VercelRequest,
   res: VercelResponse,
   user: { id: string; email: string; name: string | null; plan?: string | null; planStatus?: string | null; trialEndsAt?: Date | null; createdAt?: Date },
   stores: StoreRow[],
   status: number,
-): void {
+): Promise<void> {
+  await noteOwnerLogin(prisma, user.id);
   setSessionCookie(res, signSession(user), req);
   res.status(status).json({
     success: true,
@@ -115,7 +117,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
           return;
         }
         logApp('auth.login', { via: 'wa_link', ok: true, storeId: link.storeId, userId: linked.id });
-        issueSession(req, res, linked, linked.stores, 200);
+        await issueSession(req, res, linked, linked.stores, 200);
         return;
       }
 
@@ -165,7 +167,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
 
       clearAuthFailures(parsed.email);
       logApp('auth.login', { via: 'password', ok: true, userId: user.id, stores: user.stores.length });
-      issueSession(req, res, user, user.stores, 200);
+      await issueSession(req, res, user, user.stores, 200);
     } catch (error: unknown) {
       logAppError('auth.login', { ok: false, ...serializeError(error) });
       res.status(500).json({ error: 'Failed to login' });
@@ -220,7 +222,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       });
 
       logApp('auth.signup', { ok: true, userId: user.id });
-      issueSession(req, res, user, [], 201);
+      await issueSession(req, res, user, [], 201);
     } catch (error: unknown) {
       if (isDuplicateEmail(error)) {
         res.status(409).json({ error: DUPLICATE_EMAIL_ERROR });

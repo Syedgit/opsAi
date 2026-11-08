@@ -108,6 +108,14 @@
     {
       "source": "/api/cron/tasks",
       "destination": "/api/cron/tasks.ts"
+    },
+    {
+      "source": "/internal",
+      "destination": "/internal.html"
+    },
+    {
+      "source": "/api/admin/usage",
+      "destination": "/api/admin/usage.ts"
     }
   ],
   "headers": [

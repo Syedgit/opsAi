@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { OAuth2Client } from 'google-auth-library';
 import { signSession } from '../../lib/apiAuth';
 import { setSessionCookie } from '../../lib/authCookie';
+import { noteOwnerLogin } from '../../lib/ceoUsage';
 import { googleOAuthStep } from '../../lib/googleOAuth';
 import { logAppError, loggedHandler, serializeError } from '../../lib/requestLog';
 import { newAccountBilling } from '../../lib/billing/plans';
@@ -148,6 +149,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       });
     }
 
+    await noteOwnerLogin(prisma, user.id);
     setSessionCookie(res, signSession(user), req);
     res.redirect(user.stores.length === 0 ? '/onboarding' : '/dashboard');
   } catch (error: unknown) {

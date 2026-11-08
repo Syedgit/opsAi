@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en" data-app-shell="web">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Usage · opsAi</title>
+    <link rel="icon" type="image/png" href="/icon-192.png">
+    <link rel="stylesheet" href="/app-shell.css?v=2">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f4f4f5;
+            color: #111;
+            min-height: 100vh;
+        }
+        header {
+            background: #111;
+            color: #fff;
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        header strong { font-size: 15px; letter-spacing: 0.02em; }
+        header span { color: #a3a3a3; font-size: 13px; }
+        main { max-width: 1080px; margin: 0 auto; padding: 24px 16px 64px; }
+        h1 { font-size: 22px; margin: 0 0 8px; }
+        .lead { color: #525252; margin-bottom: 24px; font-size: 14px; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 28px; }
+        .stat { background: #fff; border: 1px solid #e5e5e5; border-radius: 10px; padding: 14px 16px; }
+        .stat b { display: block; font-size: 28px; line-height: 1.1; }
+        .stat small { color: #737373; font-size: 12px; }
+        .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-bottom: 28px; }
+        .chart { background: #fff; border: 1px solid #e5e5e5; border-radius: 10px; padding: 16px; }
+        .chart h2 { font-size: 13px; font-weight: 600; margin-bottom: 12px; }
+        .bar { display: grid; grid-template-columns: 72px 1fr 28px; gap: 8px; align-items: center; margin-bottom: 6px; font-size: 12px; color: #525252; }
+        .bar i { display: block; height: 10px; background: #111; border-radius: 2px; min-width: 0; }
+        table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e5e5e5; border-radius: 10px; overflow: hidden; font-size: 13px; }
+        th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #f0f0f0; }
+        th { color: #737373; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+        .ok { color: #128C7E; font-weight: 600; }
+        .warn { color: #b45309; font-weight: 600; }
+        .err { background: #fff; border: 1px solid #e5e5e5; padding: 20px; border-radius: 10px; }
+        .err a { color: #111; }
+        h2.table-title { font-size: 15px; margin: 8px 0 10px; }
+        .muted { color: #737373; }
+    </style>
+</head>
+<body>
+    <header>
+        <strong>opsAi usage</strong>
+        <span>Founders only · not the owner dashboard</span>
+    </header>
+    <main>
+        <h1>How the product is doing</h1>
+        <p class="lead" id="lead">Loading…</p>
+        <div id="root"></div>
+    </main>
+    <script>
+        function esc(v) {
+            return String(v == null ? '' : v)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+        function when(iso) {
+            if (!iso) return '—';
+            return iso.slice(0, 10);
+        }
+        function money(n) {
+            return '$' + Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
+        }
+        function bars(rows, label) {
+            const max = Math.max(1, ...rows.map(function (r) { return r.count; }));
+            return rows.map(function (r) {
+                const pct = Math.round((r.count / max) * 100);
+                const text = label ? r[label] : r.week.slice(5);
+                return '<div class="bar"><span>' + esc(text) + '</span><i style="width:' + pct + '%"></i><b>' + r.count + '</b></div>';
+            }).join('');
+        }
+        function planLabel(u) {
+            if (u.planStatus === 'trial' && u.daysLeft != null) return 'trial · ' + u.daysLeft + 'd';
+            return u.planStatus || '—';
+        }
+        function stripeLabel(u) {
+            if (u.stripeSubscription) return 'sub';
+            if (u.stripeCustomer) return 'customer';
+            return '—';
+        }
+        function table(headers, rows) {
+            return '<table><thead><tr>' + headers.map(function (h) { return '<th>' + h + '</th>'; }).join('') +
+                '</tr></thead><tbody>' + rows.join('') + '</tbody></table>';
+        }
+        (async function () {
+            const root = document.getElementById('root');
+            const lead = document.getElementById('lead');
+            try {
+                const res = await fetch('/api/admin/usage');
+                const data = await res.json();
+                if (res.status === 401) {
+                    lead.textContent = '';
+                    root.innerHTML = '<div class="err">Sign in with the founder account, then open this page again. Production also needs ADMIN_EMAILS set to that email.<p style="margin-top:12px"><a href="/login?next=/internal">Sign in</a></p></div>';
+                    return;
+                }
+                if (!res.ok) throw new Error(data.error || 'Could not load usage');
+                const t = data.totals;
+                const b = data.billing || {};
+                lead.textContent = 'A store is live when a WhatsApp group is linked or a report has been saved. Billing is $' +
+                    (b.priceUsdPerStore || 25) + ' per store per month from your database, not a live Stripe pull. Generated ' +
+                    when(data.generatedAt) + '.';
+                root.innerHTML =
+                    '<div class="stats">' +
+                        '<div class="stat"><b>' + t.users + '</b><small>Owner accounts</small></div>' +
+                        '<div class="stat"><b>' + t.loggedIn7 + '</b><small>Logged in last 7 days</small></div>' +
+                        '<div class="stat"><b>' + t.storesActive + '</b><small>Active stores</small></div>' +
+                        '<div class="stat"><b>' + t.storesLive + '</b><small>Stores actually using it</small></div>' +
+                        '<div class="stat"><b>' + t.whatsappGroups + '</b><small>Linked WhatsApp groups</small></div>' +
+                        '<div class="stat"><b>' + t.reports7 + '</b><small>Reports last 7 days</small></div>' +
+                    '</div>' +
+                    '<h2 class="table-title">Billing</h2>' +
+                    '<p class="lead">MRR is paying accounts only. Trial pipeline is what those stores would pay if they convert. Live run-rate is live stores × $25, whether or not they have a card.</p>' +
+                    '<div class="stats">' +
+                        '<div class="stat"><b>' + money(b.mrrUsd) + '</b><small>MRR (paying)</small></div>' +
+                        '<div class="stat"><b>' + money(b.arrUsd) + '</b><small>ARR</small></div>' +
+                        '<div class="stat"><b>' + money(b.trialPipelineUsd) + '</b><small>Trial pipeline / mo</small></div>' +
+                        '<div class="stat"><b>' + money(b.liveRunRateUsd) + '</b><small>If every live store paid</small></div>' +
+                        '<div class="stat"><b>' + money(b.atRiskUsd) + '</b><small>Trials ending in 3 days</small></div>' +
+                        '<div class="stat"><b>' + (b.billedStores || 0) + '</b><small>Stores on a paid plan</small></div>' +
+                        '<div class="stat"><b>' + (b.stripeSubscriptions || 0) + '</b><small>Stripe subscriptions</small></div>' +
+                        '<div class="stat"><b>' + (b.stripeReady ? 'on' : 'off') + '</b><small>Stripe checkout</small></div>' +
+                    '</div>' +
+                    '<div class="charts">' +
+                        '<div class="chart"><h2>Owner signups by week (UTC)</h2>' + bars(data.signupsByWeek) + '</div>' +
+                        '<div class="chart"><h2>Stores created by week (UTC)</h2>' + bars(data.storesByWeek) + '</div>' +
+                        '<div class="chart"><h2>Confirmed reports by week (UTC)</h2>' + bars(data.reportsByWeek) + '</div>' +
+                        '<div class="chart"><h2>Plans</h2>' + bars(b.byStatus || [], 'status') + '</div>' +
+                    '</div>' +
+                    '<h2 class="table-title">Stores</h2>' +
+                    table(['Store', 'Owner', 'Live', 'Created', 'Last report'],
+                        data.stores.map(function (s) {
+                            return '<tr><td>' + esc(s.storeName) + ' <span class="muted">' + esc(s.storeId) + '</span></td><td>' +
+                                esc(s.ownerEmail) + '</td><td class="' + (s.live ? 'ok' : 'warn') + '">' +
+                                (s.live ? 'yes' : 'not yet') + '</td><td>' + when(s.createdAt) + '</td><td>' +
+                                when(s.lastReportAt) + '</td></tr>';
+                        })) +
+                    '<h2 class="table-title" style="margin-top:28px">Owners</h2>' +
+                    table(['Email', 'Stores', 'Plan', 'Monthly', 'Stripe', 'Signed up', 'Last login'],
+                        data.owners.map(function (u) {
+                            return '<tr><td>' + esc(u.email) + '</td><td>' + u.stores + '</td><td>' +
+                                esc(planLabel(u)) + '</td><td>' + money(u.monthlyUsd) + '</td><td>' +
+                                esc(stripeLabel(u)) + '</td><td>' + when(u.createdAt) + '</td><td>' +
+                                when(u.lastLoginAt) + '</td></tr>';
+                        }));
+            } catch (e) {
+                lead.textContent = '';
+                root.innerHTML = '<div class="err">' + esc(e.message || e) + '</div>';
+            }
+        })();
+    </script>
+</body>
+</html>

@@ -9,11 +9,12 @@ import { WA_LINK_ERROR, signWhatsAppLogin } from '../whatsappLogin';
 
 const userFindUnique = jest.fn();
 const userCreate = jest.fn();
+const userUpdate = jest.fn();
 
 jest.mock('@prisma/client', () => ({
   PrismaClient: function PrismaClient() {
     return {
-      user: { findUnique: userFindUnique, create: userCreate },
+      user: { findUnique: userFindUnique, create: userCreate, update: userUpdate },
     };
   },
 }));
@@ -65,6 +66,8 @@ describe('POST /api/auth/signup', () => {
     resetAuthLimits();
     userFindUnique.mockReset();
     userCreate.mockReset();
+    userUpdate.mockReset();
+    userUpdate.mockResolvedValue({});
   });
 
   it('creates the user and sets an HttpOnly session cookie', async () => {
@@ -134,6 +137,8 @@ describe('POST /api/auth/login', () => {
     resetAuthLimits();
     userFindUnique.mockReset();
     userCreate.mockReset();
+    userUpdate.mockReset();
+    userUpdate.mockResolvedValue({});
   });
 
   it('sets a session cookie for a matching password', async () => {

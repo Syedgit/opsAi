@@ -23,6 +23,7 @@ import storesLinkHandler from '../api/stores/[storeId]/link';
 import webhookHandler from '../api/webhook/whatsapp';
 import billingHandler from '../api/billing/index';
 import stripeWebhookHandler from '../api/webhook/stripe';
+import usageHandler from '../api/admin/usage';
 
 const PORT = Number(process.env.PORT ?? 3000);
 const PUBLIC = join(__dirname, '..', 'public');
@@ -74,12 +75,14 @@ app.get('/dashboard', sendPage('dashboard.html'));
 app.get('/tasks', sendPage('tasks.html'));
 app.get('/pricing', sendPage('pricing.html'));
 app.get('/billing', sendPage('billing.html'));
+app.get('/internal', sendPage('internal.html'));
 
 app.all('/api/auth/signup', wrap(authHandler));
 app.all('/api/auth/login', wrap(authHandler));
 app.all('/api/auth/me', wrap(authHandler));
 app.all('/api/auth/logout', wrap(authHandler));
 app.all('/api/billing', wrap(billingHandler));
+app.all('/api/admin/usage', wrap(usageHandler));
 app.all('/api/onboarding/status', wrap(onboardingHandler));
 app.all('/api/onboarding/complete-store', wrap(onboardingHandler));
 app.all('/api/stores/tasks', wrap(storesTasksHandler));
@@ -100,4 +103,5 @@ app.listen(PORT, () => {
   console.log(`Tasks & alerts:                  http://localhost:${PORT}/tasks`);
   console.log(`WhatsApp webhook:                http://localhost:${PORT}/api/webhook/whatsapp`);
   console.log(`Stripe webhook:                  http://localhost:${PORT}/api/webhook/stripe`);
+  console.log(`CEO usage:                       http://localhost:${PORT}/internal`);
 });

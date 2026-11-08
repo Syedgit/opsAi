@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import type { VercelRequest } from '@vercel/node';
 import { getAuthUser, signSession } from '../../lib/apiAuth';
 import { clearSessionCookie, setSessionCookie } from '../../lib/authCookie';
+import { noteOwnerLogin } from '../../lib/ceoUsage';
 import { newAccountBilling } from '../../lib/billing/plans';
 
 const router = Router();
@@ -52,6 +53,7 @@ router.post('/signup', async (req: Request, res: Response) => {
       },
     });
 
+    await noteOwnerLogin(prisma, user.id);
     setSessionCookie(res, signSession(user), req);
     res.status(201).json({
       success: true,
@@ -103,6 +105,7 @@ router.post('/login', async (req: Request, res: Response) => {
       return;
     }
 
+    await noteOwnerLogin(prisma, user.id);
     setSessionCookie(res, signSession(user), req);
     res.status(200).json({
       success: true,
