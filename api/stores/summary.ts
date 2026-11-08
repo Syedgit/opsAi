@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
 import { generateBusinessSummary } from '../../lib/aiSummarization';
 import { requireStoreAccess, isMockRequested } from '../../lib/storeAccess';
+import { logAppError, loggedHandler, serializeError } from '../../lib/requestLog';
 
 const prisma = new PrismaClient();
 
@@ -9,7 +10,7 @@ const prisma = new PrismaClient();
  * Get AI-powered business summary
  * GET /api/stores/summary?storeId=S001&period=today|week|month
  */
-export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   const storeId = req.query.storeId as string;
   const period = (req.query.period as 'today' | 'week' | 'month') || 'today';
 
@@ -29,11 +30,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       summary,
     });
   } catch (error: unknown) {
+    logAppError('stores.summary', { storeId, period, ...serializeError(error) });
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Failed to generate summary', { error: errorMessage, storeId, period });
     res.status(500).json({
       error: 'Failed to generate summary',
       details: errorMessage,
     });
   }
 }
+
+export default loggedHandler('stores.summary', handler);

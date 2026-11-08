@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
 import { timingSafeEqual } from 'crypto';
 import { runTaskTick } from '../../lib/tasks/tick';
+import { logApp, logAppError, loggedHandler, serializeError } from '../../lib/requestLog';
 
 const prisma = new PrismaClient();
 
@@ -21,20 +22,24 @@ function authorized(req: VercelRequest): boolean {
  * Creates due tasks, sends alerts and reminders, escalates stale ones. Call it every 5 minutes with
  * "Authorization: Bearer <CRON_SECRET>". Scheduler options are in the README.
  */
-export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== 'GET' && req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
   }
   if (!authorized(req)) {
+    logApp('cron.tasks', { ok: false, reason: 'unauthorized' });
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
   try {
     const result = await runTaskTick(prisma, new Date());
+    logApp('cron.tasks', { ok: true, ...result });
     res.status(200).json({ success: true, ...result });
   } catch (error) {
-    console.error('Task tick failed', error instanceof Error ? error.message : error);
+    logAppError('cron.tasks', { ok: false, ...serializeError(error) });
     res.status(500).json({ error: 'Task tick failed' });
   }
 }
+
+export default loggedHandler('cron.tasks', handler);

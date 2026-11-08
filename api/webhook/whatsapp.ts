@@ -4,6 +4,7 @@ import { applyGroupLifecycleEvent } from '../../lib/whatsappGroupLifecycle';
 import { waitUntil } from '@vercel/functions';
 import { readRawBody, verifyRawWhatsAppSignature } from '../../lib/whatsappSignature';
 import { processWhatsAppMessage } from '../../lib/processWhatsAppMessage';
+import { logApp, logAppError, loggedHandler, maskPhone, serializeError } from '../../lib/requestLog';
 
 const prisma = new PrismaClient();
 
@@ -68,14 +69,14 @@ async function processWebhookBody(body: any) {
                 await applyGroupLifecycleEvent(prisma, g as Record<string, unknown>);
               }
             } catch (e) {
-              console.error('group_lifecycle_update handling failed', e);
+              logAppError('wa.group_lifecycle', serializeError(e));
             }
           }
 
           if (value?.messages) {
-            console.log('📱 Messages received', {
-              messageCount: value.messages.length,
-              phoneNumberId,
+            logApp('wa.messages', {
+              count: value.messages.length,
+              phoneNumberId: phoneNumberId ? 'set' : 'missing',
             });
 
             for (const message of value.messages) {
@@ -101,9 +102,10 @@ async function processWebhookBody(body: any) {
                   phoneNumberId,
                 });
               } catch (err) {
-                console.error('Message processing failed', {
+                logAppError('wa.message.fail', {
                   messageId,
-                  error: err instanceof Error ? err.message : err,
+                  from: maskPhone(phoneE164),
+                  ...serializeError(err),
                 });
               }
             }
@@ -118,12 +120,11 @@ async function processWebhookBody(body: any) {
       }
     }
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('❌ Error handling webhook:', errorMessage);
+    logAppError('wa.webhook.crash', serializeError(error));
   }
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method === 'GET') {
     verifyWebhook(req, res);
     return;
@@ -152,3 +153,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
   res.status(405).json({ error: 'Method not allowed' });
 }
+
+export default loggedHandler('webhook.whatsapp', handler);

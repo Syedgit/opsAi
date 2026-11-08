@@ -2,13 +2,14 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
 import { getGroupSetupMode } from '../../lib/whatsappGroupConfig';
 import { getWhatsAppStoreRoutingMode } from '../../lib/whatsappStoreResolution';
+import { logApp, loggedHandler } from '../../lib/requestLog';
 
 const prisma = new PrismaClient();
 
 /**
  * GET /api/setup/readiness — deployment checklist (no secrets exposed).
  */
-export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== 'GET') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
@@ -98,6 +99,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     ),
   };
 
+  logApp('readiness', { database: database.connected, profileJsonColumn: profileColumn, ai: ai.understanding });
   res.json({
     success: true,
     environment: process.env.VERCEL_ENV || process.env.NODE_ENV || 'development',
@@ -127,3 +129,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     ],
   });
 }
+
+export default loggedHandler('readiness', handler);

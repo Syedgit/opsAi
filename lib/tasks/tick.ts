@@ -4,6 +4,7 @@ import { maybeMorningDepositText } from '../understanding/depositDue';
 import { alertMessage, escalationMessage, reminderMessage, type MessageRun } from './messages';
 import { dueSoFar } from './schedule';
 import { localDateString } from './time';
+import { logApp, logAppError, serializeError } from '../requestLog';
 
 /**
  * The heartbeat of the task system. Called every few minutes by a scheduler (see README).
@@ -280,10 +281,7 @@ async function tickMorningDeposits(
       result.depositNudges += 1;
     } catch (error) {
       result.errors += 1;
-      console.error('Morning deposit note failed for store', {
-        storeId: store.storeId,
-        error: error instanceof Error ? error.message : error,
-      });
+      logAppError('tick.deposit', { storeId: store.storeId, ...serializeError(error) });
     }
   }
 }
@@ -309,7 +307,7 @@ export async function runTaskTick(prisma: PrismaClient, now: Date = new Date(), 
       await tickStore(prisma, storeId, activeByStore.get(storeId) ?? [], now, result);
     } catch (error) {
       result.errors += 1;
-      console.error('Task tick failed for store', { storeId, error: error instanceof Error ? error.message : error });
+      logAppError('tick.store', { storeId, ...serializeError(error) });
     }
   }
 
@@ -317,7 +315,8 @@ export async function runTaskTick(prisma: PrismaClient, now: Date = new Date(), 
     await tickMorningDeposits(prisma, now, options, result);
   } catch (error) {
     result.errors += 1;
-    console.error('Morning deposit tick failed', error instanceof Error ? error.message : error);
+    logAppError('tick.deposit', serializeError(error));
   }
+  logApp('tick.done', { store: options.storeId || 'all', ...result });
   return result;
 }

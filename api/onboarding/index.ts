@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { getAuthUser } from '../../lib/apiAuth';
 import { getGroupSetupMode } from '../../lib/whatsappGroupConfig';
 import { completeOwnerStoreOnboarding } from '../../lib/storeOwnerOnboarding';
+import { logAppError, loggedHandler, serializeError } from '../../lib/requestLog';
 
 const prisma = new PrismaClient();
 
@@ -10,7 +11,7 @@ const prisma = new PrismaClient();
  * GET /api/onboarding/status
  * POST /api/onboarding/complete-store
  */
-export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   const path = req.url?.split('?')[0] || '';
 
   if (path.endsWith('/status') && req.method === 'GET') {
@@ -91,7 +92,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         opsWhatsAppDisplayNumber: process.env.OPS_WHATSAPP_DISPLAY_NUMBER?.trim() || null,
       });
     } catch (e: unknown) {
-      console.error('Onboarding failed', e);
+      logAppError('onboarding', serializeError(e));
       res.status(500).json({
         error: 'Onboarding failed',
         details: e instanceof Error ? e.message : 'Unknown error',
@@ -102,3 +103,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
   res.status(405).json({ error: 'Method not allowed' });
 }
+
+export default loggedHandler('onboarding', handler);

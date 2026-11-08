@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import axios from 'axios';
 import { getWhatsAppStoreRoutingMode } from './whatsappStoreResolution';
+import { logApp, logAppError, maskPhone } from './requestLog';
 
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v22.0';
 
@@ -56,10 +57,22 @@ async function postText(
         },
       }
     );
+    logApp('wa.send', {
+      ok: true,
+      group: target.group,
+      storeId,
+      to: target.group ? `group:${target.to.slice(0, 8)}` : maskPhone(target.to),
+    });
     return true;
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Failed to send WhatsApp message', { to: target.to, group: target.group, storeId, error: msg });
+    logAppError('wa.send', {
+      ok: false,
+      group: target.group,
+      storeId,
+      to: target.group ? `group:${target.to.slice(0, 8)}` : maskPhone(target.to),
+      error: msg,
+    });
     return false;
   }
 }

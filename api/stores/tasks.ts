@@ -24,6 +24,7 @@ import {
   removeWhatsAppPerson,
   updateWhatsAppPerson,
 } from '../../lib/tasks/people';
+import { logApp, logAppError, loggedHandler, serializeError } from '../../lib/requestLog';
 
 const prisma = new PrismaClient();
 
@@ -133,7 +134,7 @@ function templateView(t: {
  * POST /api/stores/tasks?storeId=S001  { action: create | update | delete | import_presets | close | approve | run_now | preview_report | apply_report }
  * Reading is for any member of the store; changing setup is for owners and managers.
  */
-export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   const storeId = one(req.query.storeId);
   if (!storeId) {
     res.status(400).json({ error: 'storeId required' });
@@ -159,6 +160,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const timeZone = isValidTimeZone(store.timezone) ? store.timezone : 'America/New_York';
 
     if (req.method === 'GET') {
+      logApp('tasks.get', { storeId, view: one(req.query.view) || 'board', photo: Boolean(one(req.query.photo)) });
       const photoRunId = one(req.query.photo);
       if (photoRunId) {
         await sendPhoto(res, storeId, photoRunId);
@@ -255,6 +257,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       return;
     }
     const body = parsedBody.data;
+    logApp('tasks.action', { storeId, action: body.action, userId: actor.userId });
 
     if (body.action === 'run_now') {
       const result = await runTaskTick(prisma, new Date(), { storeId });
@@ -539,10 +542,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     await prisma.taskTemplate.update({ where: { id: found.id }, data: withAnchor(parsedTemplate.data, localDateString(new Date(), timeZone)) });
     res.status(200).json({ success: true });
   } catch (error) {
-    console.error('Tasks API error', error instanceof Error ? error.message : error);
+    logAppError('stores.tasks', serializeError(error));
     res.status(500).json({ error: 'Something went wrong. Please try again.' });
   }
 }
+
+export default loggedHandler('stores.tasks', handler);
 
 /** Proof photos live at WhatsApp, which keeps them for about 30 days. */
 async function sendPhoto(res: VercelResponse, storeId: string, runId: string): Promise<void> {

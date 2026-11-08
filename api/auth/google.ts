@@ -4,6 +4,7 @@ import { sign } from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import { getJwtSecret } from '../../lib/apiAuth';
 import { googleOAuthStep } from '../../lib/googleOAuth';
+import { logAppError, loggedHandler, serializeError } from '../../lib/requestLog';
 
 const prisma = new PrismaClient();
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -43,7 +44,7 @@ export async function initiateGoogleAuth(_req: VercelRequest, res: VercelRespons
  * Handle Google OAuth callback
  * Exchange code for tokens and create/update user
  */
-export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== 'GET') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
@@ -183,8 +184,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     `;
     res.send(html);
   } catch (error: unknown) {
-    console.error('Google OAuth error:', error);
+    logAppError('auth.google', serializeError(error));
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     res.redirect(`/login?error=${encodeURIComponent(errorMessage)}`);
   }
 }
+
+export default loggedHandler('auth.google', handler);

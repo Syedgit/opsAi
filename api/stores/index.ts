@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { startOfDay, endOfDay, startOfMonth, endOfMonth } from 'date-fns';
 import { requireAuthUser } from '../../lib/apiAuth';
 import { requireStoreAccess, isMockRequested } from '../../lib/storeAccess';
+import { logAppError, loggedHandler, serializeError } from '../../lib/requestLog';
 
 const prisma = new PrismaClient();
 
@@ -13,7 +14,7 @@ const prisma = new PrismaClient();
  * GET /api/stores/data - Get data by type
  * GET /api/stores/detail - Get item detail
  */
-export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   const path = req.url?.split('?')[0] || '';
   const storeId = (req.query.storeId as string) || 'S001';
   const type = (req.query.type as string) || 'sales';
@@ -53,6 +54,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         }));
       res.json({ stores });
     } catch (error: unknown) {
+      logAppError('stores', serializeError(error));
       res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
     }
     return;
@@ -97,6 +99,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         pending: pendingCount,
       });
     } catch (error: unknown) {
+      logAppError('stores', serializeError(error));
       res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
     }
     return;
@@ -150,6 +153,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         },
       });
     } catch (error: unknown) {
+      logAppError('stores', serializeError(error));
       res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
     }
     return;
@@ -163,3 +167,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
   res.status(404).json({ error: 'Not found' });
 }
+
+export default loggedHandler('stores', handler);

@@ -17,6 +17,7 @@ import { understandAndRespond } from './understanding/service';
 import { routeIntent } from './understanding/intent';
 import { tryTaskEvidence } from './tasks/evidence';
 import { checkAiBudget } from './understanding/budget';
+import { logApp, logAppError, maskPhone, serializeError } from './requestLog';
 
 export interface ProcessWhatsAppMessageInput {
   messageId: string;
@@ -54,6 +55,7 @@ export async function processWhatsAppMessage(
   input: ProcessWhatsAppMessageInput
 ): Promise<void> {
   const { messageId, phoneE164, messageText = '', mediaId, mediaType } = input;
+  const from = maskPhone(phoneE164);
 
   // Only one worker may process a message, even if Meta delivers it twice.
   const claimed = await claimMessage(prisma, {
@@ -64,8 +66,16 @@ export async function processWhatsAppMessage(
     mediaId,
   });
   if (!claimed) {
+    logApp('wa.skip', { messageId, from, reason: 'duplicate' });
     return;
   }
+  logApp('wa.message', {
+    messageId,
+    from,
+    type: mediaId ? mediaType || 'media' : 'text',
+    hasText: Boolean(messageText.trim()),
+    hasGroup: Boolean(input.groupId),
+  });
 
   let storeId = input.storeId ?? null;
   let groupJustLinked = false;
@@ -92,6 +102,7 @@ export async function processWhatsAppMessage(
   }
 
   const text = messageText.trim();
+  logApp('wa.store', { messageId, from, storeId: storeId || null, groupJustLinked });
 
   if (text && isWhatsAppCommand(text)) {
     await logMessage(prisma, {
@@ -103,6 +114,7 @@ export async function processWhatsAppMessage(
     });
 
     const result = await handleWhatsAppCommand(prisma, phoneE164, text);
+    logApp('wa.path', { messageId, from, storeId, path: 'command' });
     await sendWhatsAppMessage(prisma, phoneE164, result.message, result.storeId ?? storeId ?? undefined);
     await updateMessageLog(prisma, messageId, { processed: true, storeId: storeId ?? undefined });
     return;
@@ -119,6 +131,7 @@ export async function processWhatsAppMessage(
 
   // Voice notes are ignored completely: no reply, no download, no AI.
   if (mediaId && mediaType?.toLowerCase().startsWith('audio')) {
+    logApp('wa.path', { messageId, from, storeId, path: 'audio_ignored' });
     await updateMessageLog(prisma, messageId, { classification: 'AUDIO_IGNORED', processed: true, storeId: storeId ?? undefined });
     return;
   }
@@ -133,6 +146,7 @@ export async function processWhatsAppMessage(
         undefined
       );
     }
+    logApp('wa.path', { messageId, from, path: 'not_linked' });
     await updateMessageLog(prisma, messageId, { classification: 'NOT_LINKED', processed: true });
     return;
   }
@@ -147,6 +161,7 @@ export async function processWhatsAppMessage(
         storeId
       );
     }
+    logApp('wa.path', { messageId, from, storeId, path: 'rate_limited' });
     await updateMessageLog(prisma, messageId, { classification: 'RATE_LIMITED', processed: true, storeId });
     return;
   }
@@ -161,6 +176,7 @@ export async function processWhatsAppMessage(
   }
 
   if (!text && !mediaId) {
+    logApp('wa.path', { messageId, from, storeId, path: 'empty' });
     await sendWhatsAppMessage(
       prisma,
       phoneE164,
@@ -183,22 +199,27 @@ export async function processWhatsAppMessage(
       groupId: input.groupId ?? null,
       role: member?.role ?? null,
     });
-    if (handled) return;
+    if (handled) {
+      logApp('wa.path', { messageId, from, storeId, path: 'task_evidence' });
+      return;
+    }
   } catch (error) {
     // Tasks must never stop normal reporting (for example while the tables are not created yet).
-    console.error('Task evidence check failed', { messageId, error: error instanceof Error ? error.message : error });
+    logAppError('wa.task_evidence', { messageId, ...serializeError(error) });
   }
 
   // Intent (code) → reason (one AI read, only if needed) → execute (always code).
   const intent = routeIntent({ text, hasMedia: Boolean(mediaId) });
 
   if (intent.layer === 'execute' && (intent.action === 'chatter' || intent.action === 'no_data')) {
+    logApp('wa.path', { messageId, from, storeId, path: intent.action });
     if (intent.reply) await sendWhatsAppMessage(prisma, phoneE164, intent.reply, storeId);
     await updateMessageLog(prisma, messageId, { classification: intent.classification, processed: true, storeId });
     return;
   }
 
   if (intent.layer === 'execute' && intent.action === 'rules') {
+    logApp('wa.path', { messageId, from, storeId, path: 'rules', type: intent.type });
     await executeRuleExtraction(prisma, {
       messageId,
       phoneE164,
@@ -235,9 +256,10 @@ export async function processWhatsAppMessage(
               processed: true,
             },
           })
-          .catch((error: unknown) => console.error('Could not record AI limit notice', error instanceof Error ? error.message : error));
+          .catch((error: unknown) => logAppError('wa.ai_limit_log', serializeError(error)));
       }
       if (mediaId) {
+        logApp('wa.path', { messageId, from, storeId, path: 'ai_limit' });
         await updateMessageLog(prisma, messageId, { classification: 'AI_LIMIT', processed: true, storeId });
         return;
       }
@@ -245,6 +267,7 @@ export async function processWhatsAppMessage(
   }
 
   if (understander && aiAllowed) {
+    logApp('wa.path', { messageId, from, storeId, path: 'ai' });
     const outcome = await understandAndRespond(prisma, {
       messageId,
       phoneE164,
@@ -257,6 +280,7 @@ export async function processWhatsAppMessage(
     if (outcome === 'handled') return;
   }
 
+  logApp('wa.path', { messageId, from, storeId, path: 'fallback_rules' });
   await executeRuleExtraction(prisma, { messageId, phoneE164, storeId, text });
 }
 

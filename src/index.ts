@@ -10,7 +10,6 @@ import { authRouter } from './routes/auth';
 import { testRouter } from './routes/test';
 import adminRouter from './routes/admin';
 import onboardingRouter from './routes/onboarding';
-import twilioRouter from './routes/twilio';
 import { errorHandler } from './middleware/errorHandler';
 
 dotenv.config();
@@ -116,12 +115,6 @@ app.get('/onboarding', (_req, res) => {
 
 // Routes
 app.use('/api/webhook', whatsappRouter);
-// Twilio SMS webhook (for receiving SMS verification codes)
-// Test: Mount at separate path first to verify it works
-console.log('🔧 Registering Twilio SMS webhook');
-app.use('/api/twilio', twilioRouter); // Temporary: test at /api/twilio/twilio-sms
-app.use('/api/webhook', twilioRouter); // Also mount at /api/webhook for Twilio
-console.log('✅ Twilio SMS webhook registered');
 // Also support /whatsapp for backward compatibility
 app.use('/whatsapp', whatsappRouter);
 // Auth routes (for local development)
@@ -152,7 +145,6 @@ process.on('SIGINT', () => {
 app.listen(PORT, () => {
   logger.info(`🚀 Server running on port ${PORT}`);
   logger.info(`📱 WhatsApp webhook: http://localhost:${PORT}/api/webhook/whatsapp`);
-  logger.info(`📨 Twilio SMS webhook: http://localhost:${PORT}/api/webhook/twilio-sms`);
   logger.info(`✅ Ready to receive webhooks!`);
 });
 

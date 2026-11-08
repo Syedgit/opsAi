@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
 import { requireStoreAccess, isMockRequested } from '../../lib/storeAccess';
+import { logAppError, loggedHandler, serializeError } from '../../lib/requestLog';
 
 const prisma = new PrismaClient();
 
@@ -169,7 +170,7 @@ function serializeMockData(data: any[]): any[] {
  * Unified data endpoint - handles both real and mock data
  * Use ?mock=true to get mock data
  */
-export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   const storeId = (req.query.storeId as string) || 'S001';
   const type = (req.query.type as string) || 'sales';
   const useMock = isMockRequested(req);
@@ -252,7 +253,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
     res.json({ [type]: formatted });
   } catch (error: unknown) {
+    logAppError('stores.data', serializeError(error));
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     res.status(500).json({ error: errorMessage });
   }
 }
+
+export default loggedHandler('stores.data', handler);

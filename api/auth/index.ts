@@ -13,6 +13,7 @@ import {
   readJsonBody,
 } from '../../lib/authCredentials';
 import { WA_LINK_ERROR, verifyWhatsAppLogin } from '../../lib/whatsappLogin';
+import { logApp, logAppError, loggedHandler, serializeError } from '../../lib/requestLog';
 
 const prisma = new PrismaClient();
 
@@ -48,7 +49,7 @@ function isDuplicateEmail(error: unknown): boolean {
  * POST /api/auth/signup - Signup (returns a session token, same as login)
  * GET /api/auth/me - Get current user
  */
-export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   const action = authActionFromRequest(req);
 
   if (action === 'login' && req.method === 'POST') {
@@ -57,6 +58,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       if (typeof body.link === 'string' && body.link.trim()) {
         const link = verifyWhatsAppLogin(body.link.trim());
         if (!link) {
+          logApp('auth.login', { via: 'wa_link', ok: false });
           res.status(401).json({ error: WA_LINK_ERROR });
           return;
         }
@@ -67,9 +69,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         const member = linked?.stores.find((row) => row.store.storeId === link.storeId);
         const canOpen = member?.role === 'OWNER' || member?.role === 'MANAGER';
         if (!linked || !linked.isActive || linked.email !== link.email || !canOpen) {
+          logApp('auth.login', { via: 'wa_link', ok: false, storeId: link.storeId });
           res.status(401).json({ error: WA_LINK_ERROR });
           return;
         }
+        logApp('auth.login', { via: 'wa_link', ok: true, storeId: link.storeId, userId: linked.id });
         res.status(200).json({
           success: true,
           token: signToken(linked),
@@ -94,28 +98,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       });
 
       if (!user || !user.isActive) {
+        logApp('auth.login', { via: 'password', ok: false, reason: 'no_user' });
         res.status(401).json({ error: INVALID_LOGIN_ERROR });
         return;
       }
 
       if (!user.password) {
+        logApp('auth.login', { via: 'password', ok: false, reason: 'no_password' });
         res.status(401).json({ error: NO_PASSWORD_ERROR });
         return;
       }
 
       const isValidPassword = await bcrypt.compare(parsed.password, user.password);
       if (!isValidPassword) {
+        logApp('auth.login', { via: 'password', ok: false, reason: 'bad_password' });
         res.status(401).json({ error: INVALID_LOGIN_ERROR });
         return;
       }
 
+      logApp('auth.login', { via: 'password', ok: true, userId: user.id, stores: user.stores.length });
       res.status(200).json({
         success: true,
         token: signToken(user),
         user: publicUser(user, user.stores),
       });
     } catch (error: unknown) {
-      console.error('Login error:', error);
+      logAppError('auth.login', { ok: false, ...serializeError(error) });
       res.status(500).json({ error: 'Failed to login' });
     }
     return;
@@ -134,6 +142,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       });
 
       if (existingUser) {
+        logApp('auth.signup', { ok: false, reason: 'duplicate' });
         res.status(409).json({ error: DUPLICATE_EMAIL_ERROR });
         return;
       }
@@ -153,6 +162,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         },
       });
 
+      logApp('auth.signup', { ok: true, userId: user.id });
       res.status(201).json({
         success: true,
         token: signToken(user),
@@ -163,7 +173,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         res.status(409).json({ error: DUPLICATE_EMAIL_ERROR });
         return;
       }
-      console.error('Signup error:', error);
+      logAppError('auth.signup', { ok: false, ...serializeError(error) });
       res.status(500).json({ error: 'Failed to create user' });
     }
     return;
@@ -210,7 +220,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         user: publicUser(user, user.stores),
       });
     } catch (error: unknown) {
-      console.error('Me endpoint error:', error);
+      logAppError('auth.me', { ...serializeError(error) });
       res.status(500).json({ error: 'Failed to get user' });
     }
     return;
@@ -218,3 +228,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
   res.status(404).json({ error: 'Not found' });
 }
+
+export default loggedHandler('auth', handler);

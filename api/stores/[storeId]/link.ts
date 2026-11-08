@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient, UserRole } from '@prisma/client';
 import { requireAuthUser } from '../../../lib/apiAuth';
+import { logAppError, loggedHandler, serializeError } from '../../../lib/requestLog';
 
 const prisma = new PrismaClient();
 
@@ -10,7 +11,7 @@ const ALLOWED_SELF_LINK_ROLES: UserRole[] = [UserRole.STAFF, UserRole.MANAGER];
  * Join an existing store with invite code (staff/manager only).
  * Owners must complete onboarding to create a new store.
  */
-export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
@@ -70,9 +71,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       message: `Joined store ${storeId} as ${role}`,
     });
   } catch (e: unknown) {
+    logAppError('stores.link', serializeError(e));
     res.status(500).json({
       error: 'Failed to link store',
       details: e instanceof Error ? e.message : 'Unknown error',
     });
   }
 }
+
+export default loggedHandler('stores.link', handler);
