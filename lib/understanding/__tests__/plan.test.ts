@@ -1,6 +1,6 @@
-import { applyFixToPayload, describeEntryPayload, formatEntriesReply, planUnderstanding, scheduleGroupMessage } from '../plan';
+import { applyFixToPayload, describeEntryPayload, formatEntriesReply, planUnderstanding, scheduleGroupMessage, scheduleHoursMessage, scheduleSheetMessage } from '../plan';
 import { buildDefaultProfile } from '../profile';
-import type { Understanding } from '../schema';
+import type { DailyCloseReport, Understanding } from '../schema';
 
 const NOW = new Date('2026-10-12T18:00:00Z');
 
@@ -178,6 +178,64 @@ describe('planUnderstanding: daily close', () => {
     const understanding = { ...twoStoreText, needsReview: ['fuelSales'] } as Understanding;
     const [entry] = planUnderstanding(understanding, ctx).entries;
     expect(entry.lines.join('\n')).toContain('❓ Please check: fuelSales');
+  });
+
+  it('adds a later cash page onto the same store and day', () => {
+    const fuelPage: Understanding = {
+      kind: 'daily_close',
+      confidence: 0.9,
+      needsReview: [],
+      reports: [
+        {
+          storeHint: 'Denville',
+          reportDate: '2026-11-07',
+          cardSales: null,
+          cashSales: null,
+          storeSalesTotal: 0,
+          fuelSales: 6086.32,
+          fuelGallons: 1455.226,
+          payouts: [],
+        },
+      ],
+    };
+    const [first] = planUnderstanding(fuelPage, ctx).entries;
+    expect(first.storeId).toBe('S002');
+    expect(first.payload.updates_action_id).toBeUndefined();
+    expect(first.payload).toMatchObject({ fuel_sales: 6086.32, gallons: 1455.226, card: 0, cash: 0 });
+
+    const cashPage: Understanding = {
+      kind: 'daily_close',
+      confidence: 0.9,
+      needsReview: [],
+      reports: [
+        {
+          storeHint: 'Denville',
+          reportDate: '2026-11-07',
+          cashSales: 765.14,
+          payouts: [],
+        },
+      ],
+    };
+    const [second] = planUnderstanding(cashPage, {
+      ...ctx,
+      openCloses: [
+        {
+          actionId: 'close-1',
+          storeId: 'S002',
+          status: 'CONFIRMED',
+          report: first.payload.report as DailyCloseReport,
+        },
+      ],
+    }).entries;
+    expect(second.payload.updates_action_id).toBe('close-1');
+    expect(second.payload).toMatchObject({
+      fuel_sales: 6086.32,
+      gallons: 1455.226,
+      cash: 765.14,
+      card: 0,
+      total_inside: 765.14,
+    });
+    expect(second.lines[0]).toContain('adding to this close');
   });
 });
 
@@ -406,6 +464,75 @@ describe('planUnderstanding: other kinds', () => {
     const plan = planUnderstanding({ kind: 'unknown', reason: 'blurry', confidence: 0, needsReview: [] }, ctx);
     expect(plan.entries).toHaveLength(0);
     expect(plan.notice).toContain("couldn't read that");
+    expect(plan.notice).toContain('gas-price board');
+  });
+});
+
+describe('planUnderstanding: fuel prices', () => {
+  const bpBoard: Understanding = {
+    kind: 'fuel_prices',
+    confidence: 0.95,
+    needsReview: [],
+    prices: {
+      stationHint: 'BP',
+      sourceHint: 'unknown',
+      grades: [
+        { product: 'Regular', price: 4.099 },
+        { product: 'Diesel', price: 6.559 },
+      ],
+    },
+  };
+
+  it('files a BP pole as competition for Rockaway and keeps the tenths', () => {
+    const plan = planUnderstanding(bpBoard, ctx);
+    const entry = plan.entries[0];
+    expect(entry.kind).toBe('fuel_prices');
+    expect(entry.actionType).toBe('UNKNOWN');
+    expect(entry.payload).toMatchObject({ _kind: 'fuel_prices', source: 'competitor', station: 'BP', regular: 4.099, diesel: 6.559 });
+    expect(entry.lines.join('\n')).toContain('Competition · BP');
+    expect(entry.lines.join('\n')).toContain('Regular $4.099');
+    expect(entry.lines.join('\n')).toContain('Diesel $6.559');
+    expect(formatEntriesReply(plan.entries)).toContain('FIX source own');
+  });
+
+  it('files our board when the caption says prices were updated', () => {
+    const plan = planUnderstanding(bpBoard, { ...ctx, messageText: 'prices updated' });
+    expect(plan.entries[0].payload.source).toBe('own');
+    expect(plan.entries[0].lines.join('\n')).toContain('Our board');
+  });
+
+  it('files an Exxon board as ours when that store is aliased Exxon', () => {
+    const exxon = { ...ctx, profiles: [{ ...ctx.profiles[0], aliases: ['Rockaway Exxon'] }, ctx.profiles[1]] };
+    const plan = planUnderstanding(
+      {
+        kind: 'fuel_prices',
+        confidence: 0.95,
+        needsReview: [],
+        prices: {
+          stationHint: 'Exxon',
+          sourceHint: 'unknown',
+          grades: [
+            { product: 'Regular', price: 4.099 },
+            { product: 'Diesel', price: 6.559 },
+          ],
+        },
+      },
+      exxon
+    );
+    expect(plan.entries[0].payload.source).toBe('own');
+  });
+
+  it('applies FIX source own and FIX diesel', () => {
+    const [entry] = planUnderstanding(bpBoard, ctx).entries;
+    const source = applyFixToPayload(entry.payload, 'source', 'own');
+    expect(source.ok).toBe(true);
+    if (source.ok) {
+      expect(source.payload.source).toBe('own');
+      expect(describeEntryPayload(source.payload, 'Rockaway')?.join('\n')).toContain('Our board');
+    }
+    const diesel = applyFixToPayload(entry.payload, 'diesel', '6.459');
+    expect(diesel.ok).toBe(true);
+    if (diesel.ok) expect(diesel.payload.diesel).toBe(6.459);
   });
 });
 
@@ -726,13 +853,27 @@ describe('planUnderstanding: work schedule', () => {
       const fixed = applyFixToPayload(entry().payload, 'sam', '6');
       if (!fixed.ok) throw new Error('fix failed');
       expect(describeEntryPayload(fixed.payload, 'Rockaway')).toContain('Sam 6h (adjusted)');
-      expect(scheduleGroupMessage(fixed.payload, 'Rockaway')).toContain('Sam 6h (adjusted)');
+      expect(scheduleGroupMessage(fixed.payload, 'Rockaway')).toContain('Sam\nThu 2p–10p\n6h (adjusted)');
     });
   });
 
-  it('builds a group message of hours only', () => {
+  it('builds a group roster of days and an admin hours note', () => {
     const [e] = planUnderstanding(sheet([maria, sam]), manager).entries;
-    expect(scheduleGroupMessage(e.payload, 'Rockaway')).toBe(
+    expect(scheduleSheetMessage(e.payload, 'Rockaway')).toBe(
+      [
+        '📅 Rockaway · week of Mon, Oct 26',
+        'Maria',
+        'Mon 9a–5p · Tue 9a–5p',
+        '16h',
+        '',
+        'Sam',
+        'Thu 2p–10p',
+        '8h',
+        '',
+        'Your hours for the week. Check your days.',
+      ].join('\n')
+    );
+    expect(scheduleHoursMessage(e.payload, 'Rockaway')).toBe(
       ['📅 Rockaway · hours for week of Mon, Oct 26', 'Maria 16h', 'Sam 8h', 'Total 24h', '', 'Hours come from the posted sheet.'].join('\n')
     );
     expect(scheduleGroupMessage({ _kind: 'daily_close' }, 'Rockaway')).toBeNull();

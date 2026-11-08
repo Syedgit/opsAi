@@ -21,6 +21,8 @@ import storesSummaryHandler from '../api/stores/summary';
 import storesTasksHandler from '../api/stores/tasks';
 import storesLinkHandler from '../api/stores/[storeId]/link';
 import webhookHandler from '../api/webhook/whatsapp';
+import billingHandler from '../api/billing/index';
+import stripeWebhookHandler from '../api/webhook/stripe';
 
 const PORT = Number(process.env.PORT ?? 3000);
 const PUBLIC = join(__dirname, '..', 'public');
@@ -50,7 +52,7 @@ const jsonParser = express.json({ limit: '4mb' });
 const formParser = express.urlencoded({ extended: true });
 app.use((req: Request, res: Response, next: NextFunction) => {
   // Meta signs the raw body; do not parse JSON on the webhook path.
-  if (req.path === '/api/webhook/whatsapp') {
+  if (req.path === '/api/webhook/whatsapp' || req.path === '/api/webhook/stripe') {
     next();
     return;
   }
@@ -70,10 +72,13 @@ app.get('/login', sendPage('login.html'));
 app.get('/onboarding', sendPage('onboarding.html'));
 app.get('/dashboard', sendPage('dashboard.html'));
 app.get('/tasks', sendPage('tasks.html'));
+app.get('/pricing', sendPage('pricing.html'));
+app.get('/billing', sendPage('billing.html'));
 
 app.all('/api/auth/signup', wrap(authHandler));
 app.all('/api/auth/login', wrap(authHandler));
 app.all('/api/auth/me', wrap(authHandler));
+app.all('/api/billing', wrap(billingHandler));
 app.all('/api/onboarding/status', wrap(onboardingHandler));
 app.all('/api/onboarding/complete-store', wrap(onboardingHandler));
 app.all('/api/stores/tasks', wrap(storesTasksHandler));
@@ -85,6 +90,7 @@ app.all('/api/stores', wrap(storesHandler));
 app.all('/api/stores/:storeId/link', wrap(storesLinkHandler, (req) => ({ storeId: String(req.params.storeId) })));
 app.all('/api/stores/:storeId/whatsapp-group-provision', wrap(storesHandler, (req) => ({ storeId: String(req.params.storeId) })));
 app.all('/api/webhook/whatsapp', wrap(webhookHandler));
+app.all('/api/webhook/stripe', wrap(stripeWebhookHandler));
 
 app.listen(PORT, () => {
   console.log(`Local owner app (real database): http://localhost:${PORT}/signup`);
@@ -92,4 +98,5 @@ app.listen(PORT, () => {
   console.log(`Dashboard reports:               http://localhost:${PORT}/dashboard`);
   console.log(`Tasks & alerts:                  http://localhost:${PORT}/tasks`);
   console.log(`WhatsApp webhook:                http://localhost:${PORT}/api/webhook/whatsapp`);
+  console.log(`Stripe webhook:                  http://localhost:${PORT}/api/webhook/stripe`);
 });

@@ -14,13 +14,22 @@ import {
 } from '../../lib/authCredentials';
 import { WA_LINK_ERROR, verifyWhatsAppLogin } from '../../lib/whatsappLogin';
 import { logApp, logAppError, loggedHandler, serializeError } from '../../lib/requestLog';
+import { describeBilling, newAccountBilling } from '../../lib/billing/plans';
 
 const prisma = new PrismaClient();
 
 type StoreRow = { store: { storeId: string; storeName: string }; role: string };
 
 function publicUser(
-  user: { id: string; email: string; name: string | null },
+  user: {
+    id: string;
+    email: string;
+    name: string | null;
+    plan?: string | null;
+    planStatus?: string | null;
+    trialEndsAt?: Date | null;
+    createdAt?: Date;
+  },
   stores: StoreRow[] = [],
 ) {
   return {
@@ -32,6 +41,7 @@ function publicUser(
       storeName: us.store.storeName,
       role: us.role,
     })),
+    billing: describeBilling(user, stores.length),
   };
 }
 
@@ -148,17 +158,23 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       }
 
       const hashedPassword = await bcrypt.hash(parsed.password, 10);
+      const billing = newAccountBilling();
       const user = await prisma.user.create({
         data: {
           email: parsed.email,
           password: hashedPassword,
           name: parsed.name,
           provider: 'email',
+          ...billing,
         },
         select: {
           id: true,
           email: true,
           name: true,
+          plan: true,
+          planStatus: true,
+          trialEndsAt: true,
+          createdAt: true,
         },
       });
 

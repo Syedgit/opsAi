@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import axios from 'axios';
 import { getWhatsAppStoreRoutingMode } from './whatsappStoreResolution';
-import { logApp, logAppError, maskPhone } from './requestLog';
+import { logApp, logAppError, maskPhone, serializeError } from './requestLog';
 
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v22.0';
 
@@ -65,13 +65,12 @@ async function postText(
     });
     return true;
   } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
     logAppError('wa.send', {
       ok: false,
       group: target.group,
       storeId,
       to: target.group ? `group:${target.to.slice(0, 8)}` : maskPhone(target.to),
-      error: msg,
+      ...serializeError(error),
     });
     return false;
   }
@@ -129,17 +128,101 @@ async function groupsForStore(
   return [{ whatsappGroupId: unique[0] }];
 }
 
+const E164 = /^\+[1-9]\d{6,14}$/;
+
+export function isSendableWhatsAppPhone(value: string | null | undefined): boolean {
+  return Boolean(value && E164.test(value.trim()));
+}
+
+/**
+ * Owner/manager WhatsApp numbers for this store. Extra locations often have no directory row
+ * of their own (the phone lives on the first store), so we also look at sibling stores.
+ */
+export async function managerPhonesForStore(prisma: PrismaClient, storeId: string): Promise<string[]> {
+  const own = await prisma.userDirectory.findMany({
+    where: { storeId, isActive: true },
+    select: { phoneE164: true, role: true },
+  });
+  const local = [
+    ...new Set(
+      own
+        .filter((row) => row.role === 'OWNER' || row.role === 'MANAGER')
+        .map((row) => row.phoneE164)
+        .filter(isSendableWhatsAppPhone)
+    ),
+  ];
+  if (local.length > 0) return local;
+
+  const members = await prisma.userStore.findMany({ where: { storeId }, select: { userId: true, role: true } });
+  const userIds = members.filter((row) => row.role === 'OWNER' || row.role === 'MANAGER').map((row) => row.userId);
+  if (userIds.length === 0) return [];
+  const sibling = await prisma.userStore.findMany({
+    where: { userId: { in: userIds } },
+    select: { storeId: true },
+  });
+  const storeIds = [...new Set(sibling.map((row) => row.storeId))];
+  if (storeIds.length === 0) return [];
+  const directory = await prisma.userDirectory.findMany({
+    where: { isActive: true, storeId: { in: storeIds }, role: { in: ['OWNER', 'MANAGER'] } },
+    select: { phoneE164: true },
+  });
+  return [...new Set(directory.map((row) => row.phoneE164).filter(isSendableWhatsAppPhone))];
+}
+
 /** Post to every active group linked to a store. Returns how many posts went out. Never throws. */
-export async function postToStoreGroups(prisma: PrismaClient, storeId: string, message: string): Promise<number> {
+export async function postToStoreGroups(
+  prisma: PrismaClient,
+  storeId: string,
+  message: string,
+  extraGroupId?: string | null
+): Promise<number> {
   try {
     const groups = await groupsForStore(prisma, storeId);
+    const ids = [
+      ...new Set(
+        [...groups.map((g) => g.whatsappGroupId), extraGroupId?.trim()].filter((id): id is string => Boolean(id))
+      ),
+    ];
     let posted = 0;
-    for (const group of groups) {
-      if (await sendWhatsAppGroupMessage(prisma, group.whatsappGroupId, message, storeId)) posted += 1;
+    for (const id of ids) {
+      if (await sendWhatsAppGroupMessage(prisma, id, message, storeId)) posted += 1;
     }
     return posted;
   } catch (error) {
     console.error('Could not post to store groups', { storeId, error: error instanceof Error ? error.message : error });
     return 0;
+  }
+}
+
+export type StoreDelivery = { posted: number; via: 'group' | 'direct' | 'none' };
+
+/**
+ * Group first when one is linked. With no group (1:1 testing, extra store on the same dashboard),
+ * send to the owner/manager WhatsApp — including the phone on a sibling store.
+ */
+export async function deliverStoreMessage(
+  prisma: PrismaClient,
+  storeId: string,
+  message: string,
+  extra?: { extraGroupId?: string | null; extraPhone?: string | null; directMessage?: string | null }
+): Promise<StoreDelivery> {
+  try {
+    const groupPosted = await postToStoreGroups(prisma, storeId, message, extra?.extraGroupId);
+    if (groupPosted > 0) return { posted: groupPosted, via: 'group' };
+
+    const phones = new Set(await managerPhonesForStore(prisma, storeId));
+    const extraPhone = extra?.extraPhone?.trim();
+    if (isSendableWhatsAppPhone(extraPhone)) phones.add(extraPhone as string);
+
+    const direct = extra?.directMessage?.trim() || message;
+    let sent = 0;
+    for (const phone of phones) {
+      if (await sendWhatsAppMessage(prisma, phone, direct, storeId)) sent += 1;
+    }
+    if (sent > 0) return { posted: sent, via: 'direct' };
+    return { posted: 0, via: 'none' };
+  } catch (error) {
+    console.error('Could not deliver store message', { storeId, error: error instanceof Error ? error.message : error });
+    return { posted: 0, via: 'none' };
   }
 }

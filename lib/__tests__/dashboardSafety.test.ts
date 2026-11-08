@@ -37,6 +37,15 @@ describe('dashboard.html', () => {
     expect(html).toContain('sched-shift');
     expect(html).toContain('Weekdays 9–5');
     expect(html).toContain('Every Thursday');
+    expect(html).toContain('Sent the hours to your WhatsApp.');
+    expect(html).toContain("Posted this week's shifts to the WhatsApp group.");
+    expect(html).toContain('1:1 to your registered number');
+    expect(html).toContain('AI readings this month');
+    expect(html).toContain('This store · no cap');
+    expect(html).toContain('Plan and usage');
+    expect(html).toContain('id="appBanner"');
+    expect(html).toContain("classList.add('is-on')");
+    expect(html).not.toContain('document.body.prepend(el)');
     expect(html).not.toMatch(/wage|salary|payroll/i);
   });
 
@@ -47,6 +56,14 @@ describe('dashboard.html', () => {
 
   it('links to the tasks page', () => {
     expect(html).toContain('href="/tasks"');
+  });
+
+  it('lists competitor vs our gas prices with escaped station names', () => {
+    expect(html).toContain('data-tab="prices"');
+    expect(html).toContain('Gas prices');
+    expect(html).toContain('fuelMoney');
+    expect(html).toContain('esc(d.station');
+    expect(html).toContain('esc(whose)');
   });
 });
 

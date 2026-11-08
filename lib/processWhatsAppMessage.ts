@@ -115,10 +115,10 @@ async function handleInboundWhatsApp(
     storeId = resolved.storeId;
   }
 
-  if (!storeId && input.groupId) {
+  if (input.groupId) {
     const linked = await tryAutoLinkGroupFromSender(prisma, input.groupId, phoneE164);
     if (linked) {
-      storeId = linked.storeId;
+      if (!storeId) storeId = linked.storeId;
       groupJustLinked = linked.linked;
     }
   }
@@ -139,7 +139,7 @@ async function handleInboundWhatsApp(
       messageText: text,
     });
 
-    const result = await handleWhatsAppCommand(prisma, phoneE164, text);
+    const result = await handleWhatsAppCommand(prisma, phoneE164, text, { groupId: input.groupId ?? null });
     logApp('wa.path', { messageId, from, storeId, path: 'command' });
     await sendWhatsAppMessage(prisma, phoneE164, result.message, result.storeId ?? storeId ?? undefined);
     await updateMessageLog(prisma, messageId, { processed: true, storeId: storeId ?? undefined });
@@ -302,6 +302,7 @@ async function handleInboundWhatsApp(
       mediaId,
       mediaType,
       understander,
+      groupId: input.groupId ?? null,
     });
     if (outcome === 'handled') return;
   }

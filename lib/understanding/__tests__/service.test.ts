@@ -18,7 +18,12 @@ import { downloadWhatsAppMedia } from '../../whatsappMedia';
 import { transcribeAudio } from '../transcribe';
 
 const prisma = {
-  pendingActions: { count: jest.fn().mockResolvedValue(3), findMany: jest.fn().mockResolvedValue([]) },
+  pendingActions: {
+    count: jest.fn().mockResolvedValue(3),
+    findMany: jest.fn().mockResolvedValue([]),
+    findFirst: jest.fn().mockResolvedValue(null),
+    update: jest.fn().mockResolvedValue({}),
+  },
   userDirectory: { findUnique: jest.fn().mockResolvedValue({ role: 'OWNER' }) },
   userStore: { findMany: jest.fn().mockResolvedValue([]) },
   storeConfig: {
@@ -236,6 +241,19 @@ describe('understandAndRespond', () => {
   it('does not repeat the welcome once the store has confirmed entries', async () => {
     await understandAndRespond(prisma, { ...base, text: 'cash 100', understander: understander(sales) });
     expect((sendWhatsAppMessage as jest.Mock).mock.calls[0][2]).not.toContain('This is your first report');
+  });
+
+  it('stamps the WhatsApp group on the pending entry so OK can post hours back there', async () => {
+    await understandAndRespond(prisma, {
+      ...base,
+      text: 'cash 100',
+      understander: understander(sales),
+      groupId: 'g-ops',
+    });
+    expect((createPendingAction as jest.Mock).mock.calls[0][4]).toMatchObject({
+      _kind: 'daily_close',
+      source_group_id: 'g-ops',
+    });
   });
 
   it('lets an owner teach a rule but not plain staff', async () => {

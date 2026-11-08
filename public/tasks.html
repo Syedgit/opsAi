@@ -1,9 +1,27 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-app-shell="app">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#25D366">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#111111">
+    <meta name="color-scheme" content="light">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="opsAi">
+    <meta name="format-detection" content="telephone=no">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/icon-180.png">
+    <link rel="icon" type="image/png" href="/icon-192.png">
+    <link rel="apple-touch-startup-image" href="/splash-1320x2868.png" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1284x2778.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1206x2622.png" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="stylesheet" href="/app-shell.css">
+    <script src="/app-shell.js"></script>
     <title>opsAi · Tasks &amp; alerts</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -12,11 +30,14 @@
             --bg: #f5f7fa; --card: #fff; --text: #1a1a1a; --light: #666; --border: #e0e0e0;
             --ok: #10b981; --warn: #f59e0b; --bad: #ef4444;
         }
+        html { -webkit-text-size-adjust: 100%; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: var(--bg); color: var(--text); }
-        header { background: linear-gradient(90deg, var(--primary-dark), var(--secondary)); color: #fff; padding: 14px 20px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+        header { background: #111; color: #fff; padding: 14px 20px; padding-top: max(14px, env(safe-area-inset-top)); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
         header a { color: #fff; text-decoration: none; opacity: .85; font-size: 14px; }
-        header h1 { font-size: 18px; flex: 1; }
-        header select { padding: 8px 10px; border-radius: 6px; border: none; font-size: 14px; width: auto; min-width: 220px; max-width: 100%; font-family: inherit; }
+        header .brand-logo { line-height: 0; opacity: 1; background: #fff; border-radius: 8px; padding: 4px 8px; }
+        header .brand-logo img { display: block; height: 28px; width: auto; }
+        header h1 { font-size: 18px; flex: 1; min-width: 8rem; }
+        header select { padding: 8px 10px; border-radius: 6px; border: none; font-size: 16px; width: auto; min-width: 0; flex: 1; max-width: 100%; font-family: inherit; }
         main { max-width: 1000px; margin: 0 auto; padding: 20px 16px 60px; }
         .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
         .tab { padding: 10px 18px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); cursor: pointer; font-size: 14px; }
@@ -45,7 +66,7 @@
         .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
         label { display: block; font-size: 12px; color: var(--light); margin-bottom: 4px; }
-        input[type=text], input[type=time], input[type=number], input[type=email], select, textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-family: inherit; }
+        input[type=text], input[type=time], input[type=number], input[type=email], select, textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 16px; font-family: inherit; }
         textarea { min-height: 60px; resize: vertical; }
         .days label { display: inline-flex; align-items: center; gap: 4px; margin-right: 10px; color: var(--text); font-size: 14px; }
         .notice { padding: 10px 14px; border-radius: 8px; font-size: 14px; margin-bottom: 14px; }
@@ -86,17 +107,28 @@
         }
         .admin-view .card h2 { font-size: 18px; font-weight: 700; color: var(--secondary); }
         .admin-view .count { background: var(--bg); border-radius: 999px; padding: 2px 9px; font-size: 12px; }
+        details.more { margin: 14px 0 0; }
+        details.more summary { cursor: pointer; font-size: 13px; color: var(--light); margin-bottom: 10px; }
         @media (max-width: 800px) { .admin-grid { grid-template-columns: 1fr; } }
+        .tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
         @media (max-width: 640px) {
             td, th { padding: 8px 4px; }
             .hide-sm { display: none; }
             .vendor-row { flex-wrap: wrap; }
             .admin-nav a { font-size: 12px; padding: 7px 10px; }
+            main { padding: 16px 12px 80px; }
+            header { gap: 8px; }
+            header h1 { font-size: 16px; }
+            .tab { min-height: 44px; display: inline-flex; align-items: center; }
+            button, button.small { min-height: 44px; }
         }
     </style>
 </head>
 <body>
+    <div id="appSplash" aria-hidden="true"><img src="/icon-192.png" alt=""><span>opsAi</span></div>
 <header>
+    <a href="/dashboard" class="brand-logo" aria-label="Operation Intelligence"><img src="/logo.jpg" alt="Operation Intelligence"></a>
     <a href="/dashboard">&larr; Dashboard</a>
     <h1>Tasks &amp; alerts</h1>
     <select id="storeSelect" aria-label="Store"></select>
@@ -118,6 +150,10 @@
         food_safety: 'Food Safety', proprietary_fresh: 'Proprietary Fresh Food', proprietary_beverage: 'Proprietary Beverage',
         product_availability: 'Product Availability', interior_cleanliness: 'Interior Cleanliness', exterior_cleanliness: 'Exterior Cleanliness',
         vault: 'Vault', back_of_house: 'Back of House', cleanliness: 'Cleanliness', inventory: 'Inventory', equipment: 'Equipment',
+        customer_service: 'Customer service', safety: 'Safety', reports: 'Daily reports', bills: 'Bills / insurance', other: 'Other'
+    };
+    const SIMPLE_CATEGORIES = {
+        bills: 'Bills / insurance', cleanliness: 'Cleanliness', inventory: 'Inventory', equipment: 'Equipment',
         customer_service: 'Customer service', safety: 'Safety', reports: 'Daily reports', other: 'Other'
     };
     const CRITICALITY = { critical: 'Critical (50)', major: 'Major (20)', minor: 'Minor (3)' };
@@ -181,7 +217,17 @@
         document.getElementById('content').innerHTML = '<div class="empty">Loading…</div>';
         try {
             board = await api('GET');
-            if (board.setup && board.setup.fuel) features.fuel = true;
+            if (board.setup) {
+                (board.setup.features || []).forEach(function (id) { features[id] = true; });
+                if (board.setup.fuel) features.fuel = true;
+                const t = board.setup.storeType;
+                if (t === 'seven_eleven' || t === 'convenience' || t === 'gas_station') {
+                    features.cooler = true;
+                    features.shelves = true;
+                    features.restroom = true;
+                    features.till = true;
+                }
+            }
             render();
         } catch (e) {
             document.getElementById('content').innerHTML = '';
@@ -370,63 +416,102 @@
 
     /* ------------------------------------ Setup ------------------------------------ */
 
+    function categoryMap() {
+        if (isSevenEleven()) return CATEGORIES;
+        const map = Object.assign({}, SIMPLE_CATEGORIES);
+        if (editing && editing.category && !map[editing.category] && CATEGORIES[editing.category]) {
+            map[editing.category] = CATEGORIES[editing.category];
+        }
+        return map;
+    }
+
+    function howOftenOf(t) {
+        if (t.frequency === 'monthly') return 'monthly';
+        if (t.frequency === 'interval') return 'interval';
+        if (t.frequency === 'once') return 'once';
+        const days = t.daysOfWeek || [0, 1, 2, 3, 4, 5, 6];
+        if (!t.id || days.length === 7) return 'daily';
+        return 'weekly';
+    }
+
+    function shiftSelect(current) {
+        const fromSetup = (board && board.setup && board.setup.shifts) ? board.setup.shifts.map(function (s) { return s.name; }) : [];
+        const extras = ['Morning', 'Afternoon', 'Evening', 'Night', 'Every shift', 'End of shift'];
+        const names = [];
+        fromSetup.concat(extras).forEach(function (n) { if (n && names.indexOf(n) < 0) names.push(n); });
+        if (current && names.indexOf(current) < 0) names.unshift(current);
+        return '<select name="shift"><option value="">Any shift</option>' + names.map(function (n) {
+            return '<option value="' + esc(n) + '"' + (n === current ? ' selected' : '') + '>' + esc(n) + '</option>';
+        }).join('') + '</select>';
+    }
+
     function renderForm() {
         const t = editing;
         const val = function (k, d) { return t[k] === null || t[k] === undefined ? d : t[k]; };
         const days = t.daysOfWeek || [0, 1, 2, 3, 4, 5, 6];
         const repeats = Boolean(t.repeatEveryMinutes);
-        const frequency = t.frequency || 'weekly';
-        const monthDays = t.monthDays || [];
-        const monthBoxes = [];
-        for (let d = 1; d <= 31; d += 1) {
-            monthBoxes.push('<label><input type="checkbox" name="monthDay" value="' + d + '"' + (monthDays.indexOf(d) >= 0 ? ' checked' : '') + '> ' + (d === 31 ? '31 (last day)' : d) + '</label>');
-        }
+        const how = howOftenOf(t);
+        const monthDay = (t.monthDays && t.monthDays[0]) || 1;
+        const monthOpts = [];
+        for (let d = 1; d <= 28; d += 1) monthOpts.push('<option value="' + d + '"' + (d === monthDay ? ' selected' : '') + '>' + d + '</option>');
+        monthOpts.push('<option value="31"' + (monthDay === 31 ? ' selected' : '') + '>Last day of the month</option>');
         const options = function (map, current) {
             return Object.keys(map).map(function (k) { return '<option value="' + esc(k) + '"' + (k === current ? ' selected' : '') + '>' + esc(map[k]) + '</option>'; }).join('');
         };
-        return '<div class="card" id="formCard"><h2>' + (t.id ? 'Edit task' : 'New task') + '</h2><form id="taskForm">' +
+        const howOpts = [
+            ['daily', 'Every day'],
+            ['weekly', 'Weekly'],
+            ['monthly', 'Monthly']
+        ];
+        if (how === 'interval') howOpts.push(['interval', 'Every few days']);
+        if (how === 'once') howOpts.push(['once', 'Once, on one date']);
+        return '<div class="card" id="formCard"><h2>' + (t.id ? 'Edit reminder' : 'New reminder') + '</h2>' +
+            '<p class="muted card-help">Name it, pick a category, the shift, the time, and how often. That is enough.</p><form id="taskForm">' +
             '<div class="grid">' +
-            '<div style="grid-column: 1 / -1;"><label>What should they do?</label><input type="text" name="title" maxlength="120" required value="' + esc(val('title', '')) + '" placeholder="e.g. Check the coffee station"></div>' +
-            '<div style="grid-column: 1 / -1;"><label>Instructions (shown in the alert, optional)</label><textarea name="instructions" maxlength="500" placeholder="What good looks like, what to photograph">' + esc(val('instructions', '')) + '</textarea></div>' +
-            '<div><label>Inspection category</label><select name="category">' + options(CATEGORIES, val('category', 'other')) + '</select></div>' +
+            '<div style="grid-column: 1 / -1;"><label>What is the task?</label><input type="text" name="title" maxlength="120" required value="' + esc(val('title', '')) + '" placeholder="e.g. Pay the electric bill"></div>' +
+            '<div><label>Category</label><select name="category">' + options(categoryMap(), val('category', 'other')) + '</select></div>' +
+            '<div><label>Shift</label>' + shiftSelect(val('shift', '')) + '</div>' +
+            '<div><label>Time of the reminder (store time)</label><input type="time" name="startTime" required value="' + esc(val('startTime', '10:00')) + '"></div>' +
+            '<div><label>How often</label><select name="howOften">' + howOpts.map(function (o) {
+                return '<option value="' + o[0] + '"' + (how === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+            }).join('') + '</select></div>' +
+            '</div>' +
+            '<div class="days" id="weeklyBox" style="margin: 14px 0;' + (how === 'weekly' ? '' : ' display:none;') + '"><label>Which days</label>' + DAYS.map(function (d, i) {
+                return '<label><input type="checkbox" name="day" value="' + i + '"' + (days.indexOf(i) >= 0 ? ' checked' : '') + '> ' + d + '</label>';
+            }).join('') + '</div>' +
+            '<div id="monthlyBox" style="margin: 14px 0;' + (how === 'monthly' ? '' : ' display:none;') + '"><label>Day of the month</label><select name="monthDay">' + monthOpts.join('') + '</select></div>' +
+            '<div class="grid" id="intervalBox" style="margin: 14px 0;' + (how === 'interval' ? '' : ' display:none;') + '">' +
+            '<div><label>Every how many days (2 to 90; 14 = every 2 weeks)</label><input type="number" name="intervalDays" min="2" max="90" value="' + esc(val('intervalDays', 3)) + '"></div>' +
+            '<div><label>First time on (optional, default today)</label><input type="date" name="anchorDate" value="' + esc(how === 'interval' ? val('anchorDate', '') : '') + '"></div></div>' +
+            '<div class="grid" id="onceBox" style="margin: 14px 0;' + (how === 'once' ? '' : ' display:none;') + '">' +
+            '<div><label>On this date</label><input type="date" name="onceDate" value="' + esc(how === 'once' ? val('anchorDate', '') : '') + '"></div></div>' +
+            '<div class="grid" style="margin-top: 8px;">' +
+            '<div><label>Proof</label><select name="evidence">' + options(EVIDENCE, val('evidence', t.id ? 'either' : 'text')) + '</select></div>' +
+            '</div>' +
+            '<div style="margin-top: 14px;"><label>Note in the alert (optional)</label><textarea name="instructions" maxlength="500" placeholder="What good looks like, or what to reply">' + esc(val('instructions', '')) + '</textarea></div>' +
+            '<details class="more"><summary>More options</summary>' +
+            (isSevenEleven() || t.standardId ? '<div class="grid">' +
             '<div><label>Standard ID (optional, like FS6)</label><input type="text" name="standardId" maxlength="20" value="' + esc(val('standardId', '')) + '"></div>' +
             '<div><label>How serious is a miss?</label><select name="criticality"><option value="">Not set</option>' + options(CRITICALITY, val('criticality', '')) + '</select></div>' +
-            '<div><label>Shift label (optional)</label><input type="text" name="shift" maxlength="40" value="' + esc(val('shift', '')) + '" placeholder="Morning, 2nd shift, Night"></div>' +
-            '<div><label>Due at (store time)</label><input type="time" name="startTime" required value="' + esc(val('startTime', '10:00')) + '"></div>' +
-            '<div><label>Proof required</label><select name="evidence">' + options(EVIDENCE, val('evidence', 'either')) + '</select></div>' +
-            '<div style="grid-column: 1 / -1;"><label>Have AI check the photo (optional). Say what it must show, like: both milk dispensers have a date label that is not expired. Costs one AI reading per photo. A photo that does not pass keeps the task open.</label><input type="text" name="photoCheck" maxlength="200" value="' + esc(val('photoCheck', '')) + '"></div>' +
             '<div><label>Points (leave empty to use Critical 50 / Major 20 / Minor 3)</label><input type="number" name="points" min="0" max="100" value="' + esc(t.id ? val('points', '') : '') + '"></div>' +
-            '</div>' +
-            '<div style="margin: 14px 0;"><label>Limit on the answer (optional). The employee must reply with a number inside it, or the task stays open and the manager is told. Example: cold case at most 40, roller grill at least 140.</label>' +
+            '</div>' : '') +
+            '<div style="margin: 14px 0;"><label>Have AI check the photo (optional)</label><input type="text" name="photoCheck" maxlength="200" value="' + esc(val('photoCheck', '')) + '" placeholder="What the photo must show"></div>' +
+            '<div style="margin: 14px 0;"><label>Limit on a number answer (optional)</label>' +
             '<div class="grid"><div><label>At least</label><input type="number" step="any" name="minValue" value="' + esc(val('minValue', '')) + '"></div>' +
             '<div><label>At most</label><input type="number" step="any" name="maxValue" value="' + esc(val('maxValue', '')) + '"></div>' +
             '<div><label>Unit (F, rows, items)</label><input type="text" name="unit" maxlength="10" value="' + esc(val('unit', '')) + '"></div></div></div>' +
-            '<div style="margin: 14px 0;"><label>If something is broken, what should they do meanwhile? (optional)</label><textarea name="fallback" maxlength="300" placeholder="e.g. Label printer broken? Write the date and time on masking tape with a marker.">' + esc(val('fallback', '')) + '</textarea></div>' +
+            '<div style="margin: 14px 0;"><label>If something is broken, what should they do meanwhile? (optional)</label><textarea name="fallback" maxlength="300" placeholder="e.g. Label printer broken? Write the date on tape.">' + esc(val('fallback', '')) + '</textarea></div>' +
             '<div style="margin: 14px 0;"><label><input type="checkbox" name="repeats"' + (repeats ? ' checked' : '') + '> Repeat during the day (for example every hour)</label>' +
             '<div class="grid" id="repeatBox" style="margin-top: 8px;' + (repeats ? '' : ' display:none;') + '">' +
             '<div><label>Every (minutes)</label><input type="number" name="repeatEveryMinutes" min="5" max="720" value="' + esc(val('repeatEveryMinutes', 60)) + '"></div>' +
             '<div><label>Until (same day)</label><input type="time" name="endTime" value="' + esc(val('endTime', '')) + '"></div></div></div>' +
-            '<div style="margin-bottom: 14px;"><label>How often</label><select name="frequency">' +
-            '<option value="weekly"' + (frequency === 'weekly' ? ' selected' : '') + '>On the days I pick (every day, weekdays, only Monday...)</option>' +
-            '<option value="interval"' + (frequency === 'interval' ? ' selected' : '') + '>Every few days (every 3 days, every 2 weeks...)</option>' +
-            '<option value="monthly"' + (frequency === 'monthly' ? ' selected' : '') + '>Monthly, on days of the month</option>' +
-            '<option value="once"' + (frequency === 'once' ? ' selected' : '') + '>Once, on one date (a bill or invoice due)</option></select></div>' +
-            '<div class="days" id="weeklyBox" style="margin-bottom: 14px;' + (frequency === 'weekly' ? '' : ' display:none;') + '"><label>Days</label>' + DAYS.map(function (d, i) {
-                return '<label><input type="checkbox" name="day" value="' + i + '"' + (days.indexOf(i) >= 0 ? ' checked' : '') + '> ' + d + '</label>';
-            }).join('') + '</div>' +
-            '<div class="grid" id="intervalBox" style="margin-bottom: 14px;' + (frequency === 'interval' ? '' : ' display:none;') + '">' +
-            '<div><label>Every how many days (2 to 90; 14 = every 2 weeks)</label><input type="number" name="intervalDays" min="2" max="90" value="' + esc(val('intervalDays', 3)) + '"></div>' +
-            '<div><label>First time on (optional, default today)</label><input type="date" name="anchorDate" value="' + esc(frequency === 'interval' ? val('anchorDate', '') : '') + '"></div></div>' +
-            '<div class="grid" id="onceBox" style="margin-bottom: 14px;' + (frequency === 'once' ? '' : ' display:none;') + '">' +
-            '<div><label>On this date</label><input type="date" name="onceDate" value="' + esc(frequency === 'once' ? val('anchorDate', '') : '') + '"></div></div>' +
-            '<div class="days" id="monthlyBox" style="margin-bottom: 14px;' + (frequency === 'monthly' ? '' : ' display:none;') + '"><label>Days of the month (29 to 31 fall on the last day of a shorter month)</label>' + monthBoxes.join('') + '</div>' +
             '<div class="grid">' +
             '<div><label>Remind every (minutes)</label><input type="number" name="remindEveryMinutes" min="5" max="240" value="' + esc(val('remindEveryMinutes', 15)) + '"></div>' +
             '<div><label>Tell the owner after (minutes)</label><input type="number" name="escalateAfterMinutes" min="10" max="1440" value="' + esc(val('escalateAfterMinutes', 60)) + '"></div>' +
             '<div><label>Counts as late after (minutes)</label><input type="number" name="lateAfterMinutes" min="5" max="720" value="' + esc(val('lateAfterMinutes', 60)) + '"></div>' +
-            '</div>' +
+            '</div></details>' +
             '<div style="margin-top: 14px;"><label><input type="checkbox" name="active"' + (val('active', true) ? ' checked' : '') + '> Active</label></div>' +
-            '<div class="row" style="margin-top: 14px;"><button type="submit" class="primary">Save task</button><button type="button" data-cancel-edit>Cancel</button></div>' +
+            '<div class="row" style="margin-top: 14px;"><button type="submit" class="primary">Save reminder</button><button type="button" data-cancel-edit>Cancel</button></div>' +
             '</form></div>';
     }
 
@@ -472,7 +557,7 @@
         const storeLabel = esc(board.storeName || 'this store');
         const gasClose = board.modules && (board.modules.fuel || board.modules.fuelOption);
         const closeHelp = gasClose
-            ? 'Same pattern as Rockaway and most gas stations. Attach the POS Store Close for ' + storeLabel + '. Fuel is Total Fuel Sales. Non-fuel, if any, is store credit. Cash is Cash Acceptor Cash on the tender page. Invoice paid from the till or a cash paid-out comes off that cash. The file is not kept.'
+            ? 'Attach a real close photo for ' + storeLabel + '. We list the lines; you say what fuel, store credit, and cash are. A second page (tender / cash) is another map. The file is not kept.'
             : 'Attach a typical close photo or type the labels you use. We keep the wording — the file is not stored.';
         const maps = board.pictureTemplates || [];
         const mapList = maps.length
@@ -495,7 +580,7 @@
                   '<div style="margin-top: 10px;"><button type="submit" class="primary">Save samples</button></div></form>'
                 : '<div class="muted">' + (s.dailyClose ? '<p>' + esc(s.dailyClose) + '</p>' : '') + (s.invoice ? '<p>' + esc(s.invoice) + '</p>' : '') + '</div>') +
             '<h3 style="font-size:15px;margin:18px 0 8px;">Document maps</h3>' +
-            '<p class="muted" style="margin-bottom:8px;">Each store’s paperwork looks different. Add a close, invoice, or schedule page anytime — onboarding can skip this. Pick a starter layout, rename the lines to match this store, and say what each line means. The photo is preview only; we keep the map, not the file.</p>' +
+            '<p class="muted" style="margin-bottom:8px;">Each store’s paperwork looks different — a close, invoice, or schedule. Attach a photo and we list the lines — you confirm fuel vs store credit vs cash. Presets are only shortcuts. The photo is not stored; we keep the map, not the file.</p>' +
             mapList + editor +
             '</div>';
     }
@@ -558,6 +643,38 @@
             '<button type="button" class="small" data-remove-pic-field>Remove</button></div>';
     }
 
+    function setPicMapStatus(text) {
+        const el = document.getElementById('picMapStatus');
+        if (el) el.textContent = text || '';
+    }
+
+    function fillPictureMap(template) {
+        if (!template) return;
+        const kind = document.getElementById('picMapKind');
+        const title = document.getElementById('picMapTitle');
+        const noteEl = document.getElementById('picMapNote');
+        const list = document.getElementById('picFieldList');
+        if (kind && template.kind) kind.value = template.kind;
+        if (title) title.value = template.title || '';
+        if (noteEl) noteEl.value = template.note || '';
+        if (list) list.innerHTML = (template.fields || []).map(picFieldRow).join('') || picFieldRow();
+    }
+
+    async function proposePictureMapFromFile(file, kind) {
+        if (!file) return;
+        if (file.size > MAX_REPORT_BYTES) { setPicMapStatus('Photo must be under 2.5 MB.'); return; }
+        if (!/^image\/(jpeg|png|webp|gif)$/i.test(file.type)) { setPicMapStatus('Use a JPEG, PNG, or WebP photo.'); return; }
+        setPicMapStatus('Reading the lines on this page…');
+        try {
+            const image = await readFileAsBase64(file);
+            const data = await api('POST', { action: 'propose_picture_template', kind: kind || currentPicKind(), image: image, mime: file.type });
+            fillPictureMap(data.template);
+            setPicMapStatus('Check each line. Change anything that is wrong, then save the map.');
+        } catch (err) {
+            setPicMapStatus(err.message + ' Pick a starter, or type the lines yourself.');
+        }
+    }
+
     function pictureMapEditor() {
         const presets = board.pictureTemplatePresets || [];
         const kinds = board.pictureTemplateKinds || [
@@ -575,7 +692,8 @@
             '<label>Photo (preview only — not saved)</label>' +
             '<input type="file" id="picMapPhoto" accept="image/jpeg,image/png,image/webp,image/gif">' +
             '<img id="picMapPreview" alt="" style="display:none;max-width:240px;margin:8px 0;border-radius:8px;border:1px solid var(--border);">' +
-            '<p class="muted" style="margin:8px 0;">Start from a known layout, then change the labels to match this store. Add another page later if they send a second sheet.</p>' +
+            '<p class="muted" style="margin:8px 0;">Attach the page, then check each line. Presets are shortcuts if you already know the layout. Add another map for a second sheet.</p>' +
+            '<div id="picMapStatus" class="muted" style="margin:8px 0;font-weight:600;"></div>' +
             chips +
             '<label style="margin-top:10px;">What this page is</label>' +
             '<select id="picMapKind">' + kindOpts + '</select>' +
@@ -752,7 +870,8 @@
         }
 
         html += '<section class="admin-section" id="admin-tasks"><div class="admin-head"><div class="admin-kicker">Reminders for ' + esc(board.storeName) + '</div>' +
-            (board.canEdit ? '<button class="primary" data-new>+ New task</button>' : '') + '</div>';
+            (board.canEdit ? '<button class="primary" data-new>+ New task</button>' : '') + '</div>' +
+            (board.canEdit && !editing ? '<p class="muted" style="margin: 0 0 12px;">Add your own reminder: what to do, category, shift, time, and daily / weekly / monthly.</p>' : '');
         if (editing && board.canEdit) html += renderForm();
         if (board.templates.length === 0) {
             html += '<div class="card"><div class="empty">No tasks yet. Add your own, or pick from Add more below.</div></div>';
@@ -772,7 +891,12 @@
             html += '<section class="admin-section" id="admin-add"><div class="admin-kicker">Add more</div><div class="card"><h2>' +
                 (isSevenEleven() ? 'Starter reminders and 7Clean' : 'Starter reminders') + '</h2>' +
                 '<p class="muted card-help">Onboarding only turned on a few for office, salon, and other businesses. Tick more here anytime. After you add them they leave this list and show above, where you can edit times.</p>';
-            html += (board.features || []).map(function (f) {
+            html += (board.features || []).filter(function (f) {
+                    const t = board.setup && board.setup.storeType;
+                    const shop = t === 'seven_eleven' || t === 'convenience' || t === 'gas_station';
+                    if (shop) return f.id === 'fuel';
+                    return f.id !== 'fuel';
+                }).map(function (f) {
                     return '<label style="color: var(--text); font-size: 14px; margin-bottom: 10px;"><input type="checkbox" data-feature="' + esc(f.id) + '"' + (features[f.id] ? ' checked' : '') + '> ' + esc(f.label) + '</label>';
                 }).join('');
             if (offered.length === 0) {
@@ -811,6 +935,30 @@
         const f = new FormData(form);
         const num = function (k) { const v = f.get(k); return v === null || v === '' ? null : Number(v); };
         const repeats = f.get('repeats') === 'on';
+        const how = f.get('howOften') || 'daily';
+        let frequency = 'weekly';
+        let daysOfWeek;
+        let monthDays = [];
+        let intervalDays = null;
+        let anchorDate = null;
+        if (how === 'daily') {
+            frequency = 'weekly';
+            daysOfWeek = [0, 1, 2, 3, 4, 5, 6];
+        } else if (how === 'weekly') {
+            frequency = 'weekly';
+            daysOfWeek = f.getAll('day').map(Number);
+        } else if (how === 'monthly') {
+            frequency = 'monthly';
+            const day = num('monthDay');
+            monthDays = day ? [day] : [1];
+        } else if (how === 'interval') {
+            frequency = 'interval';
+            intervalDays = num('intervalDays');
+            anchorDate = f.get('anchorDate') || null;
+        } else if (how === 'once') {
+            frequency = 'once';
+            anchorDate = f.get('onceDate') || null;
+        }
         return {
             title: f.get('title'),
             instructions: f.get('instructions') || null,
@@ -825,11 +973,11 @@
             startTime: f.get('startTime'),
             endTime: repeats ? (f.get('endTime') || null) : null,
             repeatEveryMinutes: repeats ? num('repeatEveryMinutes') : null,
-            frequency: f.get('frequency') || 'weekly',
-            daysOfWeek: f.get('frequency') === 'weekly' || !f.get('frequency') ? f.getAll('day').map(Number) : undefined,
-            intervalDays: f.get('frequency') === 'interval' ? num('intervalDays') : null,
-            anchorDate: f.get('frequency') === 'interval' ? (f.get('anchorDate') || null) : f.get('frequency') === 'once' ? (f.get('onceDate') || null) : null,
-            monthDays: f.get('frequency') === 'monthly' ? f.getAll('monthDay').map(Number) : [],
+            frequency: frequency,
+            daysOfWeek: daysOfWeek,
+            intervalDays: intervalDays,
+            anchorDate: anchorDate,
+            monthDays: monthDays,
             evidence: f.get('evidence'),
             photoCheck: f.get('photoCheck') || null,
             points: num('points') === null ? undefined : num('points'),
@@ -961,14 +1109,8 @@
         if (el.dataset.picPreset) {
             const preset = (board.pictureTemplatePresets || []).find(function (p) { return p.id === el.dataset.picPreset; });
             if (!preset) return;
-            const title = document.getElementById('picMapTitle');
-            const note = document.getElementById('picMapNote');
-            const list = document.getElementById('picFieldList');
-            const kind = document.getElementById('picMapKind');
-            if (kind && preset.kind) kind.value = preset.kind;
-            if (title) title.value = preset.title;
-            if (note) note.value = preset.note || '';
-            if (list) list.innerHTML = (preset.fields || []).map(picFieldRow).join('') || picFieldRow();
+            fillPictureMap(preset);
+            setPicMapStatus('Starter layout loaded. Rename the lines to match this store.');
             return;
         }
         if (el.id === 'addPicFieldBtn') {
@@ -1017,13 +1159,14 @@
     });
 
     document.addEventListener('change', function (e) {
-        if (e.target.id === 'picMapPhoto') {
+        if (e.target.id === 'picMapPhoto' || e.target.id === 'sampleClosePhoto') {
             const file = e.target.files && e.target.files[0];
-            const preview = document.getElementById('picMapPreview');
-            if (!preview) return;
-            if (!file) { preview.style.display = 'none'; preview.removeAttribute('src'); return; }
-            preview.src = URL.createObjectURL(file);
-            preview.style.display = 'block';
+            const preview = document.getElementById(e.target.id === 'picMapPhoto' ? 'picMapPreview' : '');
+            if (preview) {
+                if (!file) { preview.style.display = 'none'; preview.removeAttribute('src'); }
+                else { preview.src = URL.createObjectURL(file); preview.style.display = 'block'; }
+            }
+            if (file) proposePictureMapFromFile(file, e.target.id === 'sampleClosePhoto' ? 'daily_close' : currentPicKind());
             return;
         }
         if (e.target.id === 'picMapKind') {
@@ -1046,12 +1189,16 @@
             return;
         }
         if (e.target.name === 'repeats') document.getElementById('repeatBox').style.display = e.target.checked ? '' : 'none';
-        if (e.target.name === 'frequency') {
-            document.getElementById('weeklyBox').style.display = e.target.value === 'weekly' ? '' : 'none';
-            document.getElementById('intervalBox').style.display = e.target.value === 'interval' ? '' : 'none';
-            document.getElementById('monthlyBox').style.display = e.target.value === 'monthly' ? '' : 'none';
+        if (e.target.name === 'howOften' || e.target.name === 'frequency') {
+            const v = e.target.value;
+            const weeklyBox = document.getElementById('weeklyBox');
+            const monthlyBox = document.getElementById('monthlyBox');
+            const intervalBox = document.getElementById('intervalBox');
             const onceBox = document.getElementById('onceBox');
-            if (onceBox) onceBox.style.display = e.target.value === 'once' ? '' : 'none';
+            if (weeklyBox) weeklyBox.style.display = v === 'weekly' ? '' : 'none';
+            if (monthlyBox) monthlyBox.style.display = v === 'monthly' ? '' : 'none';
+            if (intervalBox) intervalBox.style.display = v === 'interval' ? '' : 'none';
+            if (onceBox) onceBox.style.display = v === 'once' ? '' : 'none';
         }
     });
 

@@ -45,7 +45,7 @@ interface Item {
   id: string;
   date: string;
   storeId: string;
-  type: 'sales' | 'invoices';
+  type: 'sales' | 'invoices' | 'prices';
   data: Record<string, unknown>;
   confidence: number;
 }
@@ -188,6 +188,46 @@ for (const [date, card, cash, gas, payout] of demo) {
     confidence: entry.confidence,
   });
 }
+{
+  const bp = planUnderstanding(
+    {
+      kind: 'fuel_prices',
+      confidence: 0.95,
+      needsReview: [],
+      prices: {
+        storeHint: 'Rockaway',
+        stationHint: 'BP',
+        sourceHint: 'competitor',
+        grades: [
+          { product: 'Regular', price: 4.099 },
+          { product: 'Diesel', price: 6.559 },
+        ],
+      },
+    },
+    ctx
+  ).entries[0];
+  items.push({ id: `p${++seq}`, date: '2026-11-08T11:50:00-05:00', storeId: bp.storeId, type: 'prices', data: bp.payload, confidence: bp.confidence });
+  const ours = planUnderstanding(
+    {
+      kind: 'fuel_prices',
+      confidence: 0.9,
+      needsReview: [],
+      prices: {
+        storeHint: 'Rockaway',
+        stationHint: 'Exxon',
+        sourceHint: 'own',
+        grades: [
+          { product: 'Regular', price: 3.899 },
+          { product: 'Plus', price: 4.199 },
+          { product: 'Super', price: 4.499 },
+          { product: 'Diesel', price: 4.299 },
+        ],
+      },
+    },
+    { ...ctx, messageText: 'prices updated' }
+  ).entries[0];
+  items.push({ id: `p${++seq}`, date: '2026-11-08T09:10:00-05:00', storeId: ours.storeId, type: 'prices', data: ours.payload, confidence: ours.confidence });
+}
 // Keep imports used (also handy for readers): payload builders are what the pipeline stores.
 void dailyClosePayload;
 void invoicePayload;
@@ -261,7 +301,7 @@ function tasksApi(req: http.IncomingMessage, res: http.ServerResponse, url: URL,
   const base = { success: true, storeName: 'Rockaway', canEdit: true };
   if (req.method === 'POST') {
     const b = JSON.parse(body || '{}') as {
-      action?: string; runId?: string; id?: string; setup?: unknown; presetIds?: string[];
+      action?: string; runId?: string; id?: string; setup?: unknown; presetIds?: string[]; kind?: string;
       template?: { id?: string; kind?: string; title?: string; note?: string; fields?: Array<{ label?: string; purpose?: string; note?: string }> };
     };
     if (b.action === 'setup_preview' || b.action === 'setup_apply') {
@@ -278,6 +318,22 @@ function tasksApi(req: http.IncomingMessage, res: http.ServerResponse, url: URL,
       return sendJson(res, 200, { success: true, added: (b.presetIds ?? []).length, skipped: 0, preview: true });
     }
     if (b.action === 'save_samples' || b.action === 'save_vendors') return sendJson(res, 200, { success: true, preview: true }), true;
+    if (b.action === 'propose_picture_template') {
+      return sendJson(res, 200, {
+        success: true,
+        preview: true,
+        template: {
+          kind: b.kind || 'daily_close',
+          title: 'Sample close (preview)',
+          note: 'Preview cannot read a photo. Change the lines to match this store.',
+          fields: [
+            { label: 'Fuel / gas total', purpose: 'fuel' },
+            { label: 'Store credit / inside card', purpose: 'store_credit' },
+            { label: 'Cash / acceptor', purpose: 'cash' },
+          ],
+        },
+      }), true;
+    }
     if (b.action === 'save_picture_template') {
       const saved = cleanPictureTemplate({
         id: b.template?.id,
@@ -312,6 +368,7 @@ function tasksApi(req: http.IncomingMessage, res: http.ServerResponse, url: URL,
       ...base,
       setup: savedSetup,
       storeTypes: storeTypeOptions().map((t) => ({ ...t, modules: dashboardModules(t.id, t.defaults.fuel) })),
+      storeFeatures: Object.entries(STORE_FEATURE_LABEL).map(([id, label]) => ({ id, label })),
       vendors: [
         { name: 'HLA', category: 'cigarettes' },
         { name: 'ABC', category: 'drinks' },
@@ -381,7 +438,7 @@ const MIME: Record<string, string> = {
   '.ico': 'image/x-icon',
   '.webmanifest': 'application/manifest+json',
 };
-const PAGES: Record<string, string> = { '/dashboard': 'dashboard.html', '/tasks': 'tasks.html', '/login': 'login.html', '/signup': 'signup.html', '/onboarding': 'onboarding.html', '/': 'dashboard.html' };
+const PAGES: Record<string, string> = { '/dashboard': 'dashboard.html', '/tasks': 'tasks.html', '/login': 'login.html', '/signup': 'signup.html', '/onboarding': 'onboarding.html', '/pricing': 'pricing.html', '/billing': 'billing.html', '/': 'dashboard.html' };
 
 function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -463,7 +520,7 @@ async function api(req: http.IncomingMessage, res: http.ServerResponse, url: URL
       );
       return sendJson(res, 200, { paidouts: till }), true;
     }
-    const list = type === 'sales' || type === 'invoices' ? forStore(storeId, type) : [];
+    const list = type === 'sales' || type === 'invoices' || type === 'prices' ? forStore(storeId, type) : [];
     return sendJson(res, 200, { [type]: shaped(list) }), true;
   }
 

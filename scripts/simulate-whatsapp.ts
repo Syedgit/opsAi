@@ -50,6 +50,21 @@ const fakeMessaging = {
     sent.push({ to, message });
     return true;
   },
+  postToStoreGroups: async () => 0,
+  managerPhonesForStore: async () => [] as string[],
+  deliverStoreMessage: async (
+    _prisma: unknown,
+    _storeId: string,
+    message: string,
+    extra?: { extraPhone?: string | null; directMessage?: string | null }
+  ) => {
+    const phone = extra?.extraPhone?.trim();
+    if (phone && phone.startsWith('+')) {
+      sent.push({ to: phone, message: extra?.directMessage?.trim() || message });
+      return { posted: 1, via: 'direct' as const };
+    }
+    return { posted: 0, via: 'none' as const };
+  },
 };
 const fakeMedia = {
   MAX_MEDIA_BYTES: 20 * 1024 * 1024,

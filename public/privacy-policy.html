@@ -1,15 +1,30 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-app-shell="web">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#111111">
+    <meta name="color-scheme" content="light">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="opsAi">
+    <meta name="format-detection" content="telephone=no">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/icon-180.png">
+    <link rel="icon" type="image/png" href="/icon-192.png">
+    <link rel="stylesheet" href="/app-shell.css">
+    <script src="/app-shell.js"></script>
     <title>Privacy Policy - opsAi</title>
     <style>
         body {
             font-family: Arial, sans-serif;
+            background: #fff;
+            color: #222;
             max-width: 800px;
             margin: 0 auto;
-            padding: 20px;
+            padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+            overflow-wrap: anywhere;
             line-height: 1.6;
         }
         h1 {
@@ -22,9 +37,12 @@
         p {
             color: #666;
         }
+        .brand { display: inline-block; margin-bottom: 16px; line-height: 0; }
+        .brand img { height: 40px; width: auto; }
     </style>
 </head>
 <body>
+    <a href="/" class="brand"><img src="/logo.jpg" alt="Operation Intelligence"></a>
     <h1>Privacy Policy</h1>
     <p><strong>Last Updated:</strong> January 2026</p>
 
@@ -83,6 +101,7 @@
         <li><strong>Google Cloud Vision:</strong> For OCR (image text extraction)</li>
         <li><strong>OpenAI:</strong> For AI-powered data extraction</li>
         <li><strong>Google Sheets API:</strong> For data storage</li>
+        <li><strong>Stripe:</strong> For subscription card payments. Stripe stores the card; we keep a customer and subscription id only.</li>
     </ul>
     <p>These services have their own privacy policies governing data handling.</p>
 

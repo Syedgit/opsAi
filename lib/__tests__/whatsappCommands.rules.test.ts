@@ -6,6 +6,7 @@ import { defaultSetup } from '../tasks/storeSetup';
 jest.mock('../whatsappMessaging', () => ({
   sendWhatsAppMessage: jest.fn(),
   postToStoreGroups: jest.fn().mockResolvedValue(0),
+  deliverStoreMessage: jest.fn().mockResolvedValue({ posted: 0, via: 'none' }),
 }));
 jest.mock('../googleSheetsWrite', () => ({ writeConfirmedActionToSheets: jest.fn().mockResolvedValue('skipped') }));
 
@@ -317,5 +318,65 @@ describe('invoice remaining', () => {
     expect((prisma.pendingActions.update as jest.Mock).mock.calls[0][0].data.payloadJson.remaining).toBe(400);
     expect((prisma.pendingActions.update as jest.Mock).mock.calls[0][0].data.payloadJson._kind).toBe('invoice');
     expect((prisma.taskTemplate.create as jest.Mock).mock.calls[0][0].data.title).toContain('$400');
+  });
+
+  it('merges a later close page onto the original daily close', async () => {
+    const original = {
+      actionId: 'close-1',
+      storeId: 'S001',
+      type: 'STORE_SALES',
+      status: 'CONFIRMED',
+      payloadJson: {
+        _kind: 'daily_close',
+        report_date: '2026-11-07',
+        fuel_sales: 6086.32,
+        gallons: 1455.226,
+        cash: 0,
+        card: 0,
+        report: {
+          storeHint: 'Denville',
+          reportDate: '2026-11-07',
+          fuelSales: 6086.32,
+          fuelGallons: 1455.226,
+          storeSalesTotal: 0,
+          cardSales: 0,
+          cashSales: null,
+          payouts: [],
+        },
+      },
+    };
+    const cashPage = pendingRow(
+      {
+        _kind: 'daily_close',
+        updates_action_id: 'close-1',
+        report_date: '2026-11-07',
+        cash: 765.14,
+        report: {
+          storeHint: 'Denville',
+          reportDate: '2026-11-07',
+          cashSales: 765.14,
+          payouts: [],
+        },
+      },
+      'S001',
+      'STORE_SALES'
+    );
+    cashPage.actionId = 'close-2';
+    const { prisma } = makePrisma({ pending: [cashPage] });
+    (prisma.pendingActions.findFirst as jest.Mock).mockImplementation(async ({ where }: { where: { actionId?: string } }) => {
+      if (where.actionId === 'close-1') return original;
+      return cashPage;
+    });
+    const result = await handleWhatsAppCommand(prisma, PHONE, 'OK');
+    expect(result.success).toBe(true);
+    const updates = (prisma.pendingActions.update as jest.Mock).mock.calls;
+    expect(updates[0][0].where).toEqual({ actionId: 'close-1' });
+    expect(updates[0][0].data.status).toBe('CONFIRMED');
+    expect(updates[0][0].data.payloadJson.fuel_sales).toBe(6086.32);
+    expect(updates[0][0].data.payloadJson.cash).toBe(765.14);
+    expect(updates[0][0].data.payloadJson.gallons).toBe(1455.226);
+    expect(updates[1][0].where).toEqual({ actionId: 'close-2' });
+    expect(updates[1][0].data.status).toBe('CANCELLED');
+    expect(prisma.pendingActions.updateMany).not.toHaveBeenCalled();
   });
 });

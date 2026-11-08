@@ -258,33 +258,76 @@ const M = Module as any;
 const originalLoad = M._load;
 M._load = function (request: string, ...rest: unknown[]) {
   if (/(^|\/)whatsappMessaging$/.test(request)) {
+    const sendWhatsAppMessage = async (_prisma: unknown, to: string, message: string) => {
+      sent.push({ to, message });
+      return true;
+    };
+    const sendWhatsAppGroupMessage = async (_prisma: unknown, groupId: string, message: string) => {
+      sent.push({ to: `group:${groupId}`, message });
+      return true;
+    };
+    const postToStoreGroups = async (_prisma: unknown, storeId: string, message: string, extraGroupId?: string | null) => {
+      let groups = db.storeWhatsAppGroup.rows.filter((g) => g.storeId === storeId && g.active === true);
+      if (groups.length === 0) {
+        const owners = db.userStore.rows.filter((u) => u.storeId === storeId && u.role === 'OWNER');
+        const siblingIds = new Set(
+          db.userStore.rows
+            .filter((u) => u.role === 'OWNER' && owners.some((o) => o.userId === u.userId))
+            .map((u) => u.storeId as string)
+        );
+        siblingIds.delete(storeId);
+        const shared = db.storeWhatsAppGroup.rows.filter((g) => siblingIds.has(g.storeId as string) && g.active === true);
+        const unique = [...new Set(shared.map((g) => g.whatsappGroupId as string))];
+        if (unique.length === 1) groups = [{ whatsappGroupId: unique[0], storeId, active: true }];
+      }
+      const ids = [...new Set([...groups.map((g) => g.whatsappGroupId as string), extraGroupId?.trim()].filter(Boolean))];
+      for (const id of ids) sent.push({ to: `group:${id}`, message });
+      return ids.length;
+    };
+    const managerPhonesForStore = async (_prisma: unknown, storeId: string) => {
+      const own = db.userDirectory.rows.filter(
+        (d) => d.storeId === storeId && d.isActive !== false && (d.role === 'OWNER' || d.role === 'MANAGER')
+      );
+      if (own.length > 0) return [...new Set(own.map((d) => d.phoneE164 as string))];
+      const owners = db.userStore.rows.filter((u) => u.storeId === storeId && (u.role === 'OWNER' || u.role === 'MANAGER'));
+      const siblingIds = new Set(
+        db.userStore.rows
+          .filter((u) => owners.some((o) => o.userId === u.userId))
+          .map((u) => u.storeId as string)
+      );
+      return [
+        ...new Set(
+          db.userDirectory.rows
+            .filter((d) => siblingIds.has(d.storeId as string) && d.isActive !== false && (d.role === 'OWNER' || d.role === 'MANAGER'))
+            .map((d) => d.phoneE164 as string)
+        ),
+      ];
+    };
+    const deliverStoreMessage = async (
+      prisma: unknown,
+      storeId: string,
+      message: string,
+      extra?: { extraGroupId?: string | null; extraPhone?: string | null; directMessage?: string | null }
+    ) => {
+      const groupPosted = await postToStoreGroups(prisma, storeId, message, extra?.extraGroupId);
+      if (groupPosted > 0) return { posted: groupPosted, via: 'group' };
+      const phones = new Set<string>(await managerPhonesForStore(prisma, storeId));
+      const extraPhone = extra?.extraPhone?.trim();
+      if (extraPhone && /^\+[1-9]\d{6,14}$/.test(extraPhone)) phones.add(extraPhone);
+      const direct = extra?.directMessage?.trim() || message;
+      let sentCount = 0;
+      for (const phone of phones) {
+        if (await sendWhatsAppMessage(prisma, phone, direct)) sentCount += 1;
+      }
+      if (sentCount > 0) return { posted: sentCount, via: 'direct' };
+      return { posted: 0, via: 'none' };
+    };
     return {
-      sendWhatsAppMessage: async (_prisma: unknown, to: string, message: string) => {
-        sent.push({ to, message });
-        return true;
-      },
-      sendWhatsAppGroupMessage: async (_prisma: unknown, groupId: string, message: string) => {
-        sent.push({ to: `group:${groupId}`, message });
-        return true;
-      },
-      // Same behaviour as the real one: every active group linked to the store gets the post.
-      postToStoreGroups: async (_prisma: unknown, storeId: string, message: string) => {
-        let groups = db.storeWhatsAppGroup.rows.filter((g) => g.storeId === storeId && g.active === true);
-        if (groups.length === 0) {
-          const owners = db.userStore.rows.filter((u) => u.storeId === storeId && u.role === 'OWNER');
-          const siblingIds = new Set(
-            db.userStore.rows
-              .filter((u) => u.role === 'OWNER' && owners.some((o) => o.userId === u.userId))
-              .map((u) => u.storeId as string)
-          );
-          siblingIds.delete(storeId);
-          const shared = db.storeWhatsAppGroup.rows.filter((g) => siblingIds.has(g.storeId as string) && g.active === true);
-          const unique = [...new Set(shared.map((g) => g.whatsappGroupId as string))];
-          if (unique.length === 1) groups = [{ whatsappGroupId: unique[0], storeId, active: true }];
-        }
-        for (const g of groups) sent.push({ to: `group:${g.whatsappGroupId}`, message });
-        return groups.length;
-      },
+      sendWhatsAppMessage,
+      sendWhatsAppGroupMessage,
+      postToStoreGroups,
+      managerPhonesForStore,
+      deliverStoreMessage,
     };
   }
   if (/(^|\/)whatsappMedia$/.test(request)) {

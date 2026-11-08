@@ -1,0 +1,149 @@
+/* Native-app shell for the owner PWA. Do not cache HTML. */
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+body {
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+}
+a, button, [role="button"], .menu-item, .nav-tab, .tab {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+input[type="text"], input[type="email"], input[type="password"], input[type="time"], input[type="number"], textarea {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+#appSplash {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  background: #111;
+  color: #fff;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+html.app-launch #appSplash {
+  display: flex;
+}
+#appSplash img {
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
+}
+#appSplash span {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  opacity: 0.9;
+}
+#appSplash.go {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.28s ease;
+}
+
+html.app-standalone .sidebar,
+html.app-standalone header,
+html.app-standalone .top-bar,
+html.app-standalone .menu-toggle {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+html.app-standalone .auth-container {
+  box-shadow: none;
+  border-radius: 0;
+  min-height: 100dvh;
+  max-width: none;
+  padding: max(28px, env(safe-area-inset-top)) 20px max(28px, env(safe-area-inset-bottom));
+}
+html.app-standalone body:has(> .auth-container) {
+  padding: 0;
+  align-items: stretch;
+  background: #fff;
+}
+
+#appInstall {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 2147482000;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+#appInstall.open { display: block; }
+#appInstall .app-install-bg {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+}
+#appInstall .app-install-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #fff;
+  border-radius: 16px 16px 0 0;
+  padding: 20px 20px max(20px, env(safe-area-inset-bottom));
+  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.18);
+}
+#appInstall .app-install-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 999px;
+  background: #d4d4d4;
+  margin: 0 auto 16px;
+}
+#appInstall h2 {
+  font-size: 20px;
+  margin: 0 0 8px;
+  color: #111;
+}
+#appInstall p {
+  margin: 0 0 16px;
+  color: #555;
+  font-size: 15px;
+  line-height: 1.45;
+}
+#appInstall ol {
+  margin: 0 0 18px;
+  padding-left: 20px;
+  color: #333;
+  font-size: 15px;
+  line-height: 1.55;
+}
+#appInstall .app-install-actions {
+  display: flex;
+  gap: 10px;
+}
+#appInstall button {
+  flex: 1;
+  min-height: 44px;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+#appInstall .app-install-primary {
+  background: #111;
+  color: #fff;
+  border: none;
+}
+#appInstall .app-install-ghost {
+  background: #fff;
+  color: #111;
+  border: 1px solid #e0e0e0;
+}
+
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  html { background: #111; }
+}

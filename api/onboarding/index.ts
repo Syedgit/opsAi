@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { getAuthUser } from '../../lib/apiAuth';
 import { getGroupSetupMode } from '../../lib/whatsappGroupConfig';
 import { completeOwnerStoreOnboarding } from '../../lib/storeOwnerOnboarding';
+import { syncStripeSubscriptionQuantity } from '../../lib/billing/stripeActions';
 import { logAppError, loggedHandler, serializeError } from '../../lib/requestLog';
 
 const prisma = new PrismaClient();
@@ -75,6 +76,8 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         });
         return;
       }
+
+      void syncStripeSubscriptionQuantity(prisma, authUser.userId);
 
       const message =
         result.provision.status === 'started'

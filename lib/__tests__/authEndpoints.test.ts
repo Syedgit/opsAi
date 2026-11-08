@@ -74,9 +74,13 @@ describe('POST /api/auth/signup', () => {
           email: 'sam@store.com',
           name: 'Sam Owner',
           provider: 'email',
+          plan: 'store',
+          planStatus: 'trial',
         }),
       }),
     );
+    const created = (userCreate as jest.Mock).mock.calls[0][0].data;
+    expect(created.trialEndsAt).toBeInstanceOf(Date);
   });
 
   it('rejects a duplicate email', async () => {

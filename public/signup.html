@@ -1,8 +1,27 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-app-shell="app">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#111111">
+    <meta name="color-scheme" content="light">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="opsAi">
+    <meta name="format-detection" content="telephone=no">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/icon-180.png">
+    <link rel="icon" type="image/png" href="/icon-192.png">
+    <link rel="apple-touch-startup-image" href="/splash-1320x2868.png" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1284x2778.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1206x2622.png" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="stylesheet" href="/app-shell.css">
+    <script src="/app-shell.js"></script>
     <title>Sign Up - opsAi</title>
     <style>
         * {
@@ -30,7 +49,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 20px;
+            padding: max(20px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom));
         }
         
         .auth-container {
@@ -60,15 +79,16 @@
         }
         
         .logo-link {
-            display: inline-block;
-            margin-bottom: 24px;
-            font-size: 28px;
-            font-weight: 700;
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            display: block;
+            width: fit-content;
+            margin: 0 auto 24px;
+            line-height: 0;
             text-decoration: none;
+        }
+        .logo-link img {
+            height: 52px;
+            width: auto;
+            max-width: 280px;
         }
         
         .form-group {
@@ -89,6 +109,7 @@
             border: 2px solid var(--border);
             border-radius: 8px;
             font-size: 16px;
+            min-height: 44px;
             transition: border-color 0.3s;
         }
         
@@ -162,6 +183,10 @@
             display: block;
         }
         
+        @media (max-width: 480px) {
+            .auth-container { padding: 28px 18px; box-shadow: none; border-radius: 0; min-height: 100dvh; }
+            body { padding: 0; align-items: stretch; }
+        }
         .password-hint {
             font-size: 12px;
             color: var(--text-light);
@@ -170,12 +195,13 @@
     </style>
 </head>
 <body>
+    <div id="appSplash" aria-hidden="true"><img src="/icon-192.png" alt=""><span>opsAi</span></div>
     <div class="auth-container">
-        <a href="/" class="logo-link">opsAi</a>
+        <a href="/" class="logo-link"><img src="/logo.jpg" alt="Operation Intelligence"></a>
         
         <div class="auth-header">
             <h1>Create Account</h1>
-            <p>Start managing your stores today</p>
+            <p>14 days free. No card. Then $25 per store per month.</p>
         </div>
         
         <div class="error-message" id="errorMessage" role="alert"></div>
@@ -202,7 +228,7 @@
                 <input type="password" id="passwordConfirm" name="passwordConfirm" required autocomplete="new-password" placeholder="••••••••" minlength="8">
             </div>
             
-            <button type="submit" class="btn-primary" id="submitBtn">Create Account</button>
+            <button type="submit" class="btn-primary" id="submitBtn">Start free trial</button>
         </form>
         
         <div class="loading" id="loading">Creating account...</div>

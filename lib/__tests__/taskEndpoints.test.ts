@@ -31,6 +31,10 @@ jest.mock('../tasks/pdfText', () => ({
   NotAPdfError: class NotAPdfError extends Error {},
 }));
 jest.mock('../tasks/tick', () => ({ runTaskTick: (...args: unknown[]) => tick(...args) }));
+const proposeMap = jest.fn();
+jest.mock('../understanding/proposePictureMap', () => ({
+  proposePictureMapFromPhoto: (...args: unknown[]) => proposeMap(...args),
+}));
 
 import { REPORT } from '../tasks/__tests__/reportFixture';
 import tasksHandler from '../../api/stores/tasks';
@@ -320,7 +324,7 @@ describe('Store setup (type, hours, shifts)', () => {
   };
 
   beforeEach(() => {
-    [userStoreFindFirst, storeFindUnique, storeUpdate, templateFindMany, templateCreate, templateCount].forEach((m) => m.mockReset());
+    [userStoreFindFirst, storeFindUnique, storeUpdate, templateFindMany, templateCreate, templateCount, proposeMap].forEach((m) => m.mockReset());
     storeFindUnique.mockResolvedValue({ storeName: 'Rockaway', timezone: 'America/New_York', setupJson: null });
     templateFindMany.mockResolvedValue([]);
     templateCreate.mockResolvedValue({ id: 'new' });
@@ -549,6 +553,28 @@ describe('Store setup (type, hours, shifts)', () => {
         profileJson: expect.objectContaining({ pictureTemplates: [] }),
       }),
     }));
+  });
+
+  it('proposes a picture map from a sample photo for the owner to confirm', async () => {
+    userStoreFindFirst.mockResolvedValue({ role: 'OWNER' });
+    proposeMap.mockResolvedValue({
+      ok: true,
+      template: {
+        kind: 'daily_close',
+        title: 'Shell close',
+        note: 'Fuel is Pump Sales.',
+        fields: [{ label: 'Pump Sales', purpose: 'fuel' }],
+      },
+    });
+    const { status, body } = await asUser('POST', {
+      action: 'propose_picture_template',
+      kind: 'daily_close',
+      image: 'a'.repeat(100),
+      mime: 'image/jpeg',
+    });
+    expect(status).toBe(200);
+    expect(body.template).toMatchObject({ title: 'Shell close', fields: [{ label: 'Pump Sales', purpose: 'fuel' }] });
+    expect(storeUpdate).not.toHaveBeenCalled();
   });
 });
 

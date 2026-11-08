@@ -3,8 +3,8 @@ import { ClassificationType, PendingStatus } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 import { WorkScheduleSchema, type WorkSchedule } from './understanding/schema';
 import { summarizeSchedule } from './understanding/schedule';
-import { scheduleGroupMessage, schedulePayload } from './understanding/plan';
-import { postToStoreGroups } from './whatsappMessaging';
+import { scheduleHoursMessage, scheduleSheetMessage, schedulePayload } from './understanding/plan';
+import { deliverStoreMessage } from './whatsappMessaging';
 
 export type PublishScheduleInput = {
   storeId: string;
@@ -19,7 +19,7 @@ export type PublishScheduleInput = {
 };
 
 export type PublishScheduleResult =
-  | { ok: true; actionId: string; posted: number }
+  | { ok: true; actionId: string; posted: number; via: 'group' | 'direct' | 'none' }
   | { ok: false; status: number; error: string };
 
 function asWorkSchedule(input: PublishScheduleInput): WorkSchedule | null {
@@ -60,13 +60,24 @@ export async function publishDashboardSchedule(
   }
 
   const summary = summarizeSchedule(schedule);
-  const payload = schedulePayload(schedule, summary, []);
 
   const existing = await prisma.pendingActions.findMany({
     where: { storeId: input.storeId, type: ClassificationType.UNKNOWN, status: PendingStatus.CONFIRMED },
     orderBy: { createdAt: 'desc' },
     take: 80,
   });
+  const extraGroup =
+    existing
+      .map((row) => {
+        const id = (row.payloadJson as { source_group_id?: string } | null)?.source_group_id;
+        return typeof id === 'string' && id.trim() ? id.trim() : null;
+      })
+      .find((id) => id) ?? null;
+  const payload = {
+    ...schedulePayload(schedule, summary, []),
+    ...(extraGroup ? { source_group_id: extraGroup } : {}),
+  };
+
   const same = existing.find((row) => {
     const data = row.payloadJson as { _kind?: string; week_start?: string } | null;
     return data?._kind === 'work_schedule' && data.week_start === schedule.weekStart;
@@ -99,10 +110,19 @@ export async function publishDashboardSchedule(
   }
 
   let posted = 0;
+  let via: 'group' | 'direct' | 'none' = 'none';
   if (input.postToGroup !== false) {
-    const message = scheduleGroupMessage(payload, input.storeName);
-    if (message) posted = await postToStoreGroups(prisma, input.storeId, message);
+    const sheet = scheduleSheetMessage(payload, input.storeName);
+    if (sheet) {
+      const delivery = await deliverStoreMessage(prisma, input.storeId, sheet, {
+        extraGroupId: extraGroup,
+        extraPhone: input.phoneE164,
+        directMessage: scheduleHoursMessage(payload, input.storeName),
+      });
+      posted = delivery.posted;
+      via = delivery.via;
+    }
   }
 
-  return { ok: true, actionId, posted };
+  return { ok: true, actionId, posted, via };
 }

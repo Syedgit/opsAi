@@ -28,6 +28,14 @@ model User {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  /// store. $25 per location after the trial.
+  plan        String    @default("store")
+  /// trial | active | expired | canceled
+  planStatus  String    @default("trial") @map("plan_status")
+  trialEndsAt DateTime? @map("trial_ends_at")
+  stripeCustomerId     String? @unique @map("stripe_customer_id")
+  stripeSubscriptionId String? @unique @map("stripe_subscription_id")
+
   // Many-to-many relationship with stores
   stores UserStore[]
 

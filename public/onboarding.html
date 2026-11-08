@@ -1,8 +1,27 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-app-shell="app">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#111111">
+    <meta name="color-scheme" content="light">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="opsAi">
+    <meta name="format-detection" content="telephone=no">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/icon-180.png">
+    <link rel="icon" type="image/png" href="/icon-192.png">
+    <link rel="apple-touch-startup-image" href="/splash-1320x2868.png" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1284x2778.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1206x2622.png" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="stylesheet" href="/app-shell.css">
+    <script src="/app-shell.js"></script>
     <title>Set up your store - opsAi</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -22,7 +41,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 20px;
+            padding: max(20px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom));
         }
         .auth-container {
             background: white;
@@ -36,15 +55,13 @@
         .auth-header h1 { font-size: 26px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
         .auth-header p { color: var(--text-light); font-size: 15px; line-height: 1.45; }
         .logo-link {
-            display: inline-block; margin-bottom: 20px; font-size: 28px; font-weight: 700;
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            background-clip: text; text-decoration: none;
+            display: inline-block; margin-bottom: 20px; line-height: 0; text-decoration: none;
         }
+        .logo-link img { height: 44px; width: auto; max-width: 240px; }
         .form-group { margin-bottom: 18px; }
         .form-group label { display: block; margin-bottom: 6px; color: var(--text); font-weight: 500; font-size: 14px; }
         .form-group input, .form-group textarea, .form-group select {
-            width: 100%; padding: 12px 14px; border: 2px solid var(--border); border-radius: 8px; font-size: 15px;
+            width: 100%; padding: 12px 14px; border: 2px solid var(--border); border-radius: 8px; font-size: 16px; min-height: 44px;
         }
         .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
             outline: none; border-color: var(--primary);
@@ -102,8 +119,8 @@
         .time-row { display: flex; gap: 12px; }
         .time-row .form-group { flex: 1; }
         .shift-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
-        .shift-row input[type="text"] { flex: 2; padding: 10px 12px; border: 2px solid var(--border); border-radius: 8px; font-size: 15px; }
-        .shift-row input[type="time"] { flex: 1; padding: 10px 12px; border: 2px solid var(--border); border-radius: 8px; font-size: 15px; }
+        .shift-row input[type="text"] { flex: 2; padding: 10px 12px; border: 2px solid var(--border); border-radius: 8px; font-size: 16px; min-height: 44px; }
+        .shift-row input[type="time"] { flex: 1; padding: 10px 12px; border: 2px solid var(--border); border-radius: 8px; font-size: 16px; min-height: 44px; }
         .small-btn { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 13px; cursor: pointer; color: var(--text); }
         .link-btn { background: none; border: none; color: var(--primary-dark); font-size: 14px; cursor: pointer; text-decoration: underline; margin-top: 14px; }
         .group-title { font-size: 13px; font-weight: 700; margin: 16px 0 6px; color: var(--text); text-transform: uppercase; letter-spacing: .03em; }
@@ -112,22 +129,29 @@
         .task-row input { width: auto; margin-top: 3px; }
         .task-row .when { color: var(--text-light); font-size: 12px; }
         .bucket-blurb { font-size: 13px; color: var(--text-light); margin: 0 0 8px; line-height: 1.4; }
-        textarea { width: 100%; padding: 12px 14px; border: 2px solid var(--border); border-radius: 8px; font-size: 15px; font-family: inherit; resize: vertical; }
+        textarea { width: 100%; padding: 12px 14px; border: 2px solid var(--border); border-radius: 8px; font-size: 16px; font-family: inherit; resize: vertical; }
         .back-row { display: flex; gap: 10px; }
         .back-row button { flex: 1; }
         .pic-field { display: grid; grid-template-columns: 1.3fr 1fr 1fr auto; gap: 6px; margin-bottom: 6px; }
-        .pic-field input, .pic-field select { width: 100%; padding: 10px 12px; border: 2px solid var(--border); border-radius: 8px; font-size: 14px; }
+        .pic-field input, .pic-field select { width: 100%; padding: 10px 12px; border: 2px solid var(--border); border-radius: 8px; font-size: 16px; min-height: 44px; }
         .pic-preset { margin: 0 6px 6px 0; }
-        @media (max-width: 640px) { .pic-field { grid-template-columns: 1fr; } }
+        @media (max-width: 640px) {
+            .pic-field { grid-template-columns: 1fr; }
+            body { padding: 0; align-items: stretch; }
+            .auth-container { padding: 20px 16px 40px; border-radius: 0; min-height: 100dvh; max-width: 100%; }
+            .auth-container.wide { max-width: 100%; }
+            .btn-primary, .btn-secondary { min-height: 44px; }
+        }
         .vendor-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
-        .vendor-row input[type="text"] { flex: 1.2; padding: 10px 12px; border: 2px solid var(--border); border-radius: 8px; font-size: 15px; }
-        .vendor-row select { flex: 1.4; padding: 10px 12px; border: 2px solid var(--border); border-radius: 8px; font-size: 15px; }
+        .vendor-row input[type="text"] { flex: 1.2; padding: 10px 12px; border: 2px solid var(--border); border-radius: 8px; font-size: 16px; min-height: 44px; }
+        .vendor-row select { flex: 1.4; padding: 10px 12px; border: 2px solid var(--border); border-radius: 8px; font-size: 16px; min-height: 44px; }
     </style>
 </head>
 <body>
+    <div id="appSplash" aria-hidden="true"><img src="/icon-192.png" alt=""><span>opsAi</span></div>
     <div class="auth-container">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-            <a href="/dashboard" class="logo-link" style="margin-bottom:0;">opsAi</a>
+            <a href="/dashboard" class="logo-link" style="margin-bottom:0;"><img src="/logo.jpg" alt="Operation Intelligence"></a>
             <button type="button" id="logoutBtn" style="background:none;border:none;color:var(--text-light);font-size:13px;font-weight:600;cursor:pointer;">Log out</button>
         </div>
 
@@ -203,12 +227,13 @@
             <div class="form-group" id="sampleCloseBlock">
                 <label for="sampleClose">Typical daily close</label>
                 <textarea id="sampleClose" maxlength="2000" rows="5" placeholder="Rockaway 10/12 cash 106 card 334 gas 1355 Lays 142 deposit 1653"></textarea>
-                <div class="help-text">Copy a group message, or attach the POS Store Close. Same pattern for Rockaway and most gas stations: fuel is Total Fuel Sales; non-fuel, if any, is store credit; cash is Cash Acceptor Cash on the next page. Invoice paid from the till or a cash paid-out comes off that cash. The file is not stored.</div>
+                <div class="help-text">Attach a real close photo for this store. We list the lines we see; you say what each one is (fuel, store credit, cash, ignore). A new POS does not need a code change — only this map. Add a second page later (cash / tender) from Tasks → Store admin. The photo is not stored.</div>
                 <input type="file" id="sampleClosePhoto" accept="image/jpeg,image/png,image/webp,image/gif" style="margin-top: 8px;">
                 <img id="sampleClosePreview" alt="" style="display: none; max-width: 220px; margin-top: 8px; border-radius: 8px; border: 1px solid var(--border);">
                 <div id="pictureMapBlock" style="margin-top: 16px;">
-                    <label>Picture map (what to take from that photo)</label>
-                    <div class="help-text">Optional. Pick a known close layout (POS fuel page, tender page, or handwritten store sales). You can skip this and add more pages anytime under Tasks → Store admin — invoices and schedules too. The photo is not stored — only the map is.</div>
+                    <label>What each line on that photo means</label>
+                    <div class="help-text">Check every line after we read the photo. Change anything that is wrong. Presets below are only shortcuts if you already know the layout.</div>
+                    <div id="picMapStatus" class="help-text" style="margin: 8px 0; font-weight: 600;"></div>
                     <div id="picPresetChips" style="margin: 8px 0;"></div>
                     <input type="text" id="picMapTitle" maxlength="80" placeholder="Name of this page" style="margin-bottom: 8px;">
                     <div id="picFieldList"></div>
@@ -374,10 +399,10 @@
                     ? 'Who do you order from?'
                     : 'How do you send the day’s numbers?';
             document.getElementById('samplesIntro').textContent = vendors && samples
-                ? 'Paste a typical close or attach the POS Store Close screen. Set the vendors you order from so a photo or “need 10 Marlboro” comes back as a list to confirm.'
+                ? 'Attach this store’s close photo. We list the lines; you say what fuel, store credit, and cash are. Set vendors so an order photo comes back as a list to confirm.'
                 : vendors
                     ? 'Set the vendors you order from so a photo or typed list comes back as a list to confirm.'
-                    : 'Paste a typical daily close or invoice, or attach the POS Store Close screen. opsAi uses it as this location’s template.';
+                    : 'Attach this store’s close photo. We list the lines; you mark fuel, store credit, cash, or ignore.';
             if (vendors) renderVendors();
             renderPictureMapEditor();
         }
@@ -423,6 +448,7 @@
                 }
                 window._picPresets = (data.pictureTemplatePresets && data.pictureTemplatePresets.length) ? data.pictureTemplatePresets : FALLBACK_PIC_PRESETS;
                 window._picPurposes = (data.picturePurposes && data.picturePurposes.length) ? data.picturePurposes : DEFAULT_PIC_PURPOSES;
+                window._storeFeatures = data.storeFeatures || [];
                 renderPictureMapEditor();
                 renderProfile();
             } catch (e) {
@@ -472,6 +498,22 @@
                 const mods = modulesFor(st.storeType);
                 if (mods.fuelOption) {
                     html += '<div class="form-group"><label class="check-row"><input type="checkbox" id="fuelBox" ' + (st.fuel ? 'checked' : '') + '> This location sells fuel (pumps / spill kit reminders)</label></div>';
+                }
+                if (['appointments', 'shipping', 'other', 'office', 'real_estate', 'personal'].indexOf(st.storeType) >= 0) {
+                    const extras = (window._storeFeatures && window._storeFeatures.length)
+                        ? window._storeFeatures.filter(function (f) { return f.id !== 'fuel'; })
+                        : [
+                            { id: 'cooler', label: 'Walk-in or display cooler' },
+                            { id: 'shelves', label: 'Retail shelves to restock' },
+                            { id: 'restroom', label: 'Restroom to check' },
+                            { id: 'till', label: 'Cash register / daily close' },
+                        ];
+                    const have = st.features || [];
+                    html += '<div class="form-group"><label>What does this location have?</label>' +
+                        '<div class="help-text" style="margin-bottom:8px;">Only tick what is here. A salon or clinic with a cooler and shelves should tick those; a UPS counter usually does not. These add reminders on the next screen — they stay off until you tick them.</div>' +
+                        extras.map(function (f) {
+                            return '<label class="check-row"><input type="checkbox" data-feature="' + esc(f.id) + '"' + (have.indexOf(f.id) >= 0 ? ' checked' : '') + '> ' + esc(f.label) + '</label>';
+                        }).join('') + '</div>';
                 }
                 html += '<button type="button" class="btn-primary" id="profileNext">Next: choose WhatsApp reminders</button>';
             }
@@ -542,6 +584,13 @@
                 }
             } else if (t.id === 'fuelBox') {
                 setupState.fuel = t.checked;
+            } else if (t.dataset.feature) {
+                const id = t.dataset.feature;
+                const have = setupState.features || [];
+                setupState.features = t.checked
+                    ? have.concat([id]).filter(function (x, i, arr) { return arr.indexOf(x) === i; })
+                    : have.filter(function (x) { return x !== id; });
+                if (id === 'fuel') setupState.fuel = t.checked;
             }
         });
 
@@ -550,7 +599,7 @@
             daily_reports: 'Nag the shift to send numbers you already collect — close, deposit, competitor prices, invoices.',
             shift_checks: 'Time-based checks on each shift: open, clean, restock, pumps. Staff reply OK or send a photo.',
             photo_proofs: 'Must send a picture (date labels, 7Clean items, a POS screen). Stays open until the photo is right.',
-            weekly_monthly: 'Less often: fire safety, spill kit, pest report, deep clean.',
+            weekly_monthly: 'Less often: utility and insurance bills, fire safety, spill kit, pest report, deep clean.',
         };
 
         function renderTasks() {
@@ -561,7 +610,11 @@
                 ? (kind === 'seven_eleven'
                     ? '7-Eleven: daily close plus 7Clean photo checks are ticked. Untick what you do not need. Upload an inspection PDF later on Store admin if you want the failed standards added.'
                     : 'The usual shop pack is ticked — close, open, cleaning, restock. Untick what you do not run. You can add lottery or invoices later from Store admin.')
-                : 'Only a few reminders are ticked. Leave the rest for Store admin unless you already know you need them.';
+                : kind === 'shipping'
+                ? 'UPS / pack-and-ship: who is on the counter, held packages, last drop-off. Cooler or shelves only appear if you ticked them on the last screen.'
+                : kind === 'appointments'
+                ? 'Salon / clinic: today’s book, rooms, and till close. Cooler and shelves only appear if you ticked them.'
+                : 'Only a few reminders are ticked for this kind of business. Cooler, shelves, restroom, and a till only show if you said this location has them.';
             const byBucket = {};
             suggestions.forEach(function (s) {
                 const b = s.bucket || 'shift_checks';
@@ -579,8 +632,9 @@
                             (s.standardId ? esc(s.standardId) + ' ' : '') + esc(s.title) + '</strong>' +
                             '<div class="when">' + esc(s.scheduleText) + (s.shift ? ' · ' + esc(s.shift) : '') + proof + '</div></span></label>';
                     }).join('');
-            }).join('') + (setupState && setupState.storeType === 'seven_eleven'
-                ? '<div class="help-text" style="margin-top: 14px;">Have your last 7-Eleven inspection report? Upload it later on Tasks &amp; alerts → Inspection, and it will add a task for everything the inspector found.</div>' : '');
+            }).join('') + '<div class="help-text" style="margin-top: 14px;">Need something that is not on this list? After setup, Store admin → + New task: name it, pick a category, shift, time, and daily / weekly / monthly.</div>' +
+                (setupState && setupState.storeType === 'seven_eleven'
+                ? '<div class="help-text">Have your last 7-Eleven inspection report? Upload it later on Tasks &amp; alerts → Inspection, and it will add a task for everything the inspector found.</div>' : '');
         }
 
         document.getElementById('tasksPanel').addEventListener('click', function (e) {
@@ -650,6 +704,19 @@
             finishSetup(window._tasksAdded);
         });
 
+        function setPicMapStatus(text) {
+            const el = document.getElementById('picMapStatus');
+            if (el) el.textContent = text || '';
+        }
+
+        function fillPictureMap(template) {
+            if (!template) return;
+            document.getElementById('picMapTitle').value = template.title || '';
+            document.getElementById('picMapNote').value = template.note || '';
+            const list = document.getElementById('picFieldList');
+            if (list) list.innerHTML = (template.fields || []).map(picFieldRow).join('') || picFieldRow();
+        }
+
         function bindSamplePreview(inputId, previewId) {
             document.getElementById(inputId).addEventListener('change', function () {
                 const file = this.files && this.files[0];
@@ -657,15 +724,40 @@
                 if (!file) { preview.style.display = 'none'; preview.removeAttribute('src'); return; }
                 preview.src = URL.createObjectURL(file);
                 preview.style.display = 'block';
+                if (inputId === 'sampleClosePhoto') proposeCloseMap(file);
             });
         }
         bindSamplePreview('sampleClosePhoto', 'sampleClosePreview');
         bindSamplePreview('sampleInvoicePhoto', 'sampleInvoicePreview');
 
+        async function proposeCloseMap(file) {
+            const saveBtn = document.getElementById('samplesSaveBtn');
+            setPicMapStatus('Reading the lines on this page…');
+            if (saveBtn) saveBtn.disabled = true;
+            try {
+                const photo = await readSamplePhoto('sampleClosePhoto', 'dailyCloseImage', 'dailyCloseMime');
+                if (!photo) throw new Error('Could not read that photo.');
+                const data = await setupApi('POST', {
+                    action: 'propose_picture_template',
+                    kind: 'daily_close',
+                    image: photo.dailyCloseImage,
+                    mime: photo.dailyCloseMime,
+                });
+                fillPictureMap(data.template);
+                setPicMapStatus('Check each line. Change anything that is wrong, then save.');
+            } catch (err) {
+                setPicMapStatus(err.message + ' Pick a starter below, or type the lines yourself.');
+            } finally {
+                if (saveBtn) saveBtn.disabled = false;
+            }
+        }
+
         const DEFAULT_PIC_PURPOSES = [
-            { id: 'fuel', label: 'Fuel' },
+            { id: 'fuel', label: 'Fuel / gas' },
+            { id: 'gallons', label: 'Fuel gallons' },
             { id: 'store_credit', label: 'Store credit (inside card)' },
             { id: 'cash', label: 'Cash (acceptor / till)' },
+            { id: 'inside_total', label: 'Inside total (shop, not gas)' },
             { id: 'payout', label: 'Comes off cash (invoice / paid-out)' },
             { id: 'ignore', label: 'Ignore (not today’s sales)' },
         ];
@@ -675,6 +767,7 @@
                 note: 'Fuel is Total Fuel Sales. Non-fuel, if any, is store credit. Ignore the register reading.',
                 fields: [
                     { label: 'Total Fuel Sales', purpose: 'fuel' },
+                    { label: 'Volume on Total Fuel Sales', purpose: 'gallons', note: 'volume on the fuel total row, not grade lines' },
                     { label: 'Total Non Fuel Sales', purpose: 'store_credit' },
                     { label: 'Grand Total Store Sales Reading', purpose: 'ignore', note: 'register reading, not today' },
                 ],
@@ -736,9 +829,8 @@
             if (presetBtn) {
                 const preset = (window._picPresets || []).find(function (p) { return p.id === presetBtn.getAttribute('data-pic-preset'); });
                 if (!preset) return;
-                document.getElementById('picMapTitle').value = preset.title;
-                document.getElementById('picMapNote').value = preset.note || '';
-                document.getElementById('picFieldList').innerHTML = (preset.fields || []).map(picFieldRow).join('') || picFieldRow();
+                fillPictureMap(preset);
+                setPicMapStatus('Starter layout loaded. Rename the lines to match this store.');
                 return;
             }
             if (e.target.id === 'addPicFieldBtn') {

@@ -255,6 +255,9 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('Time Out');
     expect(prompt).toContain('Pay Period');
     expect(prompt).toContain('Friday through Thursday');
+    expect(prompt).toContain('"kind":"fuel_prices"');
+    expect(prompt).toContain('9/10 is 4.099');
+    expect(prompt).toContain('Never copy a pole into daily_close');
   });
 
   it('lists the store vendors the owner set at signup', () => {
@@ -283,6 +286,7 @@ describe('buildSystemPrompt', () => {
       ],
       NOW,
     );
+    expect(prompt).toContain("this store's document maps are the source of truth");
     expect(prompt).toContain('picture map "Exxon Store Close (fuel page)"');
     expect(prompt).toContain('take "Total Fuel Sales" as fuelSales');
     expect(prompt).toContain('Owner note: Fuel is Total Fuel Sales.');

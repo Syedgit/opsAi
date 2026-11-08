@@ -186,6 +186,28 @@ export const OrderSchema = z.object({
 });
 export type Order = z.infer<typeof OrderSchema>;
 
+export const FUEL_PRICE_SOURCES = ['competitor', 'own', 'unknown'] as const;
+export type FuelPriceSource = (typeof FUEL_PRICE_SOURCES)[number];
+
+/** One grade on a roadside pole or our own price board. Tenths 9/10 on 4.09 is 4.099. */
+export const FuelPriceGradeSchema = z.object({
+  product: z.string().min(1),
+  price: amount,
+});
+export type FuelPriceGrade = z.infer<typeof FuelPriceGradeSchema>;
+
+export const FuelPricesSchema = z.object({
+  /** Which of our stores this report is for. Null when the sender only has one. */
+  storeHint: z.string().nullable().optional(),
+  /** Brand or name printed on the photographed sign (BP, Shell, Exxon). */
+  stationHint: z.string().nullable().optional(),
+  /** Caption / board hint only — code decides competitor vs our board. */
+  sourceHint: z.enum(FUEL_PRICE_SOURCES).optional().default('unknown'),
+  grades: z.array(FuelPriceGradeSchema).min(1),
+  observedDate: isoDate.nullable().optional(),
+});
+export type FuelPrices = z.infer<typeof FuelPricesSchema>;
+
 export const UnderstandingSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('daily_close'),
@@ -220,6 +242,12 @@ export const UnderstandingSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('order'),
     order: OrderSchema,
+    confidence,
+    needsReview,
+  }),
+  z.object({
+    kind: z.literal('fuel_prices'),
+    prices: FuelPricesSchema,
     confidence,
     needsReview,
   }),

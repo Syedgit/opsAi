@@ -9,6 +9,8 @@ import { logAppError, loggedHandler, serializeError } from '../../lib/requestLog
 import { readStoredSetup } from '../../lib/tasks/storeSetup';
 import { dashboardModules } from '../../lib/businessProfile';
 import { flattenTillPaidOuts, sourceActionId } from '../../lib/understanding/tillPaidOuts';
+import { utcMonthRange } from '../../lib/billing/plans';
+import { summarizeUsage } from '../../lib/understanding/usage';
 
 const prisma = new PrismaClient();
 
@@ -99,20 +101,31 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       const monthStart = startOfMonth(today);
       const monthEnd = endOfMonth(today);
 
-      const [todaySales, todayInvoices, todayOrders, monthSales, monthInvoices, pendingCount] = await Promise.all([
+      const monthWindow = utcMonthRange();
+      const [todaySales, todayInvoices, todayOrders, monthSales, monthInvoices, pendingCount, monthLogs] = await Promise.all([
         prisma.pendingActions.count({ where: { storeId, type: 'STORE_SALES', status: 'CONFIRMED', createdAt: { gte: todayStart, lte: todayEnd } } }),
         prisma.pendingActions.count({ where: { storeId, type: 'INVOICE_EXPENSE', status: 'CONFIRMED', createdAt: { gte: todayStart, lte: todayEnd } } }),
         prisma.pendingActions.count({ where: { storeId, type: 'ORDER_REQUEST', status: 'CONFIRMED', createdAt: { gte: todayStart, lte: todayEnd } } }),
         prisma.pendingActions.count({ where: { storeId, type: 'STORE_SALES', status: 'CONFIRMED', createdAt: { gte: monthStart, lte: monthEnd } } }),
         prisma.pendingActions.count({ where: { storeId, type: 'INVOICE_EXPENSE', status: 'CONFIRMED', createdAt: { gte: monthStart, lte: monthEnd } } }),
         prisma.pendingActions.count({ where: { storeId, status: 'PENDING' } }),
+        prisma.messageLog.findMany({
+          where: { storeId, createdAt: { gte: monthWindow.from, lt: monthWindow.to } },
+          select: { storeId: true, createdAt: true, extractedData: true },
+          take: 20000,
+        }),
       ]);
+      const used = summarizeUsage(monthLogs).total;
 
       res.json({
         storeId,
         today: { sales: todaySales, invoices: todayInvoices, orders: todayOrders },
         month: { sales: monthSales, invoices: monthInvoices },
         pending: pendingCount,
+        usage: {
+          month: monthWindow.month,
+          aiReadings: used.aiCalls,
+        },
       });
     } catch (error: unknown) {
       logAppError('stores', serializeError(error));
@@ -153,7 +166,10 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
 
       const lookupId = type === 'paidouts' ? sourceActionId(id) : id;
       const item = await prisma.pendingActions.findFirst({
-        where: type === 'paidouts' ? { actionId: lookupId, storeId } : { actionId: lookupId, storeId, type: dbType as 'STORE_SALES' | 'INVOICE_EXPENSE' | 'FUEL_SALES' | 'PAID_OUT' | 'ORDER_REQUEST' },
+        where:
+          type === 'paidouts' || type === 'fuel'
+            ? { actionId: lookupId, storeId }
+            : { actionId: lookupId, storeId, type: dbType as 'STORE_SALES' | 'INVOICE_EXPENSE' | 'FUEL_SALES' | 'PAID_OUT' | 'ORDER_REQUEST' },
       });
 
       if (!item) {

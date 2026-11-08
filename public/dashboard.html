@@ -1,11 +1,27 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-app-shell="app">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <meta name="theme-color" content="#25D366">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#111111">
+    <meta name="color-scheme" content="light">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="opsAi">
+    <meta name="format-detection" content="telephone=no">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/icon-180.png">
+    <link rel="icon" type="image/png" href="/icon-192.png">
+    <link rel="apple-touch-startup-image" href="/splash-1320x2868.png" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1284x2778.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1206x2622.png" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="stylesheet" href="/app-shell.css">
+    <script src="/app-shell.js"></script>
     <title>opsAi Dashboard</title>
     <style>
         * {
@@ -27,52 +43,84 @@
             --warning: #f59e0b;
             --danger: #ef4444;
             --sidebar-width: 260px;
+            --sidebar-bg: #111111;
+            --sidebar-bg-end: #0a0a0a;
+            --sidebar-accent: #2dd4bf;
         }
         
+        html { -webkit-text-size-adjust: 100%; overflow-x: hidden; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             background: var(--bg);
             color: var(--text);
             display: flex;
             min-height: 100vh;
+            min-height: 100dvh;
+            overflow-x: hidden;
         }
+        body.nav-open { overflow: hidden; }
+        input, select, textarea, button { font-size: 16px; font-family: inherit; }
         
         /* Sidebar */
         .sidebar {
             width: var(--sidebar-width);
-            background: linear-gradient(180deg, var(--primary-dark) 0%, var(--secondary) 100%);
+            background: linear-gradient(180deg, var(--sidebar-bg) 0%, var(--sidebar-bg-end) 100%);
             color: white;
             position: fixed;
             height: 100vh;
+            height: 100dvh;
             overflow-y: auto;
-            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            box-shadow: 2px 0 16px rgba(0,0,0,0.18);
             z-index: 1000;
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+            z-index: 999;
         }
         
         .sidebar-header {
             padding: 24px 20px;
             border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
         }
-        
-        .sidebar-header h2 {
-            font-size: 24px;
-            font-weight: 700;
-            margin-bottom: 8px;
+        .sidebar-header .brand-logo { flex: 1; min-width: 0; }
+        .sidebar-close {
+            display: none;
+            flex-shrink: 0;
+            width: 44px;
+            height: 44px;
+            margin: -4px -8px 0 0;
+            background: transparent;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 28px;
+            line-height: 1;
             cursor: pointer;
-            transition: opacity 0.2s;
         }
         
-        .sidebar-header h2:hover {
-            opacity: 0.8;
+        .sidebar-header .brand-logo {
+            display: block;
+            background: #fff;
+            border-radius: 10px;
+            padding: 8px 10px;
+            margin-bottom: 10px;
+            line-height: 0;
         }
-        
-        .sidebar-header a:hover h2 {
-            opacity: 0.8;
+        .sidebar-header .brand-logo img {
+            display: block;
+            width: 100%;
+            height: auto;
         }
-        
-        .sidebar-header .subtitle {
-            font-size: 12px;
-            opacity: 0.8;
+        .sidebar-header .brand-logo:hover {
+            opacity: 0.92;
         }
         
         .sidebar-menu {
@@ -91,13 +139,13 @@
         }
         
         .menu-item:hover {
-            background: rgba(255,255,255,0.1);
-            border-left-color: var(--primary);
+            background: rgba(255,255,255,0.06);
+            border-left-color: var(--sidebar-accent);
         }
         
         .menu-item.active {
-            background: rgba(255,255,255,0.15);
-            border-left-color: white;
+            background: rgba(45,212,191,0.12);
+            border-left-color: var(--sidebar-accent);
             font-weight: 600;
         }
         
@@ -182,6 +230,7 @@
             margin-left: var(--sidebar-width);
             flex: 1;
             min-height: 100vh;
+            min-width: 0;
         }
         
         .top-bar {
@@ -194,6 +243,39 @@
             position: sticky;
             top: 0;
             z-index: 100;
+        }
+
+        #appBanner {
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin: 0;
+            padding: 10px 32px;
+            font-size: 13px;
+            line-height: 1.4;
+            color: #664d03;
+            background: #fff8e8;
+            border-bottom: 1px solid #f0e0a8;
+        }
+
+        #appBanner.is-on {
+            display: flex;
+        }
+
+        #appBanner a {
+            color: inherit;
+            font-weight: 600;
+        }
+
+        #appBanner button {
+            background: none;
+            border: none;
+            font-size: 18px;
+            line-height: 1;
+            cursor: pointer;
+            color: inherit;
+            padding: 0 4px;
         }
         
         .store-selector {
@@ -220,7 +302,9 @@
             color: var(--text);
             cursor: pointer;
             transition: all 0.2s;
-            min-width: 250px;
+            min-width: 0;
+            flex: 1;
+            max-width: 280px;
         }
         
         .store-selector select:hover {
@@ -466,6 +550,7 @@
             display: flex;
             align-items: center;
             gap: 12px;
+            flex-shrink: 0;
         }
 
         .logout-btn {
@@ -757,18 +842,19 @@
         /* Mobile Menu Toggle */
         .menu-toggle {
             display: none;
-            background: var(--primary);
+            background: #111;
             color: white;
             border: none;
-            padding: 10px 15px;
+            padding: 10px 14px;
             border-radius: 8px;
             cursor: pointer;
             font-size: 20px;
             position: fixed;
-            top: 20px;
-            left: 20px;
+            top: max(12px, env(safe-area-inset-top));
+            left: max(12px, env(safe-area-inset-left));
             z-index: 1001;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            min-width: 44px;
+            min-height: 44px;
         }
         
         /* Responsive */
@@ -780,17 +866,26 @@
             .content-wrapper {
                 padding: 24px;
             }
+
+            .top-bar {
+                flex-wrap: wrap;
+                gap: 12px;
+                padding: 16px 20px;
+            }
         }
         
         @media (max-width: 768px) {
             .menu-toggle {
                 display: block;
             }
+            .sidebar-overlay.open { display: block; }
+            .sidebar-close { display: flex; align-items: center; justify-content: center; }
+            body.nav-open .menu-toggle { visibility: hidden; pointer-events: none; }
             
             .sidebar {
                 transform: translateX(-100%);
                 transition: transform 0.3s ease-in-out;
-                width: 280px;
+                width: min(280px, 86vw);
             }
             
             .sidebar.open {
@@ -804,8 +899,14 @@
             
             .top-bar {
                 padding: 15px 20px;
+                padding-left: 64px;
+                padding-top: max(15px, env(safe-area-inset-top));
                 flex-wrap: wrap;
                 gap: 15px;
+            }
+
+            #appBanner {
+                padding: 10px 20px 10px 64px;
             }
             
             .store-selector {
@@ -869,31 +970,30 @@
             
             .data-table {
                 font-size: 14px;
+                display: block;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
             }
             
             .data-table th,
             .data-table td {
                 padding: 10px 8px;
+                white-space: nowrap;
             }
             
-            /* Hide some columns on mobile */
-            .data-table th:nth-child(n+5),
-            .data-table td:nth-child(n+5) {
-                display: none;
-            }
-            
-            /* Show important columns */
-            .data-table th:first-child,
-            .data-table td:first-child,
-            .data-table th:last-child,
-            .data-table td:last-child {
-                display: table-cell;
+            .modal-content {
+                width: calc(100% - 24px);
+                max-height: 90dvh;
+                overflow: auto;
+                padding: 20px 16px;
             }
         }
         
         @media (max-width: 480px) {
             .top-bar {
                 padding: 12px 15px;
+                padding-left: 60px;
+                padding-top: max(12px, env(safe-area-inset-top));
             }
             
             .content-wrapper {
@@ -926,40 +1026,6 @@
             
             .content-area {
                 padding: 15px 10px;
-            }
-            
-            .data-table {
-                font-size: 12px;
-                display: block;
-                overflow-x: auto;
-                white-space: nowrap;
-            }
-            
-            .data-table thead,
-            .data-table tbody,
-            .data-table tr {
-                display: block;
-            }
-            
-            .data-table th,
-            .data-table td {
-                display: block;
-                text-align: left;
-                padding: 8px;
-                border-bottom: 1px solid var(--border);
-            }
-            
-            .data-table th {
-                background: var(--bg);
-                font-weight: 600;
-                border-bottom: 2px solid var(--border);
-            }
-            
-            .data-table tr {
-                margin-bottom: 10px;
-                background: white;
-                border-radius: 8px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
             }
         }
         
@@ -994,13 +1060,14 @@
     </style>
 </head>
 <body>
+    <div id="appSplash" aria-hidden="true"><img src="/icon-192.png" alt=""><span>opsAi</span></div>
     <!-- Sidebar -->
     <aside class="sidebar">
         <div class="sidebar-header">
-            <a href="/" style="text-decoration: none; color: inherit; display: block;">
-                <h2>📊 opsAi</h2>
+            <a href="/" class="brand-logo" aria-label="Operation Intelligence">
+                <img src="/logo.jpg" alt="Operation Intelligence">
             </a>
-            <div class="subtitle">Store Management</div>
+            <button type="button" class="sidebar-close" onclick="toggleSidebar()" aria-label="Close menu">×</button>
         </div>
         
         <nav class="sidebar-menu">
@@ -1026,6 +1093,10 @@
                 <a href="#" class="menu-item" data-page="fuel" data-mod="fuel">
                     <span class="menu-item-icon">⛽</span>
                     <span>Fuel Sales</span>
+                </a>
+                <a href="#" class="menu-item" data-page="prices" data-mod="fuel">
+                    <span class="menu-item-icon">🏷️</span>
+                    <span>Gas prices</span>
                 </a>
                 <a href="#" class="menu-item" data-page="paidouts" data-mod="money">
                     <span class="menu-item-icon">💵</span>
@@ -1068,12 +1139,14 @@
         
         <div id="userInfo"></div>
     </aside>
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
     
     <!-- Mobile Menu Toggle -->
-    <button class="menu-toggle" id="menuToggle" onclick="toggleSidebar()">☰</button>
+    <button class="menu-toggle" id="menuToggle" onclick="toggleSidebar()" aria-label="Open menu" aria-expanded="false">☰</button>
     
     <!-- Main Content -->
     <main class="main-content">
+        <div id="appBanner" role="status"></div>
         <div class="top-bar">
             <div class="store-selector">
                 <label for="storeSelect">Store:</label>
@@ -1190,6 +1263,17 @@
                             <div class="stat-card-icon pending">⚠️</div>
                         </div>
                     </div>
+
+                    <div class="stat-card">
+                        <div class="stat-card-header">
+                            <div>
+                                <h3>AI readings this month</h3>
+                                <div class="value" id="aiReadingsCount">-</div>
+                                <div class="change" id="aiReadingsNote">This store · no cap</div>
+                            </div>
+                            <div class="stat-card-icon pending">🔎</div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="whatsapp-setup-card" id="whatsappSetupCard">
@@ -1206,6 +1290,7 @@
                     <button class="nav-tab active" data-tab="sales" data-mod="money">Daily Sales</button>
                     <button class="nav-tab" data-tab="invoices" data-mod="money">Invoices & Expenses</button>
                     <button class="nav-tab" data-tab="fuel" data-mod="fuel">Fuel Sales</button>
+                    <button class="nav-tab" data-tab="prices" data-mod="fuel">Gas prices</button>
                     <button class="nav-tab" data-tab="paidouts" data-mod="money">Paid Outs</button>
                     <button class="nav-tab" data-tab="orders" data-mod="orders">Orders</button>
                     <button class="nav-tab" data-tab="schedules" data-mod="schedules">Schedule</button>
@@ -1240,6 +1325,12 @@
                 <h1 class="page-title">Fuel Sales</h1>
                 <p class="page-subtitle">Fuel sales and performance metrics</p>
                 <div class="content-area" id="fuelContent"></div>
+            </div>
+
+            <div id="pricesPage" class="page" style="display: none;" data-mod="fuel">
+                <h1 class="page-title">Gas prices</h1>
+                <p class="page-subtitle">Competitor poles and our board after a change. Reply OK on WhatsApp to save.</p>
+                <div class="content-area" id="pricesContent"></div>
             </div>
             
             <div id="paidoutsPage" class="page" style="display: none;" data-mod="money">
@@ -1286,6 +1377,7 @@
                 <p class="page-subtitle">Configure your store settings</p>
                 <div class="content-area">
                     <p>Reminders, people (WhatsApp numbers, staff, a partner owner), and how this store sends reports are on <a href="/tasks">Tasks &amp; alerts → Store admin</a>. You can change the WhatsApp number you entered at signup there.</p>
+                    <p style="margin-top: 16px;">Plan, trial, and AI readings per store are on <a href="/billing">Plan and usage</a>.</p>
                     <p style="margin-top: 16px;">To add another location you own, use <strong>+ Add Store</strong> at the top of the dashboard, or <a href="/onboarding?add=1">Add another store</a>. Each store keeps its own ID, name, sales, and WhatsApp group.</p>
                 </div>
             </div>
@@ -1315,6 +1407,30 @@
             return {};
         }
 
+        (async function showTrialBanner() {
+            const token = localStorage.getItem('authToken');
+            if (!token) return;
+            try {
+                const r = await fetch('/api/auth/me', { headers: { Authorization: 'Bearer ' + token } });
+                const d = await r.json();
+                const b = d.user && d.user.billing;
+                if (!b) return;
+                if (!b.access) {
+                    window.location.href = '/billing';
+                    return;
+                }
+                if (b.status === 'trial' && typeof b.daysLeft === 'number') {
+                    const days = b.daysLeft;
+                    const unit = days === 1 ? 'day' : 'days';
+                    if (days <= 3) {
+                        showBanner('Trial ends in ' + days + ' ' + unit + '. Add a card on <a href="/billing">Plan and usage</a> so this store stays on after the trial.');
+                    } else {
+                        showBanner('14-day trial · ' + days + ' ' + unit + ' left. <a href="/billing">Plan and usage</a>');
+                    }
+                }
+            } catch (e) { /* keep the dashboard usable if billing is down */ }
+        })();
+
         (async function redirectIfNeedsOnboarding() {
             const token = localStorage.getItem('authToken');
             if (!token) return;
@@ -1342,6 +1458,10 @@
             const n = Number(value);
             return '$' + (Number.isFinite(n) ? n.toFixed(2) : '0.00');
         }
+        function fuelMoney(value) {
+            const n = Number(value);
+            return Number.isFinite(n) ? '$' + n.toFixed(3) : '\u2014';
+        }
         function invoiceRemaining(d) {
             if (typeof d.remaining === 'number' && Number.isFinite(d.remaining)) return Math.max(0, d.remaining);
             if (d.paid === 'Y') return 0;
@@ -1367,17 +1487,12 @@
                 '</div><div style="font-size: ' + size + 'px; font-weight: 700; color: ' + color + ';">' + valueHtml + '</div></div>';
         }
 
-        // A visible, dismissible message at the top of the page (never silently show made-up data).
+        // Statement at the top of the main column (never over the sidebar; never silently show made-up data).
         function showBanner(html) {
-            let el = document.getElementById('appBanner');
-            if (!el) {
-                el = document.createElement('div');
-                el.id = 'appBanner';
-                el.setAttribute('role', 'alert');
-                el.style.cssText = 'position:sticky;top:0;z-index:3000;background:#fff3cd;color:#664d03;border-bottom:1px solid #ffecb5;padding:12px 16px;font-size:14px;display:flex;gap:12px;align-items:center;justify-content:space-between;';
-                document.body.prepend(el);
-            }
-            el.innerHTML = '<span>' + html + '</span><button type="button" aria-label="Dismiss" style="background:none;border:none;font-size:20px;cursor:pointer;color:inherit;" onclick="this.parentElement.remove()">&times;</button>';
+            const el = document.getElementById('appBanner');
+            if (!el) return;
+            el.classList.add('is-on');
+            el.innerHTML = '<span>' + html + '</span><button type="button" aria-label="Dismiss" onclick="this.parentElement.classList.remove(\'is-on\'); this.parentElement.innerHTML=\'\';">&times;</button>';
         }
         let currentTab = 'sales';
         let currentPage = 'dashboard';
@@ -1407,7 +1522,7 @@
                     : 'Staff hours and WhatsApp reminders for this location';
             }
             const moneyPage = currentPage === 'sales' || currentPage === 'invoices' || currentPage === 'expenses' || currentPage === 'paidouts' || currentPage === 'summary';
-            if ((moneyPage && !currentModules.money) || (currentPage === 'fuel' && !currentModules.fuel) || (currentPage === 'orders' && !currentModules.orders)) {
+            if ((moneyPage && !currentModules.money) || ((currentPage === 'fuel' || currentPage === 'prices') && !currentModules.fuel) || (currentPage === 'orders' && !currentModules.orders)) {
                 currentPage = 'dashboard';
                 document.querySelectorAll('.page').forEach(function (p) { p.style.display = 'none'; });
                 const dash = document.getElementById('dashboardPage');
@@ -1419,7 +1534,7 @@
             if (!currentModules.money && (currentTab === 'sales' || currentTab === 'invoices' || currentTab === 'fuel' || currentTab === 'paidouts')) {
                 currentTab = 'schedules';
             }
-            if (currentTab === 'fuel' && !currentModules.fuel) currentTab = currentModules.money ? 'sales' : 'schedules';
+            if ((currentTab === 'fuel' || currentTab === 'prices') && !currentModules.fuel) currentTab = currentModules.money ? 'sales' : 'schedules';
             if (currentTab === 'orders' && !currentModules.orders) currentTab = currentModules.money ? 'sales' : 'schedules';
             document.querySelectorAll('.nav-tab[data-tab]').forEach(function (t) {
                 t.classList.toggle('active', t.dataset.tab === currentTab);
@@ -1603,12 +1718,17 @@
                 document.getElementById('todayInvoices').textContent = data.today?.invoices || 0;
                 document.getElementById('todayOrders').textContent = data.today?.orders || 0;
                 document.getElementById('pendingCount').textContent = data.pending || 0;
+                const used = data.usage && typeof data.usage.aiReadings === 'number' ? data.usage.aiReadings : 0;
+                const aiEl = document.getElementById('aiReadingsCount');
+                const aiNote = document.getElementById('aiReadingsNote');
+                if (aiEl) aiEl.textContent = String(used);
+                if (aiNote) aiNote.textContent = 'This store · no cap';
                 
                 logActivity('Dashboard loaded', `Loaded dashboard for store ${storeId}`);
                 await loadWhatsAppProvision(storeId);
             } catch (error) {
                 console.error('Error loading dashboard:', error);
-                ['todaySales', 'todayInvoices', 'todayOrders', 'pendingCount'].forEach(id => {
+                ['todaySales', 'todayInvoices', 'todayOrders', 'pendingCount', 'aiReadingsCount'].forEach(id => {
                     document.getElementById(id).textContent = '–';
                 });
                 showBanner('We could not load this store\'s numbers. <a href="#" onclick="loadDashboard(currentStoreId); return false;">Try again</a>');
@@ -1928,7 +2048,13 @@
                     });
                     const body = await response.json().catch(function () { return {}; });
                     if (!response.ok) throw new Error(body.error || 'Could not publish');
-                    if (status) status.textContent = body.posted ? 'Posted to the WhatsApp group.' : 'Saved. Add a group to send it.';
+                    if (body.posted) {
+                        if (status) status.textContent = body.via === 'direct' ? 'Sent the hours to your WhatsApp.' : "Posted this week's shifts to the WhatsApp group.";
+                    } else {
+                        const msg = 'Saved on the dashboard. I could not send the hours on WhatsApp. They go to the store group when one is linked, or 1:1 to your registered number.';
+                        if (status) status.textContent = msg;
+                        showBanner(esc(msg));
+                    }
                     logActivity('Schedule published', 'Week of ' + scheduleDraft.weekStart);
                     scheduleDraft.rows = [];
                     await loadTabData(currentStoreId, 'schedules');
@@ -2076,7 +2202,7 @@
                                 <td>${money(d.cash)}</td>
                                 <td>${money(d.card)}</td>
                                 <td><strong>${money(d.total_inside)}</strong></td>
-                                <td>${d.fuel_sales ? money(d.fuel_sales) : '\u2014'}</td>
+                                <td>${d.fuel_sales ? `${money(d.fuel_sales)}${d.gallons ? `<div style="font-size:12px;color:var(--text-light);margin-top:2px;">${esc(Number(d.gallons).toFixed(Number(d.gallons) >= 100 ? 1 : 3))} gal</div>` : ''}` : '\u2014'}</td>
                                 <td>${d.deposit !== null && d.deposit !== undefined ? money(d.deposit) : '\u2014'}</td>
                                 <td>${checkBadge}</td>
                                 <td><button onclick="event.stopPropagation(); viewDetail('sales', '${esc(item.id)}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
@@ -2134,20 +2260,43 @@
                         console.error(`Error rendering expenses item ${index}:`, error, item);
                     }
                 });
-            } else if (type === 'fuel') {
-                tableHTML += '<th>Date</th><th>Gallons</th><th>Sales</th><th>GP</th><th>Actions</th></tr></thead><tbody>';
+            } else if (type === 'prices') {
+                tableHTML += '<th>Day</th><th>Whose</th><th>Station</th><th>Regular</th><th>Plus</th><th>Premium</th><th>Diesel</th></tr></thead><tbody>';
                 items.forEach((item, index) => {
                     try {
                         const d = item.data || {};
-                        const dateStr = item.date ? (typeof item.date === 'string' ? item.date : item.date.toISOString()) : new Date().toISOString();
-                        const displayDate = new Date(dateStr).toLocaleDateString();
+                        const whose = d.source === 'own' ? 'Our board' : 'Competition';
+                        const day = d.observed_date ? fmtDay(d.observed_date) : fmtDay(item.date);
                         tableHTML += `
-                            <tr onclick="viewDetail('fuel', '${item.id}')" style="cursor: pointer;">
-                                <td>${displayDate}</td>
-                                <td>${esc(d.gallons || 0)}</td>
-                                <td>$${esc(d.fuel_sales || 0)}</td>
-                                <td>$${esc(d.fuel_gp || 0)}</td>
-                                <td><button onclick="event.stopPropagation(); viewDetail('fuel', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
+                            <tr>
+                                <td>${esc(day)}</td>
+                                <td><strong>${esc(whose)}</strong></td>
+                                <td>${esc(d.station || '\u2014')}</td>
+                                <td>${d.regular != null ? fuelMoney(d.regular) : '\u2014'}</td>
+                                <td>${d.plus != null ? fuelMoney(d.plus) : '\u2014'}</td>
+                                <td>${d.premium != null ? fuelMoney(d.premium) : '\u2014'}</td>
+                                <td>${d.diesel != null ? fuelMoney(d.diesel) : '\u2014'}</td>
+                            </tr>
+                        `;
+                    } catch (error) {
+                        console.error(`Error rendering prices item ${index}:`, error, item);
+                    }
+                });
+            } else if (type === 'fuel') {
+                tableHTML += '<th>Day</th><th>Gallons</th><th>Sales</th><th>GP</th><th>Actions</th></tr></thead><tbody>';
+                items.forEach((item, index) => {
+                    try {
+                        const d = item.data || {};
+                        const day = d.report_date ? fmtDay(d.report_date) : fmtDay(item.date);
+                        const gallons = d.gallons != null && d.gallons !== '' ? Number(d.gallons) : null;
+                        const gp = d.fuel_gp != null && d.fuel_gp !== '' ? Number(d.fuel_gp) : null;
+                        tableHTML += `
+                            <tr onclick="viewDetail('fuel', '${esc(item.id)}')" style="cursor: pointer;">
+                                <td>${esc(day)}</td>
+                                <td>${gallons != null && Number.isFinite(gallons) ? esc(gallons.toFixed(gallons >= 100 ? 1 : 3)) : '\u2014'}</td>
+                                <td><strong>${money(d.fuel_sales)}</strong></td>
+                                <td>${gp != null && Number.isFinite(gp) ? money(gp) : '\u2014'}</td>
+                                <td><button onclick="event.stopPropagation(); viewDetail('fuel', '${esc(item.id)}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
                             </tr>
                         `;
                     } catch (error) {
@@ -2373,6 +2522,18 @@
                     modalHTML += `</tbody></table></div>`;
                 });
                 modalHTML += `</div>`;
+            } else if (type === 'fuel') {
+                const gallons = d.gallons != null && d.gallons !== '' ? Number(d.gallons) : null;
+                modalHTML += `
+                    <div style="margin-bottom: 20px;">
+                        <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Day</div>
+                        <div style="font-size: 18px; font-weight: 600;">${esc(d.report_date ? fmtDay(d.report_date) : fmtDay(item.date))}</div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                        ${statCell('Gas sales', money(d.fuel_sales), 28, 'var(--warning)')}
+                        ${statCell('Gallons', gallons != null && Number.isFinite(gallons) ? esc(String(gallons)) : '\u2014', 24, 'var(--primary)')}
+                    </div>
+                `;
             } else {
                 modalHTML += `<pre style="background: var(--bg); padding: 16px; border-radius: 8px; overflow-x: auto;">${JSON.stringify(d, null, 2)}</pre>`;
             }
@@ -2931,43 +3092,33 @@
             });
         });
 
-        // Toggle sidebar on mobile
-        function toggleSidebar() {
+        function setSidebarOpen(open) {
             const sidebar = document.querySelector('.sidebar');
-            if (sidebar) {
-                sidebar.classList.toggle('open');
+            const overlay = document.getElementById('sidebarOverlay');
+            const toggle = document.getElementById('menuToggle');
+            if (!sidebar) return;
+            sidebar.classList.toggle('open', open);
+            if (overlay) overlay.classList.toggle('open', open);
+            document.body.classList.toggle('nav-open', open);
+            if (toggle) {
+                toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+                toggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
             }
         }
-        
-        // Close sidebar when clicking outside on mobile
-        document.addEventListener('click', (e) => {
+        function toggleSidebar() {
             const sidebar = document.querySelector('.sidebar');
-            const menuToggle = document.getElementById('menuToggle');
-            if (window.innerWidth <= 768 && sidebar && sidebar.classList.contains('open')) {
-                if (!sidebar.contains(e.target) && e.target !== menuToggle) {
-                    sidebar.classList.remove('open');
-                }
-            }
-        });
+            setSidebarOpen(!(sidebar && sidebar.classList.contains('open')));
+        }
         
-        // Close sidebar when clicking on menu item on mobile
         document.querySelectorAll('.menu-item').forEach(item => {
             item.addEventListener('click', () => {
-                if (window.innerWidth <= 768) {
-                    const sidebar = document.querySelector('.sidebar');
-                    if (sidebar) {
-                        sidebar.classList.remove('open');
-                    }
-                }
+                if (window.innerWidth <= 768) setSidebarOpen(false);
             });
         });
         
         // Handle window resize
         window.addEventListener('resize', () => {
-            const sidebar = document.querySelector('.sidebar');
-            if (window.innerWidth > 768 && sidebar) {
-                sidebar.classList.remove('open');
-            }
+            if (window.innerWidth > 768) setSidebarOpen(false);
         });
         
         // Initialize

@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
-import { postToStoreGroups, sendWhatsAppMessage } from '../whatsappMessaging';
+import { managerPhonesForStore, postToStoreGroups, sendWhatsAppMessage } from '../whatsappMessaging';
 import { maybeMorningDepositText } from '../understanding/depositDue';
 import { maybeThursdayHoursText } from '../understanding/hoursDigest';
 import { alertMessage, escalationMessage, reminderMessage, type MessageRun } from './messages';
@@ -111,8 +111,15 @@ export async function deliverToStore(prisma: PrismaClient, storeId: string, text
   const staff = members.filter((member) => member.role !== 'OWNER');
   const targets = staff.length > 0 ? staff : members.filter((member) => member.role === 'OWNER');
   let sent = 0;
-  for (const member of targets) {
-    if (await sendWhatsAppMessage(prisma, member.phoneE164, text, storeId)) sent += 1;
+  if (targets.length > 0) {
+    for (const member of targets) {
+      if (await sendWhatsAppMessage(prisma, member.phoneE164, text, storeId)) sent += 1;
+    }
+    return sent;
+  }
+  const fallback = await managerPhonesForStore(prisma, storeId);
+  for (const phone of fallback) {
+    if (await sendWhatsAppMessage(prisma, phone, text, storeId)) sent += 1;
   }
   return sent;
 }

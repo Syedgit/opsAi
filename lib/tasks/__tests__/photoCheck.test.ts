@@ -298,4 +298,12 @@ describe('a photo for a task with a photo check', () => {
     expect(db.run.status).toBe('OPEN');
     expect(db.run.evidenceMediaId).toBe('media1');
   });
+
+  it('does not close a competitor-price nag from the photo — AI has to read the board first', async () => {
+    const db = world({ title: 'Send competitor gas prices', photoCheck: null, standardId: null, criticality: null });
+    const { checker, check } = checkerOf({ verdict: 'pass', reason: 'ok' });
+    expect(await photo(db, checker)).toBe(false);
+    expect(check).not.toHaveBeenCalled();
+    expect(db.run.status).toBe('OPEN');
+  });
 });

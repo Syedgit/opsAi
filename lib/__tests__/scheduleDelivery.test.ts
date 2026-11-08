@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import axios from 'axios';
 import { handleWhatsAppCommand } from '../whatsappCommands';
-import { postToStoreGroups } from '../whatsappMessaging';
+import { deliverStoreMessage, postToStoreGroups } from '../whatsappMessaging';
 
 jest.mock('axios');
 jest.mock('../googleSheetsWrite', () => ({ writeConfirmedActionToSheets: jest.fn().mockResolvedValue('skipped') }));
@@ -40,6 +40,7 @@ function makePrisma(groups: unknown[] | Error) {
     },
     storeConfig: { findUnique: jest.fn().mockResolvedValue({ storeName: 'Rockaway', whatsappPhoneNumberId: 'PNID' }) },
     userStore: { findMany: jest.fn().mockResolvedValue([]) },
+    userDirectory: { findMany: jest.fn().mockResolvedValue([]) },
     storeWhatsAppGroup: {
       findMany: groups instanceof Error ? jest.fn().mockRejectedValue(groups) : jest.fn().mockResolvedValue(groups),
     },
@@ -114,6 +115,11 @@ describe('postToStoreGroups', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
+  it('posts to the chat the sheet came from even when the store has no mapped group', async () => {
+    await expect(postToStoreGroups(makePrisma([]), 'S001', 'hello', 'g-from-sheet')).resolves.toBe(1);
+    expect(post.mock.calls[0][1]).toMatchObject({ recipient_type: 'group', to: 'g-from-sheet' });
+  });
+
   it('counts only the posts that went out, and never throws', async () => {
     post.mockRejectedValueOnce(new Error('meta down')).mockResolvedValueOnce({});
     await expect(postToStoreGroups(makePrisma([{ whatsappGroupId: 'g1' }, { whatsappGroupId: 'g2' }]), 'S001', 'x')).resolves.toBe(1);
@@ -125,16 +131,68 @@ describe('OK on a schedule', () => {
   it('posts the hours to the group and says so', async () => {
     const prisma = makePrisma([{ whatsappGroupId: 'g1' }]);
     const result = await handleWhatsAppCommand(prisma, '+15550001111', 'OK');
-    expect(result.message).toContain('Posted the hours to the Rockaway group');
-    expect(post.mock.calls[0][1].text.body).toContain('Maria 8h');
+    expect(result.message).toContain("Posted this week's shifts to the Rockaway group");
+    expect(post.mock.calls[0][1].text.body).toContain('Mon 9a–5p');
+    expect(post.mock.calls[0][1].text.body).toContain('8h');
   });
 
-  it('does not claim a post when no group is linked or the post fails', async () => {
+  it('sends hours 1:1 when OK is from a personal chat and no group is linked', async () => {
     const none = await handleWhatsAppCommand(makePrisma([]), '+15550001111', 'OK');
-    expect(none.message).not.toContain('Posted');
+    expect(none.message).toContain('Sent the hours to your WhatsApp');
+    expect(post.mock.calls[0][1]).toMatchObject({ to: '15550001111', type: 'text', text: { body: expect.stringContaining('Maria 8h') } });
+    expect(post.mock.calls[0][1].recipient_type).toBeUndefined();
+  });
+
+  it('does not claim a post when WhatsApp send fails', async () => {
     post.mockRejectedValue(new Error('meta down'));
     const failed = await handleWhatsAppCommand(makePrisma([{ whatsappGroupId: 'g1' }]), '+15550001111', 'OK');
     expect(failed.success).toBe(true);
-    expect(failed.message).not.toContain('Posted');
+    expect(failed.message).not.toContain('Posted the hours');
+    expect(failed.message).not.toContain("Posted this week's shifts");
+    expect(failed.message).not.toContain('Sent the hours');
+  });
+
+  it('posts hours to the group stamped on the sheet, even if OK is 1:1', async () => {
+    const prisma = makePrisma([]);
+    const row = {
+      actionId: 'a1',
+      phoneE164: '+15550001111',
+      storeId: 'S001',
+      type: 'UNKNOWN',
+      payloadJson: { ...schedulePayload, source_group_id: 'g-ops' },
+      messageIdInbound: 'm1',
+      status: 'PENDING',
+      confidence: 0.9,
+    };
+    (prisma.pendingActions.findFirst as jest.Mock).mockResolvedValue(row);
+    (prisma.pendingActions.findMany as jest.Mock).mockResolvedValue([row]);
+    const result = await handleWhatsAppCommand(prisma, '+15550001111', 'OK');
+    expect(result.message).toContain("Posted this week's shifts to the Rockaway group");
+    expect(post.mock.calls[0][1]).toMatchObject({ recipient_type: 'group', to: 'g-ops' });
+  });
+});
+
+describe('deliverStoreMessage', () => {
+  it('DMs the owner phone on a sibling store when this location has no group', async () => {
+    const prisma = makePrisma([]);
+    (prisma.userStore.findMany as jest.Mock).mockImplementation(async ({ where }: { where: { storeId?: string; userId?: { in: string[] } } }) => {
+      if (where.storeId === 'S005') return [{ userId: 'u1', role: 'OWNER' }];
+      if (where.userId?.in?.includes('u1')) {
+        return [
+          { userId: 'u1', storeId: 'S002', role: 'OWNER' },
+          { userId: 'u1', storeId: 'S005', role: 'OWNER' },
+        ];
+      }
+      return [];
+    });
+    (prisma.userDirectory.findMany as jest.Mock).mockImplementation(async ({ where }: { where: { storeId?: string | { in: string[] } } }) => {
+      if (where.storeId === 'S005') return [];
+      const ids = typeof where.storeId === 'object' && where.storeId?.in ? where.storeId.in : [];
+      if (ids.includes('S002') || ids.includes('S005')) return [{ phoneE164: '+17325557703', role: 'OWNER' }];
+      return [];
+    });
+    await expect(deliverStoreMessage(prisma, 'S005', 'hours for realestate')).resolves.toEqual({ posted: 1, via: 'direct' });
+    expect(post.mock.calls[0][1]).toMatchObject({ to: '17325557703', text: { body: 'hours for realestate' } });
+    expect(post.mock.calls[0][1].recipient_type).toBeUndefined();
   });
 });

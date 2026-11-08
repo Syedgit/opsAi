@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { getAuthUser } from '../../lib/apiAuth';
 import { completeOwnerStoreOnboarding } from '../../lib/storeOwnerOnboarding';
+import { syncStripeSubscriptionQuantity } from '../../lib/billing/stripeActions';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -74,6 +75,8 @@ router.post('/complete-store', async (req: Request, res: Response) => {
       });
       return;
     }
+
+    void syncStripeSubscriptionQuantity(prisma, authUser.userId);
 
     const message =
       result.provision.status === 'started'

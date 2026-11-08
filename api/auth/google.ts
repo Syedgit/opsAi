@@ -5,6 +5,7 @@ import { OAuth2Client } from 'google-auth-library';
 import { getJwtSecret } from '../../lib/apiAuth';
 import { googleOAuthStep } from '../../lib/googleOAuth';
 import { logAppError, loggedHandler, serializeError } from '../../lib/requestLog';
+import { newAccountBilling } from '../../lib/billing/plans';
 
 const prisma = new PrismaClient();
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -135,6 +136,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
           provider: 'google',
           providerId: googleUser.id,
           providerData: tokens as any,
+          ...newAccountBilling(),
         },
         include: {
           stores: {

@@ -113,6 +113,28 @@ app.get('/onboarding', (_req, res) => {
   }
 });
 
+app.get('/pricing', (_req, res) => {
+  try {
+    const html = readFileSync(join(__dirname, '..', 'public', 'pricing.html'), 'utf8');
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  } catch (error) {
+    logger.error('Error serving pricing.html', error);
+    res.status(500).send('Error loading pricing');
+  }
+});
+
+app.get('/billing', (_req, res) => {
+  try {
+    const html = readFileSync(join(__dirname, '..', 'public', 'billing.html'), 'utf8');
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  } catch (error) {
+    logger.error('Error serving billing.html', error);
+    res.status(500).send('Error loading billing');
+  }
+});
+
 // Routes
 app.use('/api/webhook', whatsappRouter);
 // Also support /whatsapp for backward compatibility

@@ -135,6 +135,8 @@ describe('placing the starter tasks around the shifts', () => {
 
   it('keeps how often a task comes round (monthly, every 2 weeks, weekly)', () => {
     expect(pick(open24(), 'boh2-pest-report').template).toMatchObject({ frequency: 'monthly', monthDays: [1] });
+    expect(pick(open24(), 'own-utility-bill').template).toMatchObject({ category: 'bills', frequency: 'monthly', monthDays: [1] });
+    expect(pick(open24(), 'own-insurance').template).toMatchObject({ category: 'bills', frequency: 'monthly', monthDays: [1] });
     expect(pick(open24(), 'own-cooler-deep-clean').template).toMatchObject({ frequency: 'interval', intervalDays: 14 });
     expect(pick(open24(), 'boh3-work-orders').template.daysOfWeek).toEqual([1]);
   });
@@ -143,7 +145,7 @@ describe('placing the starter tasks around the shifts', () => {
     for (const type of STORE_TYPES) {
       for (const fuel of [false, true]) {
         const list = suggestTasks({ ...defaultSetup(type), fuel });
-        const min = type === 'seven_eleven' ? 20 : type === 'office' || type === 'shipping' || type === 'real_estate' || type === 'appointments' || type === 'personal' ? 1 : 6;
+        const min = type === 'seven_eleven' ? 20 : type === 'office' || type === 'shipping' || type === 'real_estate' || type === 'appointments' || type === 'personal' || type === 'other' ? 1 : 6;
         expect(list.length).toBeGreaterThan(min);
         for (const s of list) {
           expect(s.title.length).toBeGreaterThan(0);
@@ -209,33 +211,63 @@ describe('which starter tasks are ticked', () => {
   });
 
   it('gives an office, shipping counter, and real-estate team a short day-one list, not a till close', () => {
-    expect(ticked(defaultSetup('office')).sort()).toEqual(['own-coverage', 'own-lock-up', 'own-meetings']);
+    expect(ticked(defaultSetup('office')).sort()).toEqual(['own-coverage', 'own-insurance', 'own-lock-up', 'own-meetings', 'own-utility-bill']);
     expect(ticked(defaultSetup('office'))).not.toContain('own-daily-close');
     expect(suggestTasks(defaultSetup('office')).map((s) => s.presetId)).toEqual(expect.arrayContaining(['own-open-desk', 'own-mail']));
     expect(suggestTasks(defaultSetup('office')).map((s) => s.presetId)).not.toContain('own-coffee-station');
-    expect(ticked(defaultSetup('shipping')).sort()).toEqual(['own-cutoff', 'own-packages', 'own-who-on']);
-    expect(ticked(defaultSetup('real_estate')).sort()).toEqual(['own-keys', 'own-lock-up', 'own-showings']);
+    expect(ticked(defaultSetup('shipping')).sort()).toEqual(['own-cutoff', 'own-insurance', 'own-packages', 'own-utility-bill', 'own-who-on']);
+    expect(ticked(defaultSetup('real_estate')).sort()).toEqual(['own-insurance', 'own-keys', 'own-lock-up', 'own-showings', 'own-utility-bill']);
   });
 
   it('gives a salon or clinic the book, rooms, and a till close', () => {
     const ids = ticked(defaultSetup('appointments'));
-    expect(ids.sort()).toEqual(['own-appointments-today', 'own-confirm-tomorrow', 'own-daily-close', 'own-rooms-ready']);
+    expect(ids.sort()).toEqual(['own-appointments-today', 'own-confirm-tomorrow', 'own-daily-close', 'own-insurance', 'own-rooms-ready', 'own-utility-bill']);
     expect(ids).not.toContain('own-coffee-station');
     expect(suggestTasks(defaultSetup('appointments')).map((s) => s.presetId)).toEqual(expect.arrayContaining(['own-open-desk', 'own-lock-up']));
   });
 
   it('gives personal/solo use a daily plan, not a shop close', () => {
     const ids = ticked(defaultSetup('personal'));
-    expect(ids.sort()).toEqual(['own-follow-ups', 'own-today-plan', 'own-wrap-up']);
+    expect(ids.sort()).toEqual(['own-follow-ups', 'own-insurance', 'own-today-plan', 'own-utility-bill', 'own-wrap-up']);
     expect(ids).not.toContain('own-daily-close');
   });
 
-  it('gives an unknown other business open and lock-up only, not a c-store pack', () => {
+  it('gives an unknown other business open, lock-up, and monthly bills, not a c-store pack', () => {
     const ids = ticked(defaultSetup('other'));
-    expect(ids.sort()).toEqual(['own-lock-up', 'own-open-desk']);
-    expect(suggestTasks(defaultSetup('other')).map((s) => s.presetId)).toEqual(expect.arrayContaining(['own-today-plan', 'own-daily-close', 'own-restock']));
-    expect(suggestTasks(defaultSetup('other')).map((s) => s.presetId)).not.toContain('own-coffee-station');
-    expect(suggestTasks(defaultSetup('other')).map((s) => s.presetId)).not.toContain('own-lottery');
+    expect(ids.sort()).toEqual(['own-insurance', 'own-lock-up', 'own-open-desk', 'own-utility-bill']);
+    const offered = suggestTasks(defaultSetup('other')).map((s) => s.presetId);
+    expect(offered).toEqual(expect.arrayContaining(['own-today-plan', 'own-wrap-up', 'own-utility-bill', 'own-insurance']));
+    expect(offered).not.toContain('own-daily-close');
+    expect(offered).not.toContain('own-restock');
+    expect(offered).not.toContain('own-coffee-station');
+    expect(offered).not.toContain('own-lottery');
+  });
+
+  it('offers monthly utility and insurance reminders to every kind of store', () => {
+    for (const type of STORE_TYPES) {
+      const list = suggestTasks(defaultSetup(type));
+      expect(list.map((s) => s.presetId)).toEqual(expect.arrayContaining(['own-utility-bill', 'own-insurance']));
+      const bills = list.filter((s) => s.presetId === 'own-utility-bill' || s.presetId === 'own-insurance');
+      expect(bills.every((s) => s.bucket === 'weekly_monthly')).toBe(true);
+      const shop = type === 'seven_eleven' || type === 'convenience' || type === 'gas_station';
+      expect(bills.every((s) => s.recommended === !shop)).toBe(true);
+    }
+  });
+
+  it('lets a salon or other business add cooler and shelves without inheriting the c-store pack', () => {
+    const salon = suggestTasks(
+      StoreSetupSchema.parse({ ...defaultSetup('appointments'), features: ['till', 'restroom', 'cooler', 'shelves'] })
+    ).map((s) => s.presetId);
+    expect(salon).toEqual(expect.arrayContaining(['own-restock', 'own-cooler-temp', 'own-restroom-check', 'own-daily-close']));
+    expect(salon).not.toContain('own-coffee-station');
+    const ups = suggestTasks(defaultSetup('shipping')).map((s) => s.presetId);
+    expect(ups).toEqual(expect.arrayContaining(['own-who-on', 'own-packages', 'own-cutoff', 'own-utility-bill']));
+    expect(ups).not.toContain('own-restock');
+    expect(ups).not.toContain('own-daily-close');
+    const upsWithFloor = suggestTasks(
+      StoreSetupSchema.parse({ ...defaultSetup('shipping'), features: ['shelves', 'cooler'] })
+    ).map((s) => s.presetId);
+    expect(upsWithFloor).toEqual(expect.arrayContaining(['own-restock', 'own-cooler-temp']));
   });
 
   it('does not give a 7-Eleven the simple routines written for other stores (it has the inspection list)', () => {

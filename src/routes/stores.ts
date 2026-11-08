@@ -6,6 +6,7 @@ import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth,
 import { isGroupAutoProvisionEnabled } from '../../lib/whatsappGroupConfig';
 import { startWhatsAppGroupProvision } from '../../lib/whatsappGroupProvision';
 import { flattenTillPaidOuts, sourceActionId } from '../../lib/understanding/tillPaidOuts';
+import { flattenFuelSales } from '../../lib/understanding/fuelSalesRows';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -443,6 +444,20 @@ router.get('/data', async (req: Request, res: Response) => {
       return;
     }
 
+    if (type === 'fuel') {
+      const fuelRows = await prisma.pendingActions.findMany({
+        where: {
+          storeId,
+          status: 'CONFIRMED',
+          type: { in: ['FUEL_SALES', 'STORE_SALES'] },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+      });
+      res.json({ fuel: flattenFuelSales(fuelRows) });
+      return;
+    }
+
     const data = await prisma.pendingActions.findMany({
       where: {
         storeId,
@@ -502,7 +517,10 @@ router.get('/detail', async (req: Request, res: Response) => {
 
     const lookupId = type === 'paidouts' ? sourceActionId(id) : id;
     const item = await prisma.pendingActions.findFirst({
-      where: type === 'paidouts' ? { actionId: lookupId, storeId } : { actionId: lookupId, storeId, type: dbType as any },
+      where:
+        type === 'paidouts' || type === 'fuel'
+          ? { actionId: lookupId, storeId }
+          : { actionId: lookupId, storeId, type: dbType as any },
     });
 
     if (!item) {

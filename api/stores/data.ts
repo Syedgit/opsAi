@@ -5,7 +5,9 @@ import { logAppError, loggedHandler, serializeError } from '../../lib/requestLog
 import { loadStoreTeam } from '../../lib/tasks/people';
 import { localDateString } from '../../lib/tasks/time';
 import { publishDashboardSchedule, type PublishScheduleInput } from '../../lib/publishSchedule';
+import { managerPhonesForStore } from '../../lib/whatsappMessaging';
 import { flattenTillPaidOuts } from '../../lib/understanding/tillPaidOuts';
+import { flattenFuelSales } from '../../lib/understanding/fuelSalesRows';
 import { storeTypeOf } from '../../lib/understanding/daySummary';
 import { scheduleWeekStartOf } from '../../lib/understanding/schedule';
 
@@ -228,14 +230,11 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         where: { storeId },
         select: { storeName: true, timezone: true, setupJson: true },
       });
-      const ownerPhone = await prisma.userDirectory.findFirst({
-        where: { storeId, isActive: true, role: 'OWNER' },
-        select: { phoneE164: true },
-      });
+      const ownerPhones = await managerPhonesForStore(prisma, storeId);
       const published = await publishDashboardSchedule(prisma, {
         storeId,
         storeName: store?.storeName || storeId,
-        phoneE164: ownerPhone?.phoneE164 || `dashboard:${access.user.userId}`,
+        phoneE164: ownerPhones[0] || `dashboard:${access.user.userId}`,
         weekStart: String(body.weekStart || weekStartForStore(store?.timezone || 'America/New_York', store?.setupJson)),
         employees: Array.isArray(body.employees) ? body.employees : [],
         postToGroup: body.postToGroup !== false,
@@ -244,7 +243,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         res.status(published.status).json({ error: published.error });
         return;
       }
-      res.json({ success: true, actionId: published.actionId, posted: published.posted });
+      res.json({ success: true, actionId: published.actionId, posted: published.posted, via: published.via });
       return;
     }
 
@@ -278,6 +277,9 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         }
         dbType = 'UNKNOWN';
         break;
+      case 'prices':
+        dbType = 'UNKNOWN';
+        break;
       default:
         res.status(400).json({ error: 'Invalid type' });
         return;
@@ -297,6 +299,20 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       return;
     }
 
+    if (type === 'fuel') {
+      const fuelRows = await prisma.pendingActions.findMany({
+        where: {
+          storeId,
+          status: 'CONFIRMED',
+          type: { in: ['FUEL_SALES', 'STORE_SALES'] },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+      });
+      res.json({ fuel: flattenFuelSales(fuelRows) });
+      return;
+    }
+
     const data = await prisma.pendingActions.findMany({
       where: {
         storeId,
@@ -307,10 +323,12 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       take: type === 'schedules' ? 300 : 100,
     });
 
-    // UNKNOWN also holds deposit slips; the schedule list keeps only schedules (a year of weeks at most).
+    // UNKNOWN also holds deposit slips and gas-price boards.
     const rows =
       type === 'schedules'
         ? data.filter((item) => (item.payloadJson as { _kind?: string } | null)?._kind === 'work_schedule').slice(0, 52)
+        : type === 'prices'
+          ? data.filter((item) => (item.payloadJson as { _kind?: string } | null)?._kind === 'fuel_prices')
         : type === 'invoices'
           ? data.filter((item) => (item.payloadJson as { _kind?: string } | null)?._kind !== 'invoice_payment')
           : data;

@@ -72,3 +72,22 @@ describe('Schedule tab data', () => {
     expect((await call('sales')).status).toBe(200);
   });
 });
+
+describe('Fuel Sales tab', () => {
+  it('includes gas from a daily close, not only FUEL_SALES rows', async () => {
+    findFirst.mockReset().mockResolvedValue({ role: 'OWNER' });
+    findMany.mockReset().mockResolvedValue([
+      {
+        actionId: 'denville',
+        type: 'STORE_SALES',
+        createdAt: new Date('2026-11-08T01:47:00Z'),
+        payloadJson: { _kind: 'daily_close', report_date: '2026-11-07', fuel_sales: 6086.32, gallons: 1455.226 },
+        confidence: 0.9,
+      },
+    ]);
+    const { status, body } = await call('fuel');
+    expect(status).toBe(200);
+    expect(findMany.mock.calls[0][0].where.type).toEqual({ in: ['FUEL_SALES', 'STORE_SALES'] });
+    expect((body.fuel as Array<{ data: { fuel_sales: number } }>)[0].data.fuel_sales).toBe(6086.32);
+  });
+});

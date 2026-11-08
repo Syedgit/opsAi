@@ -1,15 +1,30 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-app-shell="web">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#111111">
+    <meta name="color-scheme" content="light">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="opsAi">
+    <meta name="format-detection" content="telephone=no">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/icon-180.png">
+    <link rel="icon" type="image/png" href="/icon-192.png">
+    <link rel="stylesheet" href="/app-shell.css">
+    <script src="/app-shell.js"></script>
     <title>Terms of Service - opsAi</title>
     <style>
         body {
             font-family: Arial, sans-serif;
+            background: #fff;
+            color: #222;
             max-width: 800px;
             margin: 0 auto;
-            padding: 20px;
+            padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+            overflow-wrap: anywhere;
             line-height: 1.6;
         }
         h1 {
@@ -31,9 +46,12 @@
         .back-link:hover {
             text-decoration: underline;
         }
+        .brand { display: block; margin-bottom: 12px; line-height: 0; }
+        .brand img { height: 40px; width: auto; }
     </style>
 </head>
 <body>
+    <a href="/" class="brand"><img src="/logo.jpg" alt="Operation Intelligence"></a>
     <a href="/" class="back-link">← Back to Home</a>
     
     <h1>Terms of Service</h1>
@@ -81,47 +99,58 @@
         you consent to the collection and use of information as described in the Privacy Policy.
     </p>
 
-    <h2>6. Service Availability</h2>
+    <h2>6. Fees and Trial</h2>
+    <p>
+        New accounts receive a 14-day trial of the Service with no credit card. After the trial,
+        the Service is billed at $25 per store per month (five locations is $125). Card payments are
+        processed by Stripe; we do not store your full card number. Fees are non-refundable except
+        where required by law. We may change prices with reasonable notice; changes apply to later
+        billing periods. There is no included message pack. The billing page shows AI readings and
+        estimated cost per store so both you and we can see usage. You can update or cancel from
+        the billing page.
+    </p>
+
+    <h2>7. Service Availability</h2>
     <p>
         We strive to maintain high availability of the Service but do not guarantee uninterrupted 
         access. The Service may be temporarily unavailable due to maintenance, updates, or 
         unforeseen circumstances.
     </p>
 
-    <h2>7. Limitation of Liability</h2>
+    <h2>8. Limitation of Liability</h2>
     <p>
         To the maximum extent permitted by law, opsAi shall not be liable for any indirect, 
         incidental, special, consequential, or punitive damages resulting from your use of 
         the Service.
     </p>
 
-    <h2>8. Modifications to Service</h2>
+    <h2>9. Modifications to Service</h2>
     <p>
         We reserve the right to modify, suspend, or discontinue the Service at any time with 
         or without notice. We may also update these Terms of Service from time to time.
     </p>
 
-    <h2>9. Termination</h2>
+    <h2>10. Termination</h2>
     <p>
         We may terminate or suspend your access to the Service immediately, without prior notice, 
         for conduct that we believe violates these Terms of Service or is harmful to other users, 
         us, or third parties.
     </p>
 
-    <h2>10. Governing Law</h2>
+    <h2>11. Governing Law</h2>
     <p>
         These Terms of Service shall be governed by and construed in accordance with applicable 
         laws, without regard to its conflict of law provisions.
     </p>
 
-    <h2>11. Contact Information</h2>
+    <h2>12. Contact Information</h2>
     <p>
         If you have any questions about these Terms of Service, please contact us at:
         <br>
         <strong>Email:</strong> support@opsai.com
     </p>
 
-    <h2>12. Changes to Terms</h2>
+    <h2>13. Changes to Terms</h2>
     <p>
         We reserve the right to modify these Terms of Service at any time. We will notify users 
         of any material changes by posting the updated terms on this page.

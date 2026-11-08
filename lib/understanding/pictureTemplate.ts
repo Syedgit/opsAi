@@ -10,6 +10,7 @@ export type PictureTemplateKind = (typeof PICTURE_TEMPLATE_KINDS)[number];
 
 export const PICTURE_FIELD_PURPOSES = [
   'fuel',
+  'gallons',
   'store_credit',
   'cash',
   'inside_total',
@@ -55,6 +56,7 @@ export const PICTURE_KIND_LABEL: Record<PictureTemplateKind, string> = {
 
 export const PICTURE_PURPOSE_LABEL: Record<PictureFieldPurpose, string> = {
   fuel: 'Fuel / gas',
+  gallons: 'Fuel gallons (volume)',
   store_credit: 'Inside card (store credit)',
   cash: 'Inside cash (till / acceptor)',
   inside_total: 'Inside total (shop, not gas)',
@@ -71,6 +73,7 @@ export const PICTURE_PURPOSE_LABEL: Record<PictureFieldPurpose, string> = {
 
 const PURPOSE_PROMPT: Record<PictureFieldPurpose, string> = {
   fuel: 'fuelSales',
+  gallons: 'fuelGallons (volume, not dollars)',
   store_credit: 'cardSales / store credit (inside shop)',
   cash: 'cashSales (till cash / Cash Acceptor Cash)',
   inside_total: 'storeSalesTotal (inside shop, not gas)',
@@ -87,6 +90,7 @@ const PURPOSE_PROMPT: Record<PictureFieldPurpose, string> = {
 
 const PURPOSE_KINDS: Record<PictureFieldPurpose, PictureTemplateKind[]> = {
   fuel: ['daily_close'],
+  gallons: ['daily_close'],
   store_credit: ['daily_close'],
   cash: ['daily_close'],
   inside_total: ['daily_close'],
@@ -118,6 +122,7 @@ export const PICTURE_TEMPLATE_PRESETS: PictureTemplatePreset[] = [
     note: 'Fuel is Total Fuel Sales. Non-fuel, if any, is store credit. Ignore the register reading.',
     fields: [
       { label: 'Total Fuel Sales', purpose: 'fuel' },
+      { label: 'Volume on Total Fuel Sales', purpose: 'gallons', note: 'volume on the fuel total row, not grade lines' },
       { label: 'Total Non Fuel Sales', purpose: 'store_credit' },
       { label: 'Grand Total Store Sales Reading', purpose: 'ignore', note: 'register reading, not today' },
     ],

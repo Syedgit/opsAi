@@ -24,6 +24,7 @@ export const TASK_CATEGORIES = [
   'customer_service',
   'safety',
   'reports',
+  'bills',
   'other',
 ] as const;
 export type TaskCategory = (typeof TASK_CATEGORIES)[number];
@@ -43,6 +44,7 @@ export const CATEGORY_LABEL: Record<TaskCategory, string> = {
   customer_service: 'Customer service',
   safety: 'Safety',
   reports: 'Daily reports',
+  bills: 'Bills / insurance',
   other: 'Other',
 };
 

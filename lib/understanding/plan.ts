@@ -22,11 +22,19 @@ import {
   type Check,
 } from './checks';
 import type { DepositRule, StoreProfile } from './profile';
-import { formatHours, hoursLines, summarizeSchedule, type ScheduleSummary } from './schedule';
+import { formatHours, hoursLines, sheetLines, summarizeSchedule, type ScheduleSummary } from './schedule';
 import { WorkScheduleSchema } from './schema';
-import type { DailyCloseReport, DepositReceipt, EquipmentIssue, Invoice, Order, OrderItem, Understanding, WorkSchedule } from './schema';
+import type { DailyCloseReport, DepositReceipt, EquipmentIssue, FuelPrices, Invoice, Order, OrderItem, Understanding, WorkSchedule } from './schema';
 import { extraTillForDay, type TillCashItem } from './daySummary';
+import { applyStoreCredit, matchOpenClose, mergeDailyCloseReports, type OpenClose } from './closeMerge';
 import { describeVendorCatalog, matchOrderVendor, matchVendorName, VENDOR_CATEGORY_LABEL, type StoreVendor } from './vendors';
+import {
+  applyFuelPriceFix,
+  checkFuelPrices,
+  fuelPriceLines,
+  fuelPricesPayload,
+  resolveFuelSource,
+} from './fuelPrices';
 
 /**
  * Turns a reading (Understanding) into saved-after-confirmation entries and a WhatsApp reply.
@@ -35,12 +43,12 @@ import { describeVendorCatalog, matchOrderVendor, matchVendorName, VENDOR_CATEGO
  * Entries reuse the existing pending-action storage, so no schema change is needed:
  * daily close -> STORE_SALES, invoice -> INVOICE_EXPENSE, deposit slip -> UNKNOWN (hidden from
  * the current dashboard lists until it gets its own view), staff schedule -> UNKNOWN tagged work_schedule
- * (shown on the dashboard's Schedule tab). Legacy field names (cash, card, ...)
- * are kept in every payload so the dashboard keeps working.
+ * (shown on the dashboard's Schedule tab), fuel_prices -> UNKNOWN tagged fuel_prices (Gas prices tab).
+ * Legacy field names (cash, card, ...) are kept in every payload so the dashboard keeps working.
  */
 
 export type PlannedActionType = 'STORE_SALES' | 'INVOICE_EXPENSE' | 'ORDER_REQUEST' | 'UNKNOWN';
-export type EntryKind = 'daily_close' | 'invoice' | 'deposit_receipt' | 'work_schedule' | 'order';
+export type EntryKind = 'daily_close' | 'invoice' | 'deposit_receipt' | 'work_schedule' | 'order' | 'fuel_prices';
 
 export interface PlannedEntry {
   kind: EntryKind;
@@ -81,6 +89,10 @@ export interface PlanContext {
   openInvoices?: Array<{ actionId: string; storeId: string; invoice: Invoice }>;
   /** Same-day till cash already confirmed (invoice cash, typed paid-outs). Close payouts stay on the report. */
   tillCash?: TillCashItem[];
+  /** Original caption / typed text, used to tell competitor poles from our own board. */
+  messageText?: string;
+  /** Recent daily closes, so a later POS page (fuel then cash) updates the same day. */
+  openCloses?: OpenClose[];
 }
 
 /* --------------------------------- helpers -------------------------------- */
@@ -113,8 +125,10 @@ function suggestDepositRule(
 }
 
 function insideTotal(report: DailyCloseReport): number {
-  if (report.storeSalesTotal != null) return report.storeSalesTotal;
-  return round2((report.cardSales ?? 0) + (report.cashSales ?? 0));
+  if (report.cardSales != null || report.cashSales != null) {
+    return round2((report.cardSales ?? 0) + (report.cashSales ?? 0));
+  }
+  return report.storeSalesTotal ?? 0;
 }
 
 function checkLine(check: Check): string | null {
@@ -147,23 +161,26 @@ export function dailyClosePayload(
   report: DailyCloseReport,
   checks: Check[],
   needsReview: string[] = [],
-  suggestedDepositRule: DepositRule | null = null
+  suggestedDepositRule: DepositRule | null = null,
+  extra: { updatesActionId?: string } = {}
 ): Record<string, unknown> {
+  const credited = applyStoreCredit(report);
   return {
     _kind: 'daily_close',
-    report,
+    report: credited,
     checks,
     needs_review: needsReview,
     /** Saved as the store's deposit rule when the owner confirms with OK. */
     suggested_deposit_rule: suggestedDepositRule,
-    report_date: report.reportDate,
+    report_date: credited.reportDate,
     // Legacy keys read by the dashboard.
-    cash: report.cashSales ?? 0,
-    card: report.cardSales ?? 0,
-    total_inside: insideTotal(report),
-    fuel_sales: report.fuelSales ?? 0,
-    gallons: report.fuelGallons ?? 0,
-    deposit: report.reportedDeposit ?? null,
+    cash: credited.cashSales ?? 0,
+    card: credited.cardSales ?? 0,
+    total_inside: insideTotal(credited),
+    fuel_sales: credited.fuelSales ?? 0,
+    gallons: credited.fuelGallons ?? 0,
+    deposit: credited.reportedDeposit ?? null,
+    ...(extra.updatesActionId ? { updates_action_id: extra.updatesActionId } : {}),
   };
 }
 
@@ -277,11 +294,27 @@ function scheduleLines(summary: ScheduleSummary, storeName: string): string[] {
   return lines;
 }
 
-/** What goes to the store's WhatsApp group once the schedule is confirmed: hours only. */
-export function scheduleGroupMessage(payload: Record<string, unknown>, storeName: string): string | null {
+function asScheduleSummary(payload: Record<string, unknown>): ScheduleSummary | null {
   if (payload._kind !== 'work_schedule') return null;
-  const summary = summarizeSchedule(payload.schedule as WorkSchedule);
+  return summarizeSchedule(payload.schedule as WorkSchedule);
+}
+
+/** Admin 1:1: totals only, so the owner can check the week added up. */
+export function scheduleHoursMessage(payload: Record<string, unknown>, storeName: string): string | null {
+  const summary = asScheduleSummary(payload);
+  if (!summary) return null;
   return [`📅 ${storeName} · hours for ${weekLabel(summary.weekStart)}`, ...hoursLines(summary), `Total ${formatHours(summary.totalHours)}`, '', 'Hours come from the posted sheet.'].join('\n');
+}
+
+/** Store group: the roster itself, so people can see the days they work. */
+export function scheduleSheetMessage(payload: Record<string, unknown>, storeName: string): string | null {
+  const summary = asScheduleSummary(payload);
+  if (!summary) return null;
+  return [`📅 ${storeName} · ${weekLabel(summary.weekStart)}`, ...sheetLines(summary), '', 'Your hours for the week. Check your days.'].join('\n');
+}
+
+export function scheduleGroupMessage(payload: Record<string, unknown>, storeName: string): string | null {
+  return scheduleSheetMessage(payload, storeName);
 }
 
 function dailyCloseLines(
@@ -501,27 +534,36 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
     case 'daily_close': {
       const entries = understanding.reports.map((report): PlannedEntry => {
         const store = resolveStore(report.storeHint, ctx);
+        const credited = applyStoreCredit(report);
+        const existing = matchOpenClose(store.storeId, credited.reportDate, ctx.openCloses);
+        const merged = existing ? mergeDailyCloseReports(existing.report, credited) : credited;
         const extraTill = extraTillForDay(
           ctx.tillCash,
           store.storeId,
-          report.reportDate ?? localDateString(ctx.now, store.profile?.timezone || 'America/New_York')
+          merged.reportDate ?? localDateString(ctx.now, store.profile?.timezone || 'America/New_York')
         );
-        const dateCheck = checkReportDate(report.reportDate, ctx.now);
+        const dateCheck = checkReportDate(merged.reportDate, ctx.now);
         const checks = [
           ...(store.warning ? [store.warning] : []),
           ...(dateCheck ? [dateCheck] : []),
-          ...checkDailyClose(report, store.profile, extraTill),
+          ...checkDailyClose(merged, store.profile, extraTill),
         ];
-        const suggestedRule = suggestDepositRule(report, store.profile, checks, ctx.canTeachRules);
+        const suggestedRule = suggestDepositRule(merged, store.profile, checks, ctx.canTeachRules);
+        const lines = dailyCloseLines(merged, store.storeName, checks, extraTill);
+        if (existing) {
+          lines[0] = `🧾 ${store.storeName} · ${dateLabel(merged.reportDate)} · adding to this close`;
+        }
         return {
           kind: 'daily_close',
           storeId: store.storeId,
           storeName: store.storeName,
           actionType: 'STORE_SALES',
-          payload: dailyClosePayload(report, checks, understanding.needsReview, suggestedRule),
+          payload: dailyClosePayload(merged, checks, understanding.needsReview, suggestedRule, {
+            updatesActionId: existing?.actionId,
+          }),
           confidence: understanding.confidence,
           lines: [
-            ...dailyCloseLines(report, store.storeName, checks, extraTill),
+            ...lines,
             ...reviewLine(understanding.needsReview),
             ...(suggestedRule
               ? [
@@ -679,6 +721,39 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
       };
     }
 
+    case 'fuel_prices': {
+      const reading = understanding.prices;
+      const store = resolveStore(reading.storeHint, ctx);
+      const decided = resolveFuelSource(reading, ctx.profiles, ctx.messageText);
+      const station = reading.stationHint?.trim() || null;
+      const observed =
+        reading.observedDate ?? localDateString(ctx.now, store.profile?.timezone || 'America/New_York');
+      const checks = [...(store.warning ? [store.warning] : []), ...checkFuelPrices(reading)];
+      if (decided.reason.startsWith('could not tell')) {
+        checks.push({ id: 'fuel_source_unclear', status: 'warn', message: decided.reason });
+      }
+      const payload = fuelPricesPayload(reading, decided.source, station, observed, checks, understanding.needsReview);
+      return {
+        entries: [
+          {
+            kind: 'fuel_prices',
+            storeId: store.storeId,
+            storeName: store.storeName,
+            actionType: 'UNKNOWN',
+            payload,
+            confidence: understanding.confidence,
+            lines: [
+              ...fuelPriceLines(reading, decided.source, store.storeName, station, checks),
+              ...reviewLine(understanding.needsReview),
+            ],
+            checks,
+          },
+        ],
+        notice: null,
+        equipment: null,
+      };
+    }
+
     case 'equipment_issue': {
       const issue = understanding.issue;
       const lines = [issue.equipment ? `🔧 Problem noted: ${issue.equipment}` : '🔧 Problem noted', issue.description];
@@ -696,7 +771,7 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
       return {
         entries: [],
         notice:
-          "❓ I couldn't read that as sales, an invoice, a deposit slip, a schedule sheet, an order list, or an equipment problem.\n\nTry a clearer photo, or type it like: Rockaway cash 298 card 1355 gas 1440. Reply HELP for commands.",
+          "❓ I couldn't read that as sales, an invoice, a deposit slip, a schedule sheet, an order list, a gas-price board, or an equipment problem.\n\nTry a clearer photo, or type it like: Rockaway cash 298 card 1355 gas 1440. Reply HELP for commands.",
         equipment: null,
       };
   }
@@ -729,6 +804,11 @@ export function describeEntryPayload(payload: Record<string, unknown>, storeName
         : null;
       return orderLines(order, storeName, vendor, catalog);
     }
+    case 'fuel_prices': {
+      const prices = payload.prices as FuelPrices;
+      const source = payload.source === 'own' ? 'own' : 'competitor';
+      return fuelPriceLines(prices, source, storeName, typeof payload.station === 'string' ? payload.station : null, checks);
+    }
     default:
       return null;
   }
@@ -748,6 +828,8 @@ export function formatEntriesReply(entries: PlannedEntry[]): string {
       ? "Reply OK to save and post the hours from this sheet, FIX <name> <hours> to correct someone's total (like FIX maria 30), or CANCEL."
       : entries.length === 1 && entries[0].kind === 'order'
       ? orderReplyFooter(entries[0])
+      : entries.length === 1 && entries[0].kind === 'fuel_prices'
+      ? 'Reply OK to save, FIX regular 4.099, FIX source own, or CANCEL.'
       : entries.length > 1
       ? 'Reply OK to save all, or CANCEL to discard all.'
       : 'Reply OK to save, FIX <field> <value> to correct, or CANCEL.';
@@ -815,7 +897,12 @@ export function applyFixToPayload(
     // A corrected report may no longer fit the rule that was proposed, so it is re-derived, never kept blindly.
     const hadSuggestion = payload.suggested_deposit_rule != null;
     const inferred = hadSuggestion && worstStatus(checks) !== 'fail' ? inferDepositRules(report) : [];
-    return { ok: true, payload: dailyClosePayload(report, checks, review, inferred.length === 1 ? inferred[0] : null) };
+    return {
+      ok: true,
+      payload: dailyClosePayload(report, checks, review, inferred.length === 1 ? inferred[0] : null, {
+        updatesActionId: typeof payload.updates_action_id === 'string' ? payload.updates_action_id : undefined,
+      }),
+    };
   }
 
   if (kind === 'invoice' || kind === 'invoice_payment') {
@@ -911,6 +998,18 @@ export function applyFixToPayload(
     const summary = summarizeSchedule(updated);
     const kept = (Array.isArray(payload.checks) ? (payload.checks as Check[]) : []).filter((c) => c.id.startsWith('store_'));
     return { ok: true, payload: schedulePayload(updated, { ...summary, checks: [...kept, ...summary.checks] }, review) };
+  }
+
+  if (kind === 'fuel_prices') {
+    const current = payload.prices as FuelPrices;
+    const currentSource = payload.source === 'own' ? 'own' : 'competitor';
+    const fixed = applyFuelPriceFix(current, currentSource, key, value);
+    if (!fixed.ok) return { ok: false, message: fixed.message };
+    const kept = (Array.isArray(payload.checks) ? (payload.checks as Check[]) : []).filter((c) => c.id.startsWith('store_'));
+    const checks = [...kept, ...checkFuelPrices(fixed.reading)];
+    const station = fixed.reading.stationHint?.trim() || (typeof payload.station === 'string' ? payload.station : null);
+    const observed = typeof payload.observed_date === 'string' ? payload.observed_date : new Date().toISOString().slice(0, 10);
+    return { ok: true, payload: fuelPricesPayload(fixed.reading, fixed.source, station, observed, checks, review) };
   }
 
   return { ok: false, message: 'This entry cannot be corrected with FIX.' };

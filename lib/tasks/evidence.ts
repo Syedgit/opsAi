@@ -21,6 +21,7 @@ import {
 import { notifyManagers } from './tick';
 import { downloadWhatsAppMedia } from '../whatsappMedia';
 import { createPhotoChecker, photoChecksLeft, type PhotoChecker, type PhotoVerdict } from './photoCheck';
+import { isFuelPriceTaskTitle, looksLikeFuelPriceText } from '../understanding/fuelPrices';
 import type { AiUsageRecord } from '../understanding/usage';
 
 /**
@@ -209,10 +210,10 @@ export async function tryTaskEvidence(prisma: PrismaClient, input: EvidenceInput
     }
   }
 
-  // Staff photo with no number.
+  // Staff photo with no number. Price-board photos go to AI, not to a 7Clean proof.
   if (code === null && mediaId) {
     if (!isStaff) return false;
-    const photoTasks = open.filter(wantsPhoto);
+    const photoTasks = open.filter((r) => wantsPhoto(r) && !isFuelPriceTaskTitle(r.title));
     if (photoTasks.length === 0) return false;
     if (photoTasks.length === 1) {
       code = photoTasks[0].code;
@@ -251,6 +252,11 @@ export async function tryTaskEvidence(prisma: PrismaClient, input: EvidenceInput
     await reply(prisma, input, problemMessage(asRun, rest.replace(/^(problem|issue)\b[:\s-]*/i, '').slice(0, 200), told));
     await finishLog(prisma, input.messageId, 'TASK_PROBLEM', input.storeId);
     return true;
+  }
+
+  // A competitor / own-board photo (or typed prices) is read as fuel_prices, then OK closes the nag.
+  if (isFuelPriceTaskTitle(run.title) && (hasPhoto || looksLikeFuelPriceText(rest))) {
+    return false;
   }
 
   // "2 cases of milk arrived" is a report that happens to start with a number, not proof for a photo task.
@@ -362,6 +368,31 @@ export async function tryTaskEvidence(prisma: PrismaClient, input: EvidenceInput
   });
   await finishLog(prisma, input.messageId, photoVerdict === 'pass' ? 'TASK_PHOTO_PASSED' : 'TASK_EVIDENCE', input.storeId, photoUsage);
   await reply(prisma, input, doneMessage(asRun, now, timeZone, lateMinutes, open.length - 1, reading !== null ? `${reading}${run.unit && /^[A-Za-z]{1,2}$/.test(run.unit) ? run.unit : run.unit ? ` ${run.unit}` : ''}` : undefined) + (photoVerdict === 'pass' && photoNote ? `\n🔍 Photo checked: ${photoNote}` : ''));
+  return true;
+}
+
+/** After OK on a competitor price photo, close that day's nag so they are not asked again. */
+export async function completeOpenFuelPriceTask(
+  prisma: PrismaClient,
+  input: { storeId: string; phoneE164: string; source: 'competitor' | 'own'; now?: Date }
+): Promise<boolean> {
+  if (input.source !== 'competitor') return false;
+  const now = input.now ?? new Date();
+  const open = ((await prisma.taskRun.findMany({ where: { storeId: input.storeId, status: 'OPEN' } })) as OpenRun[])
+    .filter((r) => r.alertedAt && isFuelPriceTaskTitle(r.title))
+    .sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime() || a.code - b.code);
+  const run = open[0];
+  if (!run) return false;
+  await prisma.taskRun.update({
+    where: { id: run.id },
+    data: {
+      status: 'DONE',
+      completedAt: now,
+      completedByPhone: input.phoneE164,
+      evidenceType: 'photo',
+      outcome: 'pass',
+    },
+  });
   return true;
 }
 

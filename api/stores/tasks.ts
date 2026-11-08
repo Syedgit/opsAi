@@ -30,6 +30,7 @@ import {
 } from '../../lib/understanding/pictureTemplate';
 import { sampleFromDailyClosePhoto } from '../../lib/understanding/closeSample';
 import { sampleFromInvoicePhoto } from '../../lib/understanding/invoiceSample';
+import { proposePictureMapFromPhoto } from '../../lib/understanding/proposePictureMap';
 import { buildDefaultProfile } from '../../lib/understanding/profile';
 import { StoreVendorsSchema, VENDOR_CATEGORIES, VENDOR_CATEGORY_LABEL } from '../../lib/understanding/vendors';
 import {
@@ -90,6 +91,12 @@ const BodySchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('delete_picture_template'),
     id: z.string().trim().min(1).max(40),
+  }),
+  z.object({
+    action: z.literal('propose_picture_template'),
+    kind: z.enum(PICTURE_TEMPLATE_KINDS).optional(),
+    image: z.string().min(80).max(2_500_000),
+    mime: z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/gif']).optional(),
   }),
   // The inspector's report as base64. Preview reads it and says what it would do; apply saves the result and adds the chosen tasks.
   z.object({ action: z.literal('preview_report'), pdf: z.string().min(100).max(3_500_000) }),
@@ -212,6 +219,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         res.status(200).json({
           success: true, storeName: store.storeName, canEdit, setup: readStoredSetup(store.setupJson),
           storeTypes: storeTypeOptions().map((t) => ({ ...t, modules: dashboardModules(t.id, t.defaults.fuel) })),
+          storeFeatures: Object.entries(STORE_FEATURE_LABEL).map(([id, label]) => ({ id, label })),
           messageSamples: parseStoredProfile(store.profileJson).messageSamples,
           ...vendorCatalog(store.profileJson),
           ...pictureMaps(store.profileJson),
@@ -405,6 +413,19 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
     if (body.action === 'delete_picture_template') {
       await deletePictureTemplate(prisma, storeId, body.id);
       res.status(200).json({ success: true });
+      return;
+    }
+
+    if (body.action === 'propose_picture_template') {
+      const proposed = await proposePictureMapFromPhoto(
+        { base64: body.image, mimeType: body.mime ?? 'image/jpeg' },
+        body.kind ?? 'daily_close',
+      );
+      if (!proposed.ok) {
+        res.status(400).json({ error: proposed.error });
+        return;
+      }
+      res.status(200).json({ success: true, template: proposed.template });
       return;
     }
 

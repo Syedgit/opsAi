@@ -1,6 +1,6 @@
 import type { z } from 'zod';
 import { WorkScheduleSchema, type WorkSchedule } from '../schema';
-import { formatHours, formatShiftRange, hoursLines, parseClock, parseShiftRange, resolveShiftDate, scheduleWeekStartOf, summarizeSchedule, weekContainsDate } from '../schedule';
+import { formatHours, formatShiftRange, hoursLines, parseClock, parseShiftRange, resolveShiftDate, scheduleWeekStartOf, sheetLines, summarizeSchedule, weekContainsDate } from '../schedule';
 
 type SheetInput = z.input<typeof WorkScheduleSchema>;
 
@@ -102,6 +102,15 @@ describe('summarizeSchedule', () => {
     ]);
     expect(summary.totalHours).toBe(28.5);
     expect(hoursLines(summary)).toEqual(['Maria 20.5h', 'Sam 8h']);
+    expect(sheetLines(summary)).toEqual([
+      'Maria',
+      'Mon 9a–5p · Tue 9a–5p · Wed 9a–1:30p',
+      '20.5h',
+      '',
+      'Sam',
+      'Thu 2p–10p',
+      '8h',
+    ]);
     expect(summary.checks).toEqual([]);
   });
 

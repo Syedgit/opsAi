@@ -30,6 +30,7 @@ describe('picture templates', () => {
     const started = templateFromPreset('exxon_store_close');
     expect(started?.fields.map((f) => [f.label, f.purpose])).toEqual([
       ['Total Fuel Sales', 'fuel'],
+      ['Volume on Total Fuel Sales', 'gallons'],
       ['Total Non Fuel Sales', 'store_credit'],
       ['Grand Total Store Sales Reading', 'ignore'],
     ]);

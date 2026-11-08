@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en" data-app-shell="app">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#111111">
+    <meta name="color-scheme" content="light">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="opsAi">
+    <meta name="format-detection" content="telephone=no">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/icon-180.png">
+    <link rel="icon" type="image/png" href="/icon-192.png">
+    <link rel="apple-touch-startup-image" href="/splash-1320x2868.png" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1284x2778.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1206x2622.png" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="/splash-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="stylesheet" href="/app-shell.css">
+    <script src="/app-shell.js"></script>
+    <title>Plan and usage - opsAi</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root { --primary: #25D366; --primary-dark: #128C7E; --text: #1a1a1a; --text-light: #666; --border: #e0e0e0; --bg-light: #f8f9fa; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: var(--text); background: var(--bg-light); min-height: 100vh; }
+        header { background: white; padding: 12px 24px; padding-top: max(12px, env(safe-area-inset-top)); display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); gap: 12px; flex-wrap: wrap; }
+        header a { color: var(--text); text-decoration: none; font-weight: 600; }
+        header .logo { line-height: 0; }
+        header .logo img { height: 40px; width: auto; max-width: 220px; }
+        main { max-width: 860px; margin: 32px auto; padding: 0 20px 48px; }
+        h1 { font-size: 28px; margin-bottom: 8px; }
+        .muted { color: var(--text-light); margin-bottom: 24px; }
+        .card { background: white; border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 16px; }
+        .card h2 { font-size: 18px; margin-bottom: 8px; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); }
+        th { color: var(--text-light); font-weight: 600; }
+        .banner { background: #fff3cd; color: #664d03; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; }
+        .error { color: #e74c3c; }
+        .ok { color: #0f7b3a; }
+        .btn { display: inline-block; background: #25D366; color: #fff; border: none; padding: 12px 18px; border-radius: 8px; font-weight: 600; cursor: pointer; margin: 12px 8px 0 0; font-size: 14px; }
+        .btn.secondary { background: #fff; color: #1a1a1a; border: 1px solid #e0e0e0; }
+        .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0; }
+        .stat { background: #f8f9fa; border-radius: 10px; padding: 14px 16px; }
+        .stat .n { font-size: 22px; font-weight: 700; }
+        .stat .l { font-size: 12px; color: var(--text-light); margin-top: 4px; }
+        @media (max-width: 640px) {
+            .stats { grid-template-columns: 1fr; }
+            header { padding: 10px 16px; padding-top: max(10px, env(safe-area-inset-top)); }
+            header .logo img { height: 32px; max-width: 160px; }
+            main { margin: 20px auto; padding: 0 14px 48px; }
+            h1 { font-size: 22px; }
+            .card { padding: 16px; }
+            table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            .btn { min-height: 44px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="appSplash" aria-hidden="true"><img src="/icon-192.png" alt=""><span>opsAi</span></div>
+    <header>
+        <a href="/dashboard" class="logo"><img src="/logo.jpg" alt="Operation Intelligence"></a>
+        <a href="/dashboard">Dashboard</a>
+    </header>
+    <main>
+        <h1>Plan and usage</h1>
+        <p class="muted">14-day trial, then $25 per store per month. Five locations is $125. Time saved is desk work you skipped vs typing the same close or invoice into a sheet.</p>
+        <div id="banner"></div>
+        <div class="card" id="planCard">Loading…</div>
+        <div id="payActions"></div>
+        <div class="card" id="savingsCard">
+            <h2>This month</h2>
+            <p class="muted" id="monthLabel"></p>
+            <div id="savingsHero">Loading…</div>
+            <div id="stores"></div>
+        </div>
+    </main>
+    <script>
+        const token = localStorage.getItem('authToken');
+        if (!token) window.location.href = '/login';
+        const params = new URLSearchParams(window.location.search);
+        function esc(value) {
+            return String(value == null ? '' : value)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+        function money(n) {
+            return '$' + Number(n || 0).toFixed(n >= 1 ? 2 : 4);
+        }
+        async function billingAction(action) {
+            const res = await fetch('/api/billing', {
+                method: 'POST',
+                headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: action })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Could not start billing');
+            if (data.url) window.location.href = data.url;
+        }
+        (async function () {
+            try {
+                const sessionId = params.get('session_id') || '';
+                const billingUrl = sessionId
+                    ? '/api/billing?session_id=' + encodeURIComponent(sessionId)
+                    : '/api/billing';
+                const res = await fetch(billingUrl, { headers: { Authorization: 'Bearer ' + token } });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Could not load billing');
+                const b = data.billing || {};
+                const pay = data.payments || {};
+                const banner = document.getElementById('banner');
+                if (params.get('checkout') === 'success') {
+                    banner.className = 'banner';
+                    banner.innerHTML = b.access && b.status === 'active'
+                        ? '<span class="ok">Card saved. You are on the paid plan.</span>'
+                        : 'Thanks — Stripe is confirming your card. Refresh this page in a few seconds.';
+                } else if (params.get('checkout') === 'cancel') {
+                    banner.className = 'banner';
+                    banner.textContent = 'Checkout canceled. You can add a card whenever you are ready.';
+                } else if (!b.access) {
+                    banner.className = 'banner';
+                    banner.textContent = pay.ready
+                        ? 'Your trial has ended. Add a card to stay on at $' + Number(b.monthlyUsd || 0).toFixed(0) + '/month. WhatsApp reports still save so you do not lose a close.'
+                        : 'Your trial has ended. Email support@opsai.us to stay on. WhatsApp reports still save so you do not lose a close.';
+                } else if (b.status === 'trial') {
+                    banner.className = 'banner';
+                    const days = b.daysLeft;
+                    const unit = days === 1 ? 'day' : 'days';
+                    if (days <= 3) {
+                        banner.innerHTML = 'Trial ends in <strong>' + esc(days) + '</strong> ' + unit + '. Add a payment card here before it expires so the dashboard stays open.';
+                    } else {
+                        banner.innerHTML = 'Trial: <strong>' + esc(days) + '</strong> ' + unit + ' left. No card required until then.';
+                    }
+                }
+                const storesCount = b.storeCount || 0;
+                document.getElementById('planCard').innerHTML =
+                    '<h2>' + money(b.monthlyUsdPerStore || 25) + ' per store</h2>' +
+                    '<p>' + (b.status === 'trial' ? 'Trial' : esc(b.status)) +
+                    ' · ' + esc(storesCount) + ' location' + (storesCount === 1 ? '' : 's') +
+                    ' · ' + money(b.monthlyUsd) + '/month after trial.</p>' +
+                    (b.trialEndsAt ? '<p class="muted" style="margin-top:8px;">Trial ends ' + esc(new Date(b.trialEndsAt).toLocaleString()) + '</p>' : '');
+                const actions = document.getElementById('payActions');
+                if (!pay.ready) {
+                    actions.innerHTML = '<p class="muted">Card checkout turns on after Stripe keys are set. Until then email support@opsai.us.</p>';
+                } else if (pay.hasSubscription) {
+                    actions.innerHTML = '<button type="button" class="btn secondary" id="portalBtn">Manage card and invoices</button>';
+                    document.getElementById('portalBtn').onclick = function () {
+                        billingAction('portal').catch(function (err) { alert(err.message); });
+                    };
+                } else {
+                    actions.innerHTML = '<button type="button" class="btn" id="checkoutBtn">Add card · $' +
+                        Number(b.monthlyUsd || 25).toFixed(0) + '/month</button>';
+                    document.getElementById('checkoutBtn').onclick = function () {
+                        billingAction('checkout').catch(function (err) { alert(err.message); });
+                    };
+                }
+                document.getElementById('monthLabel').textContent = data.month ? 'Calendar month ' + data.month : '';
+                const sav = data.savings || {};
+                const c = sav.counts || {};
+                const bits = [];
+                if (c.closes) bits.push(c.closes + ' close' + (c.closes === 1 ? '' : 's'));
+                if (c.invoices) bits.push(c.invoices + ' invoice' + (c.invoices === 1 ? '' : 's'));
+                if (c.schedules) bits.push(c.schedules + ' schedule' + (c.schedules === 1 ? '' : 's'));
+                if (c.prices) bits.push(c.prices + ' price board' + (c.prices === 1 ? '' : 's'));
+                if (c.orders) bits.push(c.orders + ' order' + (c.orders === 1 ? '' : 's'));
+                if (c.payouts) bits.push(c.payouts + ' paid-out' + (c.payouts === 1 ? '' : 's'));
+                if (c.tasks) bits.push(c.tasks + ' task' + (c.tasks === 1 ? '' : 's'));
+                const fee = Number(sav.monthlyFeeUsd || b.monthlyUsd || 0);
+                if (!sav.entries) {
+                    document.getElementById('savingsHero').innerHTML =
+                        '<p>As WhatsApp closes and invoices land, this page will show the hours you skip typing them into a sheet. A typical close is about 12 minutes.</p>';
+                } else {
+                    document.getElementById('savingsHero').innerHTML =
+                        '<div class="stats">' +
+                            '<div class="stat"><div class="n">' + esc(sav.timeLabel) + '</div><div class="l">Desk time skipped</div></div>' +
+                            '<div class="stat"><div class="n">' + esc(sav.entries) + '</div><div class="l">Entries filed from WhatsApp</div></div>' +
+                            '<div class="stat"><div class="n">$' + esc(sav.deskUsd) + '</div><div class="l">About that time at $18/hour</div></div>' +
+                        '</div>' +
+                        '<p>' + esc(bits.join(' · ')) +
+                        (sav.worthMoreThanFee
+                            ? ' — more desk time than the $' + fee.toFixed(0) + '/month plan.'
+                            : ' vs $' + fee.toFixed(0) + '/month after trial.') +
+                        '</p>' +
+                        '<p class="muted" style="margin-top:8px;">Estimate vs typing into a spreadsheet. Not a payroll number.</p>';
+                }
+                const stores = data.stores || [];
+                if (stores.length === 0) {
+                    document.getElementById('stores').innerHTML = '<p class="muted" style="margin-top:16px;">No store yet. <a href="/onboarding">Set up a store</a>.</p>';
+                } else {
+                    document.getElementById('stores').innerHTML =
+                        '<table style="margin-top:16px;"><thead><tr><th>Store</th><th>Entries</th><th>Time skipped</th></tr></thead><tbody>' +
+                        stores.map(function (s) {
+                            return '<tr><td>' + esc(s.storeName) + ' (' + esc(s.storeId) + ')</td>' +
+                                '<td>' + esc(s.entries) + '</td>' +
+                                '<td>' + esc(s.timeLabel) + '</td></tr>';
+                        }).join('') +
+                        '</tbody></table>';
+                }
+            } catch (err) {
+                document.getElementById('planCard').innerHTML = '<p class="error">' + esc(err.message) + '</p>';
+                document.getElementById('stores').textContent = '';
+            }
+        })();
+    </script>
+</body>
+</html>

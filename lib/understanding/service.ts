@@ -7,6 +7,7 @@ import { UnderstandingUnavailableError, type MessageUnderstander } from './extra
 import { formatEntriesReply, planUnderstanding } from './plan';
 import { loadOpenInvoices } from '../tasks/invoiceReminder';
 import { loadConfirmedTillCash } from './daySummary';
+import { loadOpenCloses } from './closeMerge';
 import { loadStoreProfiles } from './storeProfiles';
 import { transcribeAudio } from './transcribe';
 import type { AiUsageRecord } from './usage';
@@ -22,6 +23,8 @@ export interface UnderstandParams {
   mediaType?: string;
   understander: MessageUnderstander;
   now?: Date;
+  /** WhatsApp group the sheet/photo came from, so OK can post hours back there. */
+  groupId?: string | null;
 }
 
 /**
@@ -136,6 +139,14 @@ export async function understandAndRespond(prisma: PrismaClient, params: Underst
       console.warn('Could not load till cash', error instanceof Error ? error.message : error);
       return [];
     }),
+    openCloses: await loadOpenCloses(
+      prisma,
+      profiles.map((p) => p.storeId)
+    ).catch((error) => {
+      console.warn('Could not load open closes', error instanceof Error ? error.message : error);
+      return [];
+    }),
+    messageText: text,
   });
   const heard = transcript ? `🎙️ I heard: "${transcript}"\n\n` : '';
 
@@ -144,15 +155,35 @@ export async function understandAndRespond(prisma: PrismaClient, params: Underst
     return 'handled';
   }
 
+  const groupId = params.groupId?.trim() || null;
   for (const entry of plan.entries) {
-    await createPendingAction(prisma, phoneE164, entry.storeId, entry.actionType, entry.payload, entry.confidence, messageId);
+    const payload = groupId ? { ...entry.payload, source_group_id: groupId } : entry.payload;
+    const updateId = typeof payload.updates_action_id === 'string' ? payload.updates_action_id : '';
+    if (entry.kind === 'daily_close' && updateId) {
+      const original = await prisma.pendingActions.findFirst({
+        where: { actionId: updateId, storeId: entry.storeId },
+      });
+      if (original?.status === 'PENDING') {
+        const { updates_action_id: _ignored, ...rest } = payload;
+        await prisma.pendingActions.update({
+          where: { actionId: original.actionId },
+          data: {
+            payloadJson: rest as object,
+            confidence: entry.confidence,
+            messageIdInbound: messageId,
+          },
+        });
+        continue;
+      }
+    }
+    await createPendingAction(prisma, phoneE164, entry.storeId, entry.actionType, payload, entry.confidence, messageId);
   }
 
   // The first report from a store doubles as its setup: the owner checks what was read and fixes it once.
   const confirmedBefore = await prisma.pendingActions.count({
     where: { storeId, status: 'CONFIRMED' },
   });
-  const isMoneyReport = plan.entries.some((e) => e.kind !== 'work_schedule');
+  const isMoneyReport = plan.entries.some((e) => e.kind !== 'work_schedule' && e.kind !== 'fuel_prices');
   const welcome = confirmedBefore === 0 && isMoneyReport ? `${FIRST_REPORT_INTRO}\n\n` : '';
 
   await finish(

@@ -300,3 +300,45 @@ export function summarizeSchedule(schedule: WorkSchedule, options: { hoursLimit?
 export function hoursLines(summary: ScheduleSummary): string[] {
   return summary.employees.map((e) => `${e.name} ${formatHours(e.hours)}${e.adjusted ? ' (adjusted)' : ''}`);
 }
+
+function weekDayOrder(weekStart: string | null): string[] {
+  const startIndex = weekStart ? new Date(`${weekStart}T12:00:00Z`).getUTCDay() : 0;
+  if (Number.isNaN(startIndex)) return [...WEEKDAY_LABELS];
+  return Array.from({ length: 7 }, (_, i) => WEEKDAY_LABELS[(startIndex + i) % 7]);
+}
+
+function shiftCell(shift: WorkedShift): string {
+  return `${shift.start}–${shift.end}`;
+}
+
+function wrapJoin(parts: string[], size: number): string[] {
+  const lines: string[] = [];
+  for (let i = 0; i < parts.length; i += size) {
+    lines.push(parts.slice(i, i + size).join(' · '));
+  }
+  return lines;
+}
+
+/**
+ * The roster the group needs: each person, the days they work, and their hours.
+ * Off days are left off so the message stays short. Hours only — never pay.
+ */
+export function sheetLines(summary: ScheduleSummary): string[] {
+  const order = weekDayOrder(summary.weekStart);
+  const rank = new Map(order.map((day, i) => [day, i]));
+  const lines: string[] = [];
+  for (const employee of summary.employees) {
+    if (lines.length > 0) lines.push('');
+    lines.push(employee.name);
+    const byDay = new Map<string, string[]>();
+    for (const shift of employee.shifts) {
+      byDay.set(shift.day, [...(byDay.get(shift.day) ?? []), shiftCell(shift)]);
+    }
+    const roster = [...byDay.entries()]
+      .sort((a, b) => (rank.get(a[0]) ?? 99) - (rank.get(b[0]) ?? 99))
+      .map(([day, cells]) => `${day} ${cells.join(' & ')}`);
+    if (roster.length > 0) lines.push(...wrapJoin(roster, 4));
+    lines.push(`${formatHours(employee.hours)}${employee.adjusted ? ' (adjusted)' : ''}`);
+  }
+  return lines;
+}

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { sign, verify } from 'jsonwebtoken';
+import { newAccountBilling } from '../../lib/billing/plans';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -48,6 +49,7 @@ router.post('/signup', async (req: Request, res: Response) => {
         email: email.toLowerCase(),
         password: hashedPassword,
         name: name || null,
+        ...newAccountBilling(),
       },
       select: {
         id: true,

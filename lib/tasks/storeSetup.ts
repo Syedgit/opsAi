@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { bucketFor, TASK_BUCKETS, presetsForStore, type TaskBucket, type TaskPreset } from './presets';
+import { bucketFor, STORE_FEATURES, TASK_BUCKETS, presetsForStore, type StoreFeature, type TaskBucket, type TaskPreset } from './presets';
 import { TaskTemplateInputSchema, describeSchedule, type TaskTemplateInput } from './schedule';
 import { parseHHMM } from './time';
 
@@ -63,11 +63,11 @@ export const STORE_TYPE_BLURB: Record<StoreType, string> = {
   convenience: 'Shop without pumps. Simple cleaning, coffee, and restock reminders.',
   gas_station: 'Fuel and a shop. Adds pump and spill-kit reminders when you sell fuel.',
   office: 'Desk team, agency, insurance. Who is in, meetings, lock-up. Mail later.',
-  shipping: 'Pack-and-ship counter. Who is on, held packages, last drop-off.',
+  shipping: 'UPS / pack-and-ship counter. Who is on, held packages, last drop-off. Tick cooler or shelves if this counter has them.',
   real_estate: 'Agency or team. Showings, keys, lock-up. Open house later.',
-  appointments: 'Salon, barber, clinic, studio. Today’s book, rooms, confirm tomorrow, till close.',
+  appointments: 'Salon, barber, clinic, studio. Today’s book, rooms, till close. Tick cooler or shelves if you restock product.',
   personal: 'Just you. Daily plan and wrap-up in WhatsApp — works in a 1:1 chat.',
-  other: 'Any other business — restaurant, gym, auto shop, contractor. Open and lock-up first; add the rest later.',
+  other: 'Other business — restaurant, gym, auto, contractor. Not UPS (pick Shipping) and not a salon (pick Appointments). Open and lock-up first; tick cooler, shelves, or a till if you have them.',
 };
 
 export const MAX_SHIFTS = 4;
@@ -93,6 +93,8 @@ export const StoreSetupSchema = z
       .max(MAX_SHIFTS, `up to ${MAX_SHIFTS} shifts`),
     /** The store has fuel pumps (turns on the fuel standards). */
     fuel: z.boolean(),
+    /** Extra equipment this location has. Shop types also get cooler/shelves/restroom/till automatically. */
+    features: z.array(z.enum(STORE_FEATURES)).max(8).default([]),
   })
   .superRefine((s, ctx) => {
     const starts = s.shifts.map((x) => x.start);
@@ -117,13 +119,37 @@ export const StoreSetupSchema = z
       }
     }
   })
-  .transform((s) => ({
-    ...s,
-    opensAt: s.open24h ? null : s.opensAt,
-    closesAt: s.open24h ? null : s.closesAt,
-    shifts: [...s.shifts].sort((a, b) => (parseHHMM(a.start) as number) - (parseHHMM(b.start) as number)),
-  }));
+  .transform((s) => {
+    const features = Array.from(new Set(s.fuel ? [...s.features, 'fuel' as const] : s.features));
+    return {
+      ...s,
+      features,
+      opensAt: s.open24h ? null : s.opensAt,
+      closesAt: s.open24h ? null : s.closesAt,
+      shifts: [...s.shifts].sort((a, b) => (parseHHMM(a.start) as number) - (parseHHMM(b.start) as number)),
+    };
+  });
 export type StoreSetup = z.infer<typeof StoreSetupSchema>;
+
+const SHOP_TYPES: StoreType[] = ['seven_eleven', 'convenience', 'gas_station'];
+
+export function defaultFeatures(storeType: StoreType): StoreFeature[] {
+  if (storeType === 'appointments') return ['till', 'restroom'];
+  return [];
+}
+
+/** What this location actually has, including shop-floor defaults a c-store never has to tick. */
+export function featuresOn(setup: StoreSetup): Set<StoreFeature> {
+  const out = new Set<StoreFeature>(setup.features ?? []);
+  if (setup.fuel) out.add('fuel');
+  if (SHOP_TYPES.includes(setup.storeType)) {
+    out.add('cooler');
+    out.add('shelves');
+    out.add('restroom');
+    out.add('till');
+  }
+  return out;
+}
 
 /** What the setup form starts with for each kind of store. */
 export function defaultSetup(storeType: StoreType): StoreSetup {
@@ -140,6 +166,7 @@ export function defaultSetup(storeType: StoreType): StoreSetup {
         { name: 'Night', start: '22:00' },
       ],
       fuel: false,
+      features: defaultFeatures(storeType),
     };
   }
   const desk =
@@ -157,6 +184,7 @@ export function defaultSetup(storeType: StoreType): StoreSetup {
     closesAt: desk.closesAt,
     shifts: desk.shifts,
     fuel: storeType === 'gas_station',
+    features: defaultFeatures(storeType),
   };
 }
 
@@ -274,13 +302,14 @@ const SHOP_RECOMMENDED = new Set([
  * Office, salon, realty, shipping, personal, and “other” only tick a few on day one.
  * The rest stay on the list for Store admin — we do not invent a full ops pack for businesses we have not run.
  */
+const BILLS_MONTHLY = ['own-utility-bill', 'own-insurance'] as const;
 const MIN_RECOMMENDED: Record<string, Set<string>> = {
-  office: new Set(['own-coverage', 'own-meetings', 'own-lock-up']),
-  shipping: new Set(['own-who-on', 'own-packages', 'own-cutoff']),
-  real_estate: new Set(['own-showings', 'own-keys', 'own-lock-up']),
-  appointments: new Set(['own-appointments-today', 'own-rooms-ready', 'own-confirm-tomorrow', 'own-daily-close']),
-  personal: new Set(['own-today-plan', 'own-follow-ups', 'own-wrap-up']),
-  other: new Set(['own-open-desk', 'own-lock-up']),
+  office: new Set(['own-coverage', 'own-meetings', 'own-lock-up', ...BILLS_MONTHLY]),
+  shipping: new Set(['own-who-on', 'own-packages', 'own-cutoff', ...BILLS_MONTHLY]),
+  real_estate: new Set(['own-showings', 'own-keys', 'own-lock-up', ...BILLS_MONTHLY]),
+  appointments: new Set(['own-appointments-today', 'own-rooms-ready', 'own-confirm-tomorrow', 'own-daily-close', ...BILLS_MONTHLY]),
+  personal: new Set(['own-today-plan', 'own-follow-ups', 'own-wrap-up', ...BILLS_MONTHLY]),
+  other: new Set(['own-open-desk', 'own-lock-up', ...BILLS_MONTHLY]),
 };
 
 function isRecommended(preset: TaskPreset, setup: StoreSetup): boolean {
@@ -297,8 +326,9 @@ function isRecommended(preset: TaskPreset, setup: StoreSetup): boolean {
 
 /** The starter tasks that fit this store, with times placed around its shifts and hours. */
 export function suggestTasks(setup: StoreSetup, presets: TaskPreset[] = presetsForStore(setup.storeType)): Suggestion[] {
+  const has = featuresOn(setup);
   return presets
-    .filter((p) => !p.requires || (p.requires === 'fuel' && setup.fuel))
+    .filter((p) => !p.requires || has.has(p.requires))
     .map((p) => {
       const placed = place(p.template, setup);
       const template = TaskTemplateInputSchema.parse({ ...p.template, ...placed });

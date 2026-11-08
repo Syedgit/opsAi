@@ -117,6 +117,16 @@ describe('TaskTemplateInputSchema', () => {
     });
   });
 
+  it('accepts bills as a category and monthly on the 1st', () => {
+    expect(TaskTemplateInputSchema.parse({
+      title: 'Utility bills due',
+      category: 'bills',
+      startTime: '10:00',
+      frequency: 'monthly',
+      monthDays: [1],
+    })).toMatchObject({ category: 'bills', frequency: 'monthly', monthDays: [1] });
+  });
+
   it('pads a single-digit hour, trims, and sorts and de-duplicates days', () => {
     const t = TaskTemplateInputSchema.parse({ ...ok, title: '  Clean  ', startTime: '9:05', daysOfWeek: [5, 1, 1, 3] });
     expect(t).toMatchObject({ title: 'Clean', startTime: '09:05', daysOfWeek: [1, 3, 5] });

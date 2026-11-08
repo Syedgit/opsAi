@@ -78,6 +78,22 @@
       "destination": "/api/stores/index.ts"
     },
     {
+      "source": "/pricing",
+      "destination": "/pricing.html"
+    },
+    {
+      "source": "/billing",
+      "destination": "/billing.html"
+    },
+    {
+      "source": "/api/billing",
+      "destination": "/api/billing/index.ts"
+    },
+    {
+      "source": "/api/webhook/stripe",
+      "destination": "/api/webhook/stripe.ts"
+    },
+    {
       "source": "/tasks",
       "destination": "/tasks.html"
     },
