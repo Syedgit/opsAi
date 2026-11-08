@@ -72,7 +72,7 @@ describe('deposit rule inference', () => {
     expect(rules).toEqual([
       { includeCardSales: true, includeFuelSales: true, subtractPayouts: true, floatLeftInRegister: 0 },
     ]);
-    expect(describeDepositRule(rules[0])).toBe('card + cash + gas − vendor payouts');
+    expect(describeDepositRule(rules[0])).toBe('card + cash + gas − payouts');
   });
 
   it('finds a different rule for Denville (cash + gas, card not deposited)', () => {
@@ -155,6 +155,35 @@ describe('checkDailyClose', () => {
     expect(check?.expected).toBe(898);
     expect(check?.actual).toBe(875);
     expect(check?.difference).toBe(-23);
+  });
+
+  it('does not treat Cash Acceptor Cash as inside sales on a POS fuel close', () => {
+    const checks = checkDailyClose(
+      report({
+        storeHint: 'Denville Exxon',
+        cardSales: 0,
+        cashSales: 765.14,
+        storeSalesTotal: 0,
+        fuelSales: 6088.32,
+      }),
+    );
+    expect(checks.find((c) => c.id === 'store_sales_sum')).toBeUndefined();
+  });
+
+  it('deducts invoice and paid-out from Cash Acceptor Cash without changing the cash figure', () => {
+    const checks = checkDailyClose(
+      report({
+        cashSales: 765.14,
+        payouts: [
+          { label: 'Pepsi invoice', amount: 184.2 },
+          { label: 'salary paidout', amount: 200 },
+        ],
+      }),
+    );
+    const leftover = checks.find((c) => c.id === 'cash_after_payouts');
+    expect(leftover?.status).toBe('pass');
+    expect(leftover?.expected).toBe(380.94);
+    expect(leftover?.actual).toBe(765.14);
   });
 
   it('flags a deposit that no usual rule explains', () => {

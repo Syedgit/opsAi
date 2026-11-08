@@ -4,6 +4,7 @@ import { applyGroupLifecycleEvent } from '../../lib/whatsappGroupLifecycle';
 import { waitUntil } from '@vercel/functions';
 import { readRawBody, verifyRawWhatsAppSignature } from '../../lib/whatsappSignature';
 import { processWhatsAppMessage } from '../../lib/processWhatsAppMessage';
+import { whatsappInboundParts } from '../../lib/whatsappInbound';
 import { logApp, logAppError, loggedHandler, maskPhone, serializeError } from '../../lib/requestLog';
 
 const prisma = new PrismaClient();
@@ -82,22 +83,16 @@ async function processWebhookBody(body: any) {
             for (const message of value.messages) {
               const messageId = message.id as string;
               const phoneE164 = `+${message.from}`;
-              const messageType = message.type as string;
-              const text = (message.text as { body?: string } | undefined)?.body || '';
               const groupId = (message as { group_id?: string }).group_id ?? null;
-              const image = message.image as { id?: string; caption?: string } | undefined;
-              const audio = message.audio as { id?: string } | undefined;
-              const mediaId = image?.id || audio?.id;
-              // A photo's caption is the sender's own description of it.
-              const messageText = text || image?.caption || '';
+              const inbound = whatsappInboundParts(message);
 
               try {
                 await processWhatsAppMessage(prisma, {
                   messageId,
                   phoneE164,
-                  messageText: messageText || undefined,
-                  mediaId: mediaId || undefined,
-                  mediaType: messageType === 'image' ? 'image/jpeg' : messageType,
+                  messageText: inbound.messageText || undefined,
+                  mediaId: inbound.mediaId,
+                  mediaType: inbound.mediaType,
                   groupId,
                   phoneNumberId,
                 });

@@ -2,10 +2,18 @@ import { sign } from 'jsonwebtoken';
 
 const findFirst = jest.fn();
 const findMany = jest.fn();
+const storeFindUnique = jest.fn();
+const directoryFindMany = jest.fn();
+const userStoreFindMany = jest.fn();
 
 jest.mock('@prisma/client', () => ({
   PrismaClient: function PrismaClient() {
-    return { userStore: { findFirst }, pendingActions: { findMany } };
+    return {
+      userStore: { findFirst, findMany: userStoreFindMany },
+      pendingActions: { findMany },
+      storeConfig: { findUnique: storeFindUnique },
+      userDirectory: { findMany: directoryFindMany, findFirst: jest.fn().mockResolvedValue(null) },
+    };
   },
 }));
 
@@ -36,6 +44,9 @@ const row = (kind: string, id: string) => ({ actionId: id, createdAt: new Date()
 describe('Schedule tab data', () => {
   beforeEach(() => {
     findMany.mockReset().mockResolvedValue([row('deposit_receipt', 'd1'), row('work_schedule', 's1'), row('work_schedule', 's2')]);
+    storeFindUnique.mockReset().mockResolvedValue({ timezone: 'America/New_York', storeName: 'Rockaway' });
+    directoryFindMany.mockReset().mockResolvedValue([]);
+    userStoreFindMany.mockReset().mockResolvedValue([]);
   });
 
   it('is refused for staff', async () => {
@@ -50,6 +61,8 @@ describe('Schedule tab data', () => {
     const { status, body } = await call('schedules');
     expect(status).toBe(200);
     expect((body.schedules as Array<{ id: string }>).map((r) => r.id)).toEqual(['s1', 's2']);
+    expect(body.weekStart).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(body.people).toEqual([]);
     expect(findMany.mock.calls[0][0].where).toMatchObject({ storeId: 'S001', type: 'UNKNOWN', status: 'CONFIRMED' });
   });
 

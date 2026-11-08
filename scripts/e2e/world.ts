@@ -160,6 +160,7 @@ function freshDb(
       labelAliases: {},
       vendorAliases: {},
       messageSamples: {},
+      pictureTemplates: [],
       vendors,
     };
   };

@@ -1,9 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
 import { startOfDay, endOfDay, startOfMonth, endOfMonth } from 'date-fns';
-import { requireAuthUser } from '../../lib/apiAuth';
+import { getAuthUser, requireAuthUser } from '../../lib/apiAuth';
 import { requireStoreAccess, isMockRequested } from '../../lib/storeAccess';
+import { getGroupSetupMode, isGroupAutoProvisionEnabled } from '../../lib/whatsappGroupConfig';
 import { logAppError, loggedHandler, serializeError } from '../../lib/requestLog';
+import { readStoredSetup } from '../../lib/tasks/storeSetup';
+import { dashboardModules } from '../../lib/businessProfile';
 
 const prisma = new PrismaClient();
 
@@ -13,6 +16,7 @@ const prisma = new PrismaClient();
  * GET /api/stores/dashboard - Dashboard stats
  * GET /api/stores/data - Get data by type
  * GET /api/stores/detail - Get item detail
+ * GET /api/stores/:storeId/whatsapp-group-provision - ops group link status
  */
 async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   const path = req.url?.split('?')[0] || '';
@@ -20,6 +24,11 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   const type = (req.query.type as string) || 'sales';
   const id = req.query.id as string;
   const useMock = isMockRequested(req);
+
+  if (path.includes('whatsapp-group-provision')) {
+    await sendWhatsAppGroupStatus(req, res, path);
+    return;
+  }
 
   // List stores
   if (path.endsWith('/stores') && !path.includes('/dashboard') && !path.includes('/data') && !path.includes('/detail')) {
@@ -41,17 +50,22 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
 
       const userStores = await prisma.userStore.findMany({
         where: { userId: authUser.userId },
-        include: { store: { select: { storeId: true, storeName: true, timezone: true, active: true } } },
+        include: { store: { select: { storeId: true, storeName: true, timezone: true, active: true, setupJson: true } } },
       });
       const stores = userStores
         .filter((us) => us.store.active)
-        .map((us) => ({
-          storeId: us.store.storeId,
-          storeName: us.store.storeName,
-          timezone: us.store.timezone,
-          active: us.store.active,
-          role: us.role,
-        }));
+        .map((us) => {
+          const setup = readStoredSetup(us.store.setupJson);
+          return {
+            storeId: us.store.storeId,
+            storeName: us.store.storeName,
+            timezone: us.store.timezone,
+            active: us.store.active,
+            role: us.role,
+            storeType: setup?.storeType ?? null,
+            modules: dashboardModules(setup?.storeType ?? null, setup?.fuel),
+          };
+        });
       res.json({ stores });
     } catch (error: unknown) {
       logAppError('stores', serializeError(error));
@@ -169,3 +183,67 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
 }
 
 export default loggedHandler('stores', handler);
+
+async function sendWhatsAppGroupStatus(req: VercelRequest, res: VercelResponse, path: string): Promise<void> {
+  if (req.method !== 'GET') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+  const fromPath = path.match(/\/stores\/([^/]+)\/whatsapp-group-provision/i);
+  const storeId = String(req.query.storeId || fromPath?.[1] || '').toUpperCase();
+  if (!storeId) {
+    res.status(400).json({ error: 'storeId required' });
+    return;
+  }
+  const authUser = getAuthUser(req);
+  if (!authUser) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+  const member = await prisma.userStore.findFirst({
+    where: { userId: authUser.userId, storeId },
+  });
+  if (!member) {
+    res.status(403).json({ error: 'Not a member of this store' });
+    return;
+  }
+
+  let provision = null;
+  let activeGroups: Array<{ id: string; whatsappGroupId: string; createdAt: Date }> = [];
+  try {
+    provision = await prisma.whatsAppGroupProvision.findFirst({
+      where: { storeId },
+      orderBy: { updatedAt: 'desc' },
+    });
+  } catch (error) {
+    logAppError('stores.whatsapp_group.provision', serializeError(error));
+  }
+  try {
+    activeGroups = await prisma.storeWhatsAppGroup.findMany({
+      where: { storeId, active: true },
+      select: { id: true, whatsappGroupId: true, createdAt: true },
+    });
+  } catch (error) {
+    logAppError('stores.whatsapp_group.groups', serializeError(error));
+  }
+
+  res.json({
+    success: true,
+    groupSetupMode: getGroupSetupMode(),
+    autoProvisionEnabled: isGroupAutoProvisionEnabled(),
+    provision: provision
+      ? {
+          id: provision.id,
+          status: provision.status,
+          subject: provision.subject,
+          description: provision.description,
+          metaRequestId: provision.metaRequestId,
+          whatsappGroupId: provision.whatsappGroupId,
+          inviteLink: provision.inviteLink,
+          lastError: provision.lastError,
+          updatedAt: provision.updatedAt,
+        }
+      : null,
+    activeGroups,
+  });
+}

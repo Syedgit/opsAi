@@ -57,6 +57,11 @@
         .preset input { margin-top: 3px; }
         .vendor-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
         .vendor-row input, .vendor-row select { flex: 1; }
+        .pic-preset { display: inline-block; margin: 0 6px 6px 0; }
+        .pic-field { display: grid; grid-template-columns: 1.4fr 1fr 1fr auto; gap: 6px; margin-bottom: 6px; align-items: center; }
+        .pic-map { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 8px 0; font-size: 13px; }
+        .pic-map .row { justify-content: space-between; }
+        @media (max-width: 720px) { .pic-field { grid-template-columns: 1fr; } }
         html { scroll-behavior: smooth; }
         .admin-lead { font-size: 14px; color: var(--light); line-height: 1.45; margin-bottom: 14px; max-width: 740px; }
         .admin-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; }
@@ -425,7 +430,7 @@
             '</form></div>';
     }
 
-    const STORE_TYPES = { seven_eleven: '7-Eleven', convenience: 'Convenience store', gas_station: 'Gas station', other: 'Other business' };
+    const STORE_TYPES = { seven_eleven: '7-Eleven', convenience: 'Convenience store', gas_station: 'Gas station', office: 'Office', shipping: 'Shipping / UPS-style', real_estate: 'Real estate', appointments: 'Appointments / salon / clinic', personal: 'Personal / solo', other: 'Other business' };
 
     // The store's shifts and hours are what place the starter tasks. Until they are set, point the owner at the setup steps.
     const SUGGESTED_VENDORS = [{ name: 'HLA', category: 'cigarettes' }, { name: 'ABC', category: 'drinks' }, { name: 'RPS', category: 'auto' }];
@@ -443,6 +448,7 @@
     }
 
     function vendorsCard() {
+        if (board.modules && board.modules.vendors === false) return '';
         const list = (board.vendors && board.vendors.length) ? board.vendors : (board.canEdit ? SUGGESTED_VENDORS : []);
         if (!board.canEdit && list.length === 0) return '';
         const rows = list.map(function (v, i) {
@@ -460,18 +466,96 @@
     }
 
     function samplesCard() {
+        if (board.modules && board.modules.samples === false) return '';
         const s = board.messageSamples || {};
         if (!board.canEdit && !s.dailyClose && !s.invoice) return '';
+        const storeLabel = esc(board.storeName || 'this store');
+        const gasClose = board.modules && (board.modules.fuel || board.modules.fuelOption);
+        const closeHelp = gasClose
+            ? 'Same pattern as Rockaway and most gas stations. Attach the POS Store Close for ' + storeLabel + '. Fuel is Total Fuel Sales. Non-fuel, if any, is store credit. Cash is Cash Acceptor Cash on the tender page. Invoice paid from the till or a cash paid-out comes off that cash. The file is not kept.'
+            : 'Attach a typical close photo or type the labels you use. We keep the wording — the file is not stored.';
+        const maps = board.pictureTemplates || [];
+        const mapList = maps.length
+            ? maps.map(function (t) {
+                return '<div class="pic-map"><div class="row"><strong>' + esc(t.title) + '</strong>' +
+                    (board.canEdit ? '<button type="button" class="small danger" data-delete-pic="' + esc(t.id) + '">Remove</button>' : '') +
+                    '</div><div class="muted">' + esc(picSummary(t)) + '</div></div>';
+            }).join('')
+            : '<p class="muted">No picture map yet. Add one so WhatsApp photos use this store’s lines.</p>';
+        const editor = board.canEdit ? pictureMapEditor() : '';
         return '<div class="card"><h2>Report samples</h2>' +
-            '<p class="muted card-help">Paste a typical close or invoice. opsAi uses it as this store’s template. Photos of POS screens still go in the group — this box is the wording, not the file.</p>' +
+            '<p class="muted card-help">Teach opsAi how ' + storeLabel + ' reports. Pick this store in the list above, then paste a message or attach the picture you actually send.</p>' +
             (board.canEdit
                 ? '<form id="samplesForm"><label>Typical daily close</label><textarea name="dailyClose" maxlength="2000" placeholder="Rockaway cash 106 card 334 gas 1355 deposit 1653">' + esc(s.dailyClose || '') + '</textarea>' +
+                  '<p class="muted" style="margin: 6px 0 8px;">' + closeHelp + '</p>' +
+                  '<input type="file" id="sampleClosePhoto" accept="image/jpeg,image/png,image/webp,image/gif">' +
                   '<label style="margin-top: 10px;">Typical invoice</label><textarea name="invoice" maxlength="2000" placeholder="Pepsi invoice 184.20 paid cash">' + esc(s.invoice || '') + '</textarea>' +
-                  '<p class="muted" style="margin: 6px 0 8px;">Type a typical message, or attach a photo. We read the photo and keep the wording — the file is not stored.</p>' +
+                  '<p class="muted" style="margin: 6px 0 8px;">Type a typical invoice, or attach a photo. We read it and keep the wording — the file is not stored.</p>' +
                   '<input type="file" id="sampleInvoicePhoto" accept="image/jpeg,image/png,image/webp,image/gif">' +
                   '<div style="margin-top: 10px;"><button type="submit" class="primary">Save samples</button></div></form>'
                 : '<div class="muted">' + (s.dailyClose ? '<p>' + esc(s.dailyClose) + '</p>' : '') + (s.invoice ? '<p>' + esc(s.invoice) + '</p>' : '') + '</div>') +
+            '<h3 style="font-size:15px;margin:18px 0 8px;">Picture maps</h3>' +
+            '<p class="muted" style="margin-bottom:8px;">Upload a close photo, pick a known layout, then mark what to take and what to ignore. Fuel page and tender page are two maps. The file is not stored — only the map is.</p>' +
+            mapList + editor +
             '</div>';
+    }
+
+    function purposeLabel(id) {
+        const list = board.picturePurposes || [];
+        const hit = list.find(function (p) { return p.id === id; });
+        return hit ? hit.label : id;
+    }
+
+    function picSummary(t) {
+        const takes = (t.fields || []).filter(function (f) { return f.purpose !== 'ignore'; })
+            .map(function (f) { return f.label + ' → ' + purposeLabel(f.purpose); });
+        const ignores = (t.fields || []).filter(function (f) { return f.purpose === 'ignore'; }).map(function (f) { return f.label; });
+        const parts = takes.slice();
+        if (ignores.length) parts.push('ignore ' + ignores.join(', '));
+        if (t.note) parts.push(t.note);
+        return parts.join(' · ');
+    }
+
+    function purposeSelect(selected) {
+        return (board.picturePurposes || [
+            { id: 'fuel', label: 'Fuel' },
+            { id: 'store_credit', label: 'Store credit (inside card)' },
+            { id: 'cash', label: 'Cash (acceptor / till)' },
+            { id: 'payout', label: 'Comes off cash (invoice / paid-out)' },
+            { id: 'ignore', label: 'Ignore (not today’s sales)' },
+        ]).map(function (p) {
+            return '<option value="' + esc(p.id) + '"' + (p.id === selected ? ' selected' : '') + '>' + esc(p.label) + '</option>';
+        }).join('');
+    }
+
+    function picFieldRow(field) {
+        field = field || { label: '', purpose: 'fuel', note: '' };
+        return '<div class="pic-field" data-pic-field>' +
+            '<input type="text" maxlength="80" placeholder="Line on the page" value="' + esc(field.label || '') + '">' +
+            '<select>' + purposeSelect(field.purpose || 'fuel') + '</select>' +
+            '<input type="text" maxlength="120" placeholder="Optional hint" value="' + esc(field.note || '') + '">' +
+            '<button type="button" class="small" data-remove-pic-field>Remove</button></div>';
+    }
+
+    function pictureMapEditor() {
+        const presets = board.pictureTemplatePresets || [];
+        const chips = presets.map(function (p) {
+            return '<button type="button" class="small pic-preset" data-pic-preset="' + esc(p.id) + '">' + esc(p.title) + '</button>';
+        }).join('');
+        return '<form id="pictureMapForm" style="margin-top:12px;">' +
+            '<label>Photo (preview only — not saved)</label>' +
+            '<input type="file" id="picMapPhoto" accept="image/jpeg,image/png,image/webp,image/gif">' +
+            '<img id="picMapPreview" alt="" style="display:none;max-width:240px;margin:8px 0;border-radius:8px;border:1px solid var(--border);">' +
+            '<p class="muted" style="margin:8px 0;">Start from a known layout, then change the labels to match this store’s screen.</p>' +
+            chips +
+            '<label style="margin-top:10px;">Name of this page</label>' +
+            '<input type="text" id="picMapTitle" maxlength="80" placeholder="Exxon Store Close (fuel page)">' +
+            '<label style="margin-top:8px;">What to take</label>' +
+            '<div id="picFieldList">' + picFieldRow() + '</div>' +
+            '<button type="button" class="small" id="addPicFieldBtn">+ Add line</button>' +
+            '<label style="margin-top:10px;">One sentence for the reader (optional)</label>' +
+            '<textarea id="picMapNote" maxlength="400" placeholder="Cash is the acceptor line, not the Cash row."></textarea>' +
+            '<div style="margin-top:10px;"><button type="submit" class="primary">Save picture map</button></div></form>';
     }
 
     const TEAM_ROLES = { OWNER: 'Owner', MANAGER: 'Manager', STAFF: 'Staff' };
@@ -544,9 +628,15 @@
         return html + '</div>';
     }
 
+    function addStoreCard() {
+        if (!board.canManageOwners) return '';
+        return '<div class="card"><h2>Add another store</h2><p class="muted card-help">Same login and WhatsApp number. Each location gets its own ID (S001, S002) and name. Give it its own ops group, or name the store in the message if one group covers more than one location.</p>' +
+            '<a href="/onboarding?add=1"><button type="button" class="primary">Add another store</button></a></div>';
+    }
+
     function removeStoreCard() {
         if (!board.canManageOwners) return '';
-        return '<div class="card danger-card"><h2>Remove this store</h2><p class="muted card-help">Takes it off the dashboard. Past reports stay. You can add a new store from the dashboard.</p>' +
+        return '<div class="card danger-card"><h2>Remove this store</h2><p class="muted card-help">Takes it off the dashboard. Past reports stay. You can add a new store from Store admin or the dashboard.</p>' +
             '<button class="danger" data-deactivate-store>Remove store</button></div>';
     }
 
@@ -624,7 +714,7 @@
             html += '<section class="admin-section" id="admin-people"><div class="admin-kicker">People</div>' + peopleGrid + '</section>';
         }
 
-        html += '<section class="admin-section" id="admin-store"><div class="admin-kicker">Store</div><div class="admin-grid">' + setupCard() + removeStoreCard() + '</div></section>';
+        html += '<section class="admin-section" id="admin-store"><div class="admin-kicker">Store</div><div class="admin-grid">' + setupCard() + addStoreCard() + removeStoreCard() + '</div></section>';
 
         if (ordersGrid) {
             html += '<section class="admin-section" id="admin-orders"><div class="admin-kicker">Orders and reports</div>' + ordersGrid + '</section>';
@@ -650,7 +740,7 @@
         if (board.canEdit) {
             html += '<section class="admin-section" id="admin-add"><div class="admin-kicker">Add more</div><div class="card"><h2>' +
                 (isSevenEleven() ? 'Starter reminders and 7Clean' : 'Starter reminders') + '</h2>' +
-                '<p class="muted card-help">Tick only reminders that are not on this store yet. After you add them they leave this list and show above, where you can edit times.</p>';
+                '<p class="muted card-help">Onboarding only turned on a few for office, salon, and other businesses. Tick more here anytime. After you add them they leave this list and show above, where you can edit times.</p>';
             html += (board.features || []).map(function (f) {
                     return '<label style="color: var(--text); font-size: 14px; margin-bottom: 10px;"><input type="checkbox" data-feature="' + esc(f.id) + '"' + (features[f.id] ? ' checked' : '') + '> ' + esc(f.label) + '</label>';
                 }).join('');
@@ -832,6 +922,35 @@
             render();
             return;
         }
+        if (el.dataset.deletePic) {
+            if (!confirm('Remove this picture map? Later photos will not use those lines.')) return;
+            if (await act({ action: 'delete_picture_template', id: el.dataset.deletePic }, 'Picture map removed.')) load();
+            return;
+        }
+        if (el.dataset.picPreset) {
+            const preset = (board.pictureTemplatePresets || []).find(function (p) { return p.id === el.dataset.picPreset; });
+            if (!preset) return;
+            const title = document.getElementById('picMapTitle');
+            const note = document.getElementById('picMapNote');
+            const list = document.getElementById('picFieldList');
+            if (title) title.value = preset.title;
+            if (note) note.value = preset.note || '';
+            if (list) list.innerHTML = (preset.fields || []).map(picFieldRow).join('') || picFieldRow();
+            return;
+        }
+        if (el.id === 'addPicFieldBtn') {
+            const list = document.getElementById('picFieldList');
+            if (!list) return;
+            if (list.querySelectorAll('[data-pic-field]').length >= 8) { note('err', 'A picture map can have up to 8 lines.'); return; }
+            list.insertAdjacentHTML('beforeend', picFieldRow());
+            return;
+        }
+        if (el.dataset.removePicField !== undefined) {
+            const row = el.closest('[data-pic-field]');
+            const list = document.getElementById('picFieldList');
+            if (row && list && list.querySelectorAll('[data-pic-field]').length > 1) row.remove();
+            return;
+        }
         if (el.hasAttribute('data-import')) {
             const ids = Array.prototype.map.call(document.querySelectorAll('[data-preset]:checked'), function (c) { return c.dataset.preset; });
             if (ids.length === 0) { note('err', 'Tick at least one starter task.'); return; }
@@ -865,6 +984,15 @@
     });
 
     document.addEventListener('change', function (e) {
+        if (e.target.id === 'picMapPhoto') {
+            const file = e.target.files && e.target.files[0];
+            const preview = document.getElementById('picMapPreview');
+            if (!preview) return;
+            if (!file) { preview.style.display = 'none'; preview.removeAttribute('src'); return; }
+            preview.src = URL.createObjectURL(file);
+            preview.style.display = 'block';
+            return;
+        }
         if (e.target.id === 'reportFile') {
             const file = e.target.files && e.target.files[0];
             if (file) previewReport(file);
@@ -916,28 +1044,54 @@
             if (await act({ action: 'save_vendors', vendors: vendors }, 'Vendors saved. The next order photo or list will ask the group to confirm the vendor.')) load();
             return;
         }
+        if (e.target.id === 'pictureMapForm') {
+            e.preventDefault();
+            const list = document.getElementById('picFieldList');
+            const fields = list ? Array.prototype.map.call(list.querySelectorAll('[data-pic-field]'), function (row) {
+                const inputs = row.querySelectorAll('input, select');
+                return { label: inputs[0] ? inputs[0].value : '', purpose: inputs[1] ? inputs[1].value : 'ignore', note: inputs[2] ? inputs[2].value : '' };
+            }).filter(function (f) { return f.label.trim(); }) : [];
+            const title = (document.getElementById('picMapTitle') || {}).value || '';
+            const picNote = (document.getElementById('picMapNote') || {}).value || '';
+            if (await act({
+                action: 'save_picture_template',
+                template: { kind: 'daily_close', title: title, note: picNote, fields: fields },
+            }, function (r) {
+                return r.summary ? 'Picture map saved. ' + r.summary : 'Picture map saved for this store.';
+            })) load();
+            return;
+        }
         if (e.target.id === 'samplesForm') {
             e.preventDefault();
             const f = new FormData(e.target);
-            const photoInput = document.getElementById('sampleInvoicePhoto');
-            const file = photoInput && photoInput.files && photoInput.files[0];
+            const closeInput = document.getElementById('sampleClosePhoto');
+            const invoiceInput = document.getElementById('sampleInvoicePhoto');
+            const closeFile = closeInput && closeInput.files && closeInput.files[0];
+            const invoiceFile = invoiceInput && invoiceInput.files && invoiceInput.files[0];
             const body = { action: 'save_samples', dailyClose: f.get('dailyClose') || '', invoice: f.get('invoice') || '' };
             try {
-                if (file) {
-                    if (file.size > MAX_REPORT_BYTES) throw new Error('Photo must be under 2.5 MB.');
-                    if (!/^image\/(jpeg|png|webp|gif)$/i.test(file.type)) throw new Error('Use a JPEG, PNG, or WebP photo.');
+                if (closeFile) {
+                    if (closeFile.size > MAX_REPORT_BYTES) throw new Error('Photo must be under 2.5 MB.');
+                    if (!/^image\/(jpeg|png|webp|gif)$/i.test(closeFile.type)) throw new Error('Use a JPEG, PNG, or WebP photo.');
+                    note('info', 'Reading Store Close photo…');
+                    body.dailyCloseImage = await readFileAsBase64(closeFile);
+                    body.dailyCloseMime = closeFile.type;
+                }
+                if (invoiceFile) {
+                    if (invoiceFile.size > MAX_REPORT_BYTES) throw new Error('Photo must be under 2.5 MB.');
+                    if (!/^image\/(jpeg|png|webp|gif)$/i.test(invoiceFile.type)) throw new Error('Use a JPEG, PNG, or WebP photo.');
                     note('info', 'Reading invoice photo…');
-                    body.invoiceImage = await readFileAsBase64(file);
-                    body.invoiceMime = file.type;
+                    body.invoiceImage = await readFileAsBase64(invoiceFile);
+                    body.invoiceMime = invoiceFile.type;
                 }
             } catch (err) {
                 note('err', err.message);
                 return;
             }
             const saved = await act(body, function (r) {
-                return r.invoiceSample
-                    ? 'Samples saved. Invoice wording: ' + r.invoiceSample
-                    : 'Samples saved. The next WhatsApp close is read against this wording.';
+                if (r.dailyCloseSample) return 'Samples saved for this store. Close wording: ' + r.dailyCloseSample;
+                if (r.invoiceSample) return 'Samples saved. Invoice wording: ' + r.invoiceSample;
+                return 'Samples saved. The next WhatsApp close is read against this wording.';
             });
             if (saved) load();
             return;

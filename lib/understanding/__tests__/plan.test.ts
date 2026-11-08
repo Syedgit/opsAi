@@ -59,7 +59,7 @@ describe('planUnderstanding: daily close', () => {
 
   it('confirms each deposit against the numbers without any configured rule', () => {
     const plan = planUnderstanding(twoStoreText, ctx);
-    expect(plan.entries[0].lines.join('\n')).toContain('✅ Deposit matches: card + cash + gas − vendor payouts.');
+    expect(plan.entries[0].lines.join('\n')).toContain('✅ Deposit matches: card + cash + gas − payouts.');
     expect(plan.entries[1].lines.join('\n')).toContain('✅ Deposit matches: cash + gas.');
   });
 
@@ -437,7 +437,7 @@ describe('deposit rule suggestion (learn by asking once)', () => {
       subtractPayouts: true,
       floatLeftInRegister: 0,
     });
-    expect(rockaway.lines.join('\n')).toContain("OK also teaches me Rockaway's deposit rule (card + cash + gas − vendor payouts)");
+    expect(rockaway.lines.join('\n')).toContain("OK also teaches me Rockaway's deposit rule (card + cash + gas − payouts)");
     // Each store gets its own rule.
     expect(denville.payload.suggested_deposit_rule).toMatchObject({ includeCardSales: false, includeFuelSales: true });
   });

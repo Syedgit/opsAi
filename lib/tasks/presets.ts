@@ -19,7 +19,7 @@ import { TaskTemplateInputSchema } from './schedule';
 export type StoreFeature = 'fuel';
 
 /** Same values as the setup form's store types (kept here so presets do not depend on the setup code). */
-export type StoreKind = 'seven_eleven' | 'convenience' | 'gas_station' | 'other';
+export type StoreKind = 'seven_eleven' | 'convenience' | 'gas_station' | 'office' | 'shipping' | 'real_estate' | 'appointments' | 'personal' | 'other';
 
 export const STORE_FEATURE_LABEL: Record<StoreFeature, string> = {
   fuel: 'This store has fuel pumps',
@@ -83,7 +83,13 @@ const OWN = 'Everyday routines';
 const REPORTS = 'Daily reports';
 const STATION = 'Pumps and forecourt';
 const SEVEN: StoreKind[] = ['seven_eleven'];
-const NOT_711: StoreKind[] = ['convenience', 'gas_station', 'other'];
+/** C-store / gas shop floor — not a generic “other” business. */
+const SHOP: StoreKind[] = ['convenience', 'gas_station'];
+const NOT_711: StoreKind[] = ['convenience', 'gas_station'];
+const DESK: StoreKind[] = ['office', 'shipping', 'real_estate', 'appointments', 'personal', 'other'];
+const RETAIL: StoreKind[] = ['seven_eleven', 'convenience', 'gas_station', 'other'];
+const SERVICE: StoreKind[] = ['appointments'];
+const GENERIC: StoreKind[] = ['other'];
 
 export const TASK_PRESETS: TaskPreset[] = [
   // ---------- Food Safety ----------
@@ -255,7 +261,7 @@ export const TASK_PRESETS: TaskPreset[] = [
     category: 'interior_cleanliness', shift: 'Night', points: 3,
     title: 'Mop the sales floor',
     startTime: '03:00', evidence: 'photo',
-  }),
+  }, undefined, [...SEVEN, ...SHOP]),
 
   // ---------- Daily reports the team must send (any kind of store) ----------
   preset('own-daily-close', REPORTS, 'suggested', {
@@ -263,13 +269,13 @@ export const TASK_PRESETS: TaskPreset[] = [
     title: 'Send the daily close report',
     instructions: 'In the ops group, send yesterday’s cash, card, gas, payouts and deposit. A photo of the POS close screen is fine. Reply OK after opsAi reads it.',
     startTime: '22:00', evidence: 'either',
-  }),
+  }, undefined, [...RETAIL, ...SERVICE]),
   preset('own-deposit', REPORTS, 'suggested', {
     category: 'reports', shift: 'Morning', points: 3,
     title: 'Bank deposit done',
     instructions: 'Drop the deposit and send a photo of the slip, or reply with the amount.',
     startTime: '10:00', evidence: 'either',
-  }),
+  }, undefined, RETAIL),
   preset('own-competitor-prices', REPORTS, 'suggested', {
     category: 'reports', shift: 'Morning', points: 3,
     title: 'Send competitor gas prices',
@@ -281,7 +287,7 @@ export const TASK_PRESETS: TaskPreset[] = [
     title: 'Photo of today’s vendor invoices',
     instructions: 'Send a photo of each invoice that came in today. opsAi will read vendor, amount, and due date, and remind 3 days before payment is due.',
     startTime: '20:00', evidence: 'photo',
-  }),
+  }, undefined, RETAIL),
 
   // ---------- Everyday routines (not from the report) ----------
   preset('own-opening', OWN, 'suggested', {
@@ -295,7 +301,7 @@ export const TASK_PRESETS: TaskPreset[] = [
     title: 'Lottery / scratch-off count',
     instructions: 'Reply with the lottery sales or pack count for the shift.',
     startTime: '21:00', evidence: 'text',
-  }),
+  }, undefined, [...SEVEN, ...SHOP]),
   preset('own-cooler-temp', OWN, 'suggested', {
     category: 'equipment', shift: 'Every shift', points: 3,
     title: 'Walk-in / cooler temperature',
@@ -308,7 +314,7 @@ export const TASK_PRESETS: TaskPreset[] = [
     title: 'Check the coffee station',
     instructions: 'Fresh pots, lids, cups and stirrers stocked. Photo of the station.',
     startTime: '10:00', evidence: 'photo',
-  }),
+  }, undefined, [...SEVEN, ...SHOP]),
   preset('own-make-food', OWN, 'suggested', {
     category: 'proprietary_fresh', shift: 'Morning', points: 3,
     title: 'Make fresh food and stock the case',
@@ -326,7 +332,7 @@ export const TASK_PRESETS: TaskPreset[] = [
     title: 'Restock the shelves and coolers',
     instructions: 'Photo of the shelves and cooler doors after restocking.',
     startTime: '15:00', evidence: 'photo',
-  }),
+  }, undefined, [...SEVEN, ...SHOP, ...GENERIC]),
   preset('own-cycle-count', OWN, 'suggested', {
     category: 'inventory', shift: 'Second shift', points: 3,
     title: 'Cycle count',
@@ -338,7 +344,7 @@ export const TASK_PRESETS: TaskPreset[] = [
     title: 'Check fire extinguishers and the first-aid kit',
     instructions: 'Gauges in the green, tags in date, first-aid kit stocked. Photo of each extinguisher tag.',
     startTime: '10:30', evidence: 'photo',
-  }),
+  }, undefined, [...SEVEN, ...SHOP, ...GENERIC]),
   preset('own-cooler-deep-clean', OWN, 'suggested', {
     category: 'food_safety', shift: 'Every 2 weeks', frequency: 'interval', intervalDays: 14, points: 3,
     title: 'Deep-clean the walk-in cooler shelves',
@@ -349,7 +355,7 @@ export const TASK_PRESETS: TaskPreset[] = [
     category: 'safety', points: 3,
     title: 'Safe drop done',
     startTime: '16:00', evidence: 'none',
-  }),
+  }, undefined, [...SEVEN, ...SHOP]),
 
   // ---------- Simple routines for stores that are not a 7-Eleven (no inspection standard behind them) ----------
   preset('own-restroom-check', OWN, 'suggested', {
@@ -357,13 +363,13 @@ export const TASK_PRESETS: TaskPreset[] = [
     title: 'Restroom check',
     instructions: 'Soap, paper, bins and floor. Reply with a photo, or OK when all is good.',
     startTime: '08:00', endTime: '20:00', repeatEveryMinutes: 240, evidence: 'either',
-  }, undefined, NOT_711),
+  }, undefined, [...NOT_711, ...GENERIC]),
   preset('own-trash', OWN, 'suggested', {
     category: 'cleanliness', shift: 'End of shift', points: 3,
     title: 'Empty the trash and tidy outside',
     instructions: 'Inside and outside bins emptied, the area around the door swept. Photo when done.',
     startTime: '20:00', evidence: 'photo',
-  }, undefined, NOT_711),
+  }, undefined, [...NOT_711, ...GENERIC]),
   preset('own-fuel-islands', STATION, 'suggested', {
     category: 'exterior_cleanliness', shift: 'Morning', points: 3,
     title: 'Clean the pumps and fuel islands',
@@ -382,6 +388,121 @@ export const TASK_PRESETS: TaskPreset[] = [
     instructions: 'Spill kit stocked, the red emergency shut-off button clear and not blocked. Photo.',
     startTime: '09:30', evidence: 'photo',
   }, 'fuel', NOT_711),
+
+  preset('own-lock-up', OWN, 'suggested', {
+    category: 'safety', shift: 'End of shift', points: 3,
+    title: 'Lock up',
+    instructions: 'Doors locked, lights off, alarm set. Reply OK or what is still open.',
+    startTime: '18:00', evidence: 'text',
+  }, undefined, DESK),
+  preset('own-open-desk', OWN, 'suggested', {
+    category: 'safety', shift: 'Morning', points: 3,
+    title: 'Open up',
+    instructions: 'Lights on, doors unlocked, stations ready. Reply OK or what is not ready.',
+    startTime: '06:15', evidence: 'text',
+  }, undefined, DESK),
+  preset('own-coverage', OWN, 'suggested', {
+    category: 'customer_service', shift: 'Morning', points: 3,
+    title: 'Who is in today',
+    instructions: 'Post who is in the office and who is covering, or reply same as yesterday.',
+    startTime: '06:25', evidence: 'text',
+  }, undefined, ['office']),
+  preset('own-meetings', OWN, 'suggested', {
+    category: 'customer_service', shift: 'Morning', points: 3,
+    title: 'Today’s meetings',
+    instructions: 'Post today’s meeting times and rooms, or reply none.',
+    startTime: '06:35', evidence: 'text',
+  }, undefined, ['office']),
+  preset('own-mail', OWN, 'suggested', {
+    category: 'customer_service', shift: 'Every shift', points: 3,
+    title: 'Mail and packages',
+    instructions: 'Check the mail drop and held packages. Reply with the count, or none.',
+    startTime: '14:00', evidence: 'text',
+  }, undefined, ['office']),
+  preset('own-packages', OWN, 'suggested', {
+    category: 'customer_service', shift: 'Every shift', points: 3,
+    title: 'Held packages check',
+    instructions: 'Count held packages, pull anything past hold date, reply with the count.',
+    startTime: '11:00', evidence: 'text',
+  }, undefined, ['shipping']),
+  preset('own-who-on', OWN, 'suggested', {
+    category: 'customer_service', shift: 'Morning', points: 3,
+    title: 'Who is on the counter',
+    instructions: 'Post who is on the counter this shift.',
+    startTime: '06:20', evidence: 'text',
+  }, undefined, ['shipping']),
+  preset('own-cutoff', OWN, 'suggested', {
+    category: 'customer_service', shift: 'End of shift', points: 3,
+    title: 'Last drop-off cutoff',
+    instructions: 'Last outbound drop-off taken. Reply OK with the time, or what was turned away.',
+    startTime: '16:30', evidence: 'text',
+  }, undefined, ['shipping']),
+  preset('own-supplies', OWN, 'suggested', {
+    category: 'inventory', shift: 'Weekly', daysOfWeek: [1], points: 3,
+    title: 'Boxes, tape, labels',
+    instructions: 'Check packing supplies. Reply OK or what to reorder.',
+    startTime: '10:00', evidence: 'text',
+  }, undefined, ['shipping']),
+  preset('own-showings', OWN, 'suggested', {
+    category: 'customer_service', shift: 'Morning', points: 3,
+    title: 'Today’s showings',
+    instructions: 'Post today’s showing times and who is covering, or reply none.',
+    startTime: '06:25', evidence: 'text',
+  }, undefined, ['real_estate']),
+  preset('own-keys', OWN, 'suggested', {
+    category: 'safety', shift: 'Morning', points: 3,
+    title: 'Keys and lockbox',
+    instructions: 'Who has which keys or lockbox codes today. Reply with names, or none out.',
+    startTime: '06:35', evidence: 'text',
+  }, undefined, ['real_estate']),
+  preset('own-open-house', OWN, 'suggested', {
+    category: 'customer_service', shift: 'Weekly', daysOfWeek: [6], points: 3,
+    title: 'Open house prep',
+    instructions: 'Signs, flyers, and who is hosting. Reply ready or what is missing.',
+    startTime: '10:00', evidence: 'text',
+  }, undefined, ['real_estate']),
+  preset('own-appointments-today', OWN, 'suggested', {
+    category: 'customer_service', shift: 'Morning', points: 3,
+    title: 'Today’s appointments',
+    instructions: 'Post today’s book (times and who is with whom), or reply none.',
+    startTime: '06:25', evidence: 'text',
+  }, undefined, SERVICE),
+  preset('own-confirm-tomorrow', OWN, 'suggested', {
+    category: 'customer_service', shift: 'End of shift', points: 3,
+    title: 'Confirm tomorrow’s bookings',
+    instructions: 'Tomorrow’s appointments confirmed. Reply the count, or none.',
+    startTime: '16:30', evidence: 'text',
+  }, undefined, SERVICE),
+  preset('own-rooms-ready', OWN, 'suggested', {
+    category: 'cleanliness', shift: 'Morning', points: 3,
+    title: 'Rooms / chairs ready',
+    instructions: 'Stations or rooms set for the first appointments. Reply OK or what is not ready.',
+    startTime: '06:20', evidence: 'text',
+  }, undefined, SERVICE),
+  preset('own-no-shows', OWN, 'suggested', {
+    category: 'customer_service', shift: 'End of shift', points: 3,
+    title: 'No-shows today',
+    instructions: 'Reply with who did not show, or none.',
+    startTime: '17:00', evidence: 'text',
+  }, undefined, SERVICE),
+  preset('own-today-plan', OWN, 'suggested', {
+    category: 'customer_service', shift: 'Morning', points: 3,
+    title: 'Today’s plan',
+    instructions: 'Reply with the top three things to get done today.',
+    startTime: '06:20', evidence: 'text',
+  }, undefined, ['personal', 'other']),
+  preset('own-follow-ups', OWN, 'suggested', {
+    category: 'customer_service', shift: 'Morning', points: 3,
+    title: 'Follow-ups due',
+    instructions: 'Reply with who you need to call or message today, or none.',
+    startTime: '06:35', evidence: 'text',
+  }, undefined, ['personal', 'real_estate', 'other']),
+  preset('own-wrap-up', OWN, 'suggested', {
+    category: 'safety', shift: 'End of shift', points: 3,
+    title: 'Wrap up the day',
+    instructions: 'What got done and what moves to tomorrow. Reply with a short list.',
+    startTime: '17:30', evidence: 'text',
+  }, undefined, ['personal', 'other']),
 ];
 
 /**
@@ -391,6 +512,9 @@ export const TASK_PRESETS: TaskPreset[] = [
  */
 export function presetsForStore(kind: StoreKind | null): TaskPreset[] {
   if (kind === null) return TASK_PRESETS;
+  if (kind === 'office' || kind === 'shipping' || kind === 'real_estate' || kind === 'appointments' || kind === 'personal' || kind === 'other') {
+    return TASK_PRESETS.filter((p) => p.source === 'suggested' && p.stores?.includes(kind));
+  }
   return TASK_PRESETS.filter((p) => (kind === 'seven_eleven' || p.source === 'suggested') && (!p.stores || p.stores.includes(kind)));
 }
 

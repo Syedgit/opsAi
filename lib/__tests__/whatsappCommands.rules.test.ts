@@ -59,7 +59,7 @@ describe('OK learns the proposed deposit rule', () => {
     const result = await handleWhatsAppCommand(prisma, PHONE, 'OK');
     expect(update).toHaveBeenCalledTimes(1);
     expect(update.mock.calls[0][0].data.profileJson.depositRule).toEqual(rule);
-    expect(result.message).toContain('Remembered the deposit rule for Rockaway: card + cash + gas − vendor payouts');
+    expect(result.message).toContain('Remembered the deposit rule for Rockaway: card + cash + gas − payouts');
   });
 
   it('learns nothing when no rule was proposed', async () => {
@@ -188,7 +188,7 @@ describe('RULE command', () => {
   it('lists each store with its rule or "not set yet"', async () => {
     const { prisma } = makePrisma({ stores });
     const result = await handleWhatsAppCommand(prisma, PHONE, 'RULE');
-    expect(result.message).toContain('Rockaway: deposit = card + cash + gas − vendor payouts');
+    expect(result.message).toContain('Rockaway: deposit = card + cash + gas − payouts');
     expect(result.message).toContain('Denville: not set yet');
   });
 

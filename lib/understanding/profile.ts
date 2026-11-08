@@ -1,3 +1,4 @@
+import type { PictureTemplate } from './pictureTemplate';
 import type { StoreVendor } from './vendors';
 
 /**
@@ -30,6 +31,8 @@ export interface StoreProfile {
   vendorAliases: Record<string, string>;
   /** Owner-pasted examples of how this store actually messages on WhatsApp. */
   messageSamples: { dailyClose?: string; invoice?: string };
+  /** Owner-taught "take this line / ignore that line" maps for close photos. */
+  pictureTemplates: PictureTemplate[];
   /** Vendors this store orders from, set at signup (HLA = cigarettes, ABC = drinks, ...). */
   vendors: StoreVendor[];
 }
@@ -37,6 +40,13 @@ export interface StoreProfile {
 export type CanonicalLabel = 'card_sales' | 'cash_sales' | 'fuel_sales' | 'payout' | 'ignore';
 
 export const DEFAULT_TIMEZONE = 'America/New_York';
+
+/** Usual gas-station wording (Rockaway, Denville, and most Invenco/Gilbarco shops). */
+export const GAS_CLOSE_LABELS: Record<string, CanonicalLabel> = {
+  'store credit': 'card_sales',
+  'store cash': 'cash_sales',
+  'cash acceptor cash': 'cash_sales',
+};
 
 export function buildDefaultProfile(input: {
   storeId: string;
@@ -49,9 +59,10 @@ export function buildDefaultProfile(input: {
     aliases: [],
     timezone: input.timezone?.trim() || DEFAULT_TIMEZONE,
     depositRule: null,
-    labelAliases: {},
+    labelAliases: { ...GAS_CLOSE_LABELS },
     vendorAliases: {},
     messageSamples: {},
+    pictureTemplates: [],
     vendors: [],
   };
 }

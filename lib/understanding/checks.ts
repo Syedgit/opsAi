@@ -68,7 +68,7 @@ export function describeDepositRule(rule: DepositRule): string {
     Boolean
   );
   let text = parts.join(' + ');
-  if (rule.subtractPayouts) text += ' − vendor payouts';
+  if (rule.subtractPayouts) text += ' − payouts';
   if (rule.floatLeftInRegister > 0) text += ` − ${formatMoney(rule.floatLeftInRegister)} left in register`;
   return text;
 }
@@ -130,10 +130,18 @@ export function inferDepositRules(report: DailyCloseReport): DepositRule[] {
   return matches;
 }
 
+export function cashAfterPayouts(report: DailyCloseReport): number | null {
+  if (report.cashSales == null) return null;
+  return Math.round((report.cashSales - sumPayouts(report.payouts)) * 100) / 100;
+}
+
 export function checkDailyClose(report: DailyCloseReport, profile?: StoreProfile | null): Check[] {
   const checks: Check[] = [];
 
-  if (report.cardSales != null && report.cashSales != null && report.storeSalesTotal != null) {
+  // Cash Acceptor Cash is all tender cash (including fuel). Do not require it to equal inside non-fuel.
+  const cashIsInsideOnly =
+    report.storeSalesTotal == null || report.cashSales == null || report.cashSales <= report.storeSalesTotal + 0.009;
+  if (report.cardSales != null && report.cashSales != null && report.storeSalesTotal != null && cashIsInsideOnly) {
     checks.push(
       diffCheck(
         'store_sales_sum',
@@ -146,6 +154,21 @@ export function checkDailyClose(report: DailyCloseReport, profile?: StoreProfile
         'fail'
       )
     );
+  }
+
+  const leftoverCash = cashAfterPayouts(report);
+  if (leftoverCash != null && report.payouts.length > 0 && report.cashSales != null) {
+    checks.push({
+      id: 'cash_after_payouts',
+      status: leftoverCash >= 0 ? 'pass' : 'warn',
+      message:
+        leftoverCash >= 0
+          ? `Cash after payouts is ${formatMoney(leftoverCash)} (cash − invoice/paid-out).`
+          : `Payouts exceed cash by ${formatMoney(-leftoverCash)}.`,
+      expected: leftoverCash,
+      actual: report.cashSales,
+      difference: leftoverCash - report.cashSales,
+    });
   }
 
   const inside = insideSalesTotal(report);

@@ -1,6 +1,7 @@
 /**
  * Local owner app against the real database and Vercel API handlers.
- * Signup, onboarding, and dashboard persist. Reports stay empty until WhatsApp messages are confirmed.
+ * Signup, onboarding, and dashboard persist. WhatsApp hits /api/webhook/whatsapp
+ * when Meta (or a tunnel) points at this process.
  *
  *   npx ts-node -T scripts/local-app.ts
  *   then open http://localhost:3000/signup
@@ -10,11 +11,8 @@ dotenv.config();
 
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import express, { type Request, type Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import express, { type NextFunction, type Request, type Response } from 'express';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getAuthUser } from '../lib/apiAuth';
-import { getGroupSetupMode, isGroupAutoProvisionEnabled } from '../lib/whatsappGroupConfig';
 import authHandler from '../api/auth/index';
 import onboardingHandler from '../api/onboarding/index';
 import storesHandler from '../api/stores/index';
@@ -22,10 +20,10 @@ import storesDataHandler from '../api/stores/data';
 import storesSummaryHandler from '../api/stores/summary';
 import storesTasksHandler from '../api/stores/tasks';
 import storesLinkHandler from '../api/stores/[storeId]/link';
+import webhookHandler from '../api/webhook/whatsapp';
 
 const PORT = Number(process.env.PORT ?? 3000);
 const PUBLIC = join(__dirname, '..', 'public');
-const prisma = new PrismaClient();
 
 type VercelHandler = (req: VercelRequest, res: VercelResponse) => void | Promise<void>;
 
@@ -47,52 +45,23 @@ function sendPage(name: string) {
   };
 }
 
-async function whatsappProvision(req: Request, res: Response): Promise<void> {
-  const storeId = (req.params.storeId || '').toUpperCase();
-  const authUser = getAuthUser(req as unknown as VercelRequest);
-  if (!authUser) {
-    res.status(401).json({ error: 'Authentication required' });
-    return;
-  }
-  const member = await prisma.userStore.findFirst({
-    where: { userId: authUser.userId, storeId },
-  });
-  if (!member) {
-    res.status(403).json({ error: 'Not a member of this store' });
-    return;
-  }
-  const provision = await prisma.whatsAppGroupProvision.findFirst({
-    where: { storeId },
-    orderBy: { updatedAt: 'desc' },
-  });
-  const groups = await prisma.storeWhatsAppGroup.findMany({
-    where: { storeId, active: true },
-    select: { id: true, whatsappGroupId: true, createdAt: true },
-  });
-  res.json({
-    success: true,
-    groupSetupMode: getGroupSetupMode(),
-    autoProvisionEnabled: isGroupAutoProvisionEnabled(),
-    provision: provision
-      ? {
-          id: provision.id,
-          status: provision.status,
-          subject: provision.subject,
-          description: provision.description,
-          metaRequestId: provision.metaRequestId,
-          whatsappGroupId: provision.whatsappGroupId,
-          inviteLink: provision.inviteLink,
-          lastError: provision.lastError,
-          updatedAt: provision.updatedAt,
-        }
-      : null,
-    activeGroups: groups,
-  });
-}
-
 const app = express();
-app.use(express.json({ limit: '4mb' }));
-app.use(express.urlencoded({ extended: true }));
+const jsonParser = express.json({ limit: '4mb' });
+const formParser = express.urlencoded({ extended: true });
+app.use((req: Request, res: Response, next: NextFunction) => {
+  // Meta signs the raw body; do not parse JSON on the webhook path.
+  if (req.path === '/api/webhook/whatsapp') {
+    next();
+    return;
+  }
+  jsonParser(req, res, (err) => {
+    if (err) {
+      next(err);
+      return;
+    }
+    formParser(req, res, next);
+  });
+});
 app.use(express.static(PUBLIC));
 
 app.get('/', (_req, res) => res.redirect('/signup'));
@@ -114,13 +83,13 @@ app.all('/api/stores/detail', wrap(storesHandler));
 app.all('/api/stores/summary', wrap(storesSummaryHandler));
 app.all('/api/stores', wrap(storesHandler));
 app.all('/api/stores/:storeId/link', wrap(storesLinkHandler, (req) => ({ storeId: String(req.params.storeId) })));
-app.get('/api/stores/:storeId/whatsapp-group-provision', (req, res, next) => {
-  whatsappProvision(req, res).catch(next);
-});
+app.all('/api/stores/:storeId/whatsapp-group-provision', wrap(storesHandler, (req) => ({ storeId: String(req.params.storeId) })));
+app.all('/api/webhook/whatsapp', wrap(webhookHandler));
 
 app.listen(PORT, () => {
   console.log(`Local owner app (real database): http://localhost:${PORT}/signup`);
   console.log(`Onboarding:                      http://localhost:${PORT}/onboarding`);
   console.log(`Dashboard reports:               http://localhost:${PORT}/dashboard`);
   console.log(`Tasks & alerts:                  http://localhost:${PORT}/tasks`);
+  console.log(`WhatsApp webhook:                http://localhost:${PORT}/api/webhook/whatsapp`);
 });

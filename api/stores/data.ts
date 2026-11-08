@@ -2,6 +2,9 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
 import { requireStoreAccess, isMockRequested } from '../../lib/storeAccess';
 import { logAppError, loggedHandler, serializeError } from '../../lib/requestLog';
+import { loadStoreTeam } from '../../lib/tasks/people';
+import { localDateString, weekdayOf } from '../../lib/tasks/time';
+import { publishDashboardSchedule, type PublishScheduleInput } from '../../lib/publishSchedule';
 
 const prisma = new PrismaClient();
 
@@ -166,12 +169,20 @@ function serializeMockData(data: any[]): any[] {
   }));
 }
 
+function sundayWeekStart(timeZone: string, now = new Date()): string {
+  const today = localDateString(now, timeZone);
+  const back = weekdayOf(today);
+  const noon = new Date(`${today}T12:00:00Z`);
+  noon.setUTCDate(noon.getUTCDate() - back);
+  return noon.toISOString().slice(0, 10);
+}
+
 /**
  * Unified data endpoint - handles both real and mock data
  * Use ?mock=true to get mock data
  */
 async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
-  const storeId = (req.query.storeId as string) || 'S001';
+  const storeId = ((req.query.storeId as string) || 'S001').toUpperCase();
   const type = (req.query.type as string) || 'sales';
   const useMock = isMockRequested(req);
 
@@ -197,6 +208,49 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
     const access = await requireStoreAccess(req, res, prisma, storeId, useMock);
     if (!useMock && !access) return;
+
+    if (req.method === 'POST') {
+      if (type !== 'schedules') {
+        res.status(405).json({ error: 'POST is only for schedules' });
+        return;
+      }
+      if (!access || access.role === 'STAFF') {
+        res.status(403).json({ error: 'Only owners and managers can publish a schedule.' });
+        return;
+      }
+      const body = (req.body || {}) as {
+        weekStart?: string;
+        employees?: PublishScheduleInput['employees'];
+        postToGroup?: boolean;
+      };
+      const store = await prisma.storeConfig.findUnique({
+        where: { storeId },
+        select: { storeName: true, timezone: true },
+      });
+      const ownerPhone = await prisma.userDirectory.findFirst({
+        where: { storeId, isActive: true, role: 'OWNER' },
+        select: { phoneE164: true },
+      });
+      const published = await publishDashboardSchedule(prisma, {
+        storeId,
+        storeName: store?.storeName || storeId,
+        phoneE164: ownerPhone?.phoneE164 || `dashboard:${access.user.userId}`,
+        weekStart: String(body.weekStart || sundayWeekStart(store?.timezone || 'America/New_York')),
+        employees: Array.isArray(body.employees) ? body.employees : [],
+        postToGroup: body.postToGroup !== false,
+      });
+      if (!published.ok) {
+        res.status(published.status).json({ error: published.error });
+        return;
+      }
+      res.json({ success: true, actionId: published.actionId, posted: published.posted });
+      return;
+    }
+
+    if (req.method && req.method !== 'GET') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
 
     let dbType: string;
     switch (type) {
@@ -250,6 +304,20 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       data: item.payloadJson,
       confidence: item.confidence,
     }));
+
+    if (type === 'schedules') {
+      const store = await prisma.storeConfig.findUnique({
+        where: { storeId },
+        select: { timezone: true },
+      });
+      const team = await loadStoreTeam(prisma, storeId);
+      res.json({
+        schedules: formatted,
+        people: team.whatsapp.map((p) => ({ name: p.name || p.phoneE164, phoneE164: p.phoneE164 })),
+        weekStart: sundayWeekStart(store?.timezone || 'America/New_York'),
+      });
+      return;
+    }
 
     res.json({ [type]: formatted });
   } catch (error: unknown) {

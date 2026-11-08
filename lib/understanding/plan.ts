@@ -105,7 +105,7 @@ function insideTotal(report: DailyCloseReport): number {
 
 function checkLine(check: Check): string | null {
   if (check.status === 'pass') {
-    return ['deposit_explained', 'deposit_rule', 'day_total_sum', 'lines_sum_total', 'invoice_matches_payout'].includes(
+    return ['deposit_explained', 'deposit_rule', 'day_total_sum', 'lines_sum_total', 'invoice_matches_payout', 'cash_after_payouts'].includes(
       check.id
     )
       ? `✅ ${check.message}`

@@ -5,8 +5,9 @@
  *   npm run preview        then open http://localhost:3100/dashboard?token=preview
  *
  * The Tasks page (/tasks) shows sample tasks for today; its buttons change this sample only, nothing is saved.
- * Stores: S001 Rockaway and S002 Denville (one owner). Oct 12 comes from the real owner message;
- * the earlier days are invented demo numbers so the tables and charts have something to show.
+ * Stores: S001 Rockaway (7-Eleven), S002 Denville (shop), plus a UPS-style counter, office, and
+ * real-estate team so the dashboard can switch by business type. Oct 12 comes from the real owner
+ * message; the earlier days are invented demo numbers so the tables and charts have something to show.
  */
 import fs from 'fs';
 import http from 'http';
@@ -18,8 +19,17 @@ import { describeSchedule } from '../lib/tasks/schedule';
 import { STORE_FEATURE_LABEL, TASK_PRESETS, bucketFor, inspectionApplies, presetIsOnStore, presetsForStore } from '../lib/tasks/presets';
 import { scoreRuns } from '../lib/tasks/score';
 import { predictInspection } from '../lib/tasks/inspection';
-import { StoreSetupSchema, storeTypeOptions, suggestTasks, type StoreSetup } from '../lib/tasks/storeSetup';
+import { StoreSetupSchema, storeTypeOptions, suggestTasks, type StoreSetup, type StoreType } from '../lib/tasks/storeSetup';
 import { parseLoginInput, parseSignupInput, readJsonBody } from '../lib/authCredentials';
+import { dashboardModules } from '../lib/businessProfile';
+import {
+  MAX_PICTURE_TEMPLATES,
+  PICTURE_PURPOSE_LABEL,
+  PICTURE_TEMPLATE_PRESETS,
+  cleanPictureTemplate,
+  describePictureTemplate,
+  type PictureTemplate,
+} from '../lib/understanding/pictureTemplate';
 
 delete process.env.DATABASE_URL;
 delete process.env.DIRECT_URL;
@@ -40,10 +50,44 @@ interface Item {
   confidence: number;
 }
 
+function previewStore(
+  storeId: string,
+  storeName: string,
+  storeType: StoreType,
+  fuel = false
+) {
+  return {
+    storeId,
+    storeName,
+    timezone: 'America/New_York',
+    active: true,
+    role: 'OWNER' as const,
+    storeType,
+    modules: dashboardModules(storeType, fuel),
+  };
+}
+
 const stores = [
-  { storeId: 'S001', storeName: 'Rockaway', timezone: 'America/New_York', active: true, role: 'OWNER' },
-  { storeId: 'S002', storeName: 'Denville', timezone: 'America/New_York', active: true, role: 'OWNER' },
+  previewStore('S001', 'Rockaway', 'seven_eleven', true),
+  previewStore('S002', 'Denville', 'gas_station'),
+  previewStore('S003', 'Harbor UPS', 'shipping'),
+  previewStore('S004', 'Main Street Office', 'office'),
+  previewStore('S005', 'Harbor Realty', 'real_estate'),
+  previewStore('S006', 'Harbor Cuts', 'appointments'),
+  previewStore('S007', 'Solo', 'personal'),
 ];
+
+const previewPeople: Record<string, Array<{ name: string; phoneE164: string }>> = {
+  S001: [{ name: 'Maria', phoneE164: '+15550100101' }, { name: 'John', phoneE164: '+15550100102' }],
+  S002: [{ name: 'Sam', phoneE164: '+15550100201' }],
+  S003: [{ name: 'Alex', phoneE164: '+15550100301' }, { name: 'Riley', phoneE164: '+15550100302' }],
+  S004: [{ name: 'Jordan', phoneE164: '+15550100401' }, { name: 'Taylor', phoneE164: '+15550100402' }],
+  S005: [{ name: 'Casey', phoneE164: '+15550100501' }, { name: 'Morgan', phoneE164: '+15550100502' }],
+  S006: [{ name: 'Nina', phoneE164: '+15550100601' }, { name: 'Pat', phoneE164: '+15550100602' }],
+  S007: [{ name: 'You', phoneE164: '+15550100701' }],
+};
+
+const previewSchedules: Record<string, Array<{ id: string; date: string; data: Record<string, unknown>; confidence: number }>> = {};
 const profiles = stores.map((s) => buildDefaultProfile({ storeId: s.storeId, storeName: s.storeName }));
 const ctx = { profiles, primaryStoreId: 'S001', now: new Date('2026-10-13T08:00:00Z'), multiStoreSender: true, canTeachRules: true };
 
@@ -177,12 +221,24 @@ const sampleCatalog = TASK_PRESETS.filter((p) => p.source === 'report' && p.temp
 }));
 
 let savedSetup: StoreSetup | null = null;
+let savedPictureTemplates: PictureTemplate[] = [];
+
+function pictureMapsPayload() {
+  return {
+    pictureTemplates: savedPictureTemplates,
+    pictureTemplatePresets: PICTURE_TEMPLATE_PRESETS,
+    picturePurposes: Object.entries(PICTURE_PURPOSE_LABEL).map(([id, label]) => ({ id, label })),
+  };
+}
 
 function tasksApi(req: http.IncomingMessage, res: http.ServerResponse, url: URL, body: string): void {
   const view = url.searchParams.get('view');
   const base = { success: true, storeName: 'Rockaway', canEdit: true };
   if (req.method === 'POST') {
-    const b = JSON.parse(body || '{}') as { action?: string; runId?: string; id?: string; setup?: unknown; presetIds?: string[] };
+    const b = JSON.parse(body || '{}') as {
+      action?: string; runId?: string; id?: string; setup?: unknown; presetIds?: string[];
+      template?: { id?: string; kind?: string; title?: string; note?: string; fields?: Array<{ label?: string; purpose?: string; note?: string }> };
+    };
     if (b.action === 'setup_preview' || b.action === 'setup_apply') {
       const parsed = StoreSetupSchema.safeParse(b.setup);
       if (!parsed.success) return sendJson(res, 400, { error: parsed.error.issues.map((i) => i.message).join('; ') });
@@ -197,6 +253,28 @@ function tasksApi(req: http.IncomingMessage, res: http.ServerResponse, url: URL,
       return sendJson(res, 200, { success: true, added: (b.presetIds ?? []).length, skipped: 0, preview: true });
     }
     if (b.action === 'save_samples' || b.action === 'save_vendors') return sendJson(res, 200, { success: true, preview: true }), true;
+    if (b.action === 'save_picture_template') {
+      const saved = cleanPictureTemplate({
+        id: b.template?.id,
+        kind: (b.template?.kind as PictureTemplate['kind']) || 'daily_close',
+        title: b.template?.title || '',
+        note: b.template?.note,
+        fields: (b.template?.fields || []).map((f) => ({
+          label: f.label || '',
+          purpose: (f.purpose as PictureTemplate['fields'][number]['purpose']) || 'ignore',
+          note: f.note,
+        })),
+      });
+      if (!saved) return sendJson(res, 400, { error: 'Mark at least one line to take or ignore.' });
+      const rest = savedPictureTemplates.filter((t) => t.id !== saved.id);
+      if (rest.length >= MAX_PICTURE_TEMPLATES) return sendJson(res, 400, { error: `A store can have up to ${MAX_PICTURE_TEMPLATES} picture maps.` });
+      savedPictureTemplates = [...rest, saved];
+      return sendJson(res, 200, { success: true, template: saved, summary: describePictureTemplate(saved), preview: true });
+    }
+    if (b.action === 'delete_picture_template') {
+      savedPictureTemplates = savedPictureTemplates.filter((t) => t.id !== b.id);
+      return sendJson(res, 200, { success: true, preview: true });
+    }
     const run = sampleRuns.find((r) => r.id === b.runId);
     if (b.action === 'close' && run) { run.status = 'MISSED'; run.completedAt = null; }
     if (b.action === 'approve' && run) { run.status = 'DONE'; run.completedAt = new Date(); run.outcome = 'fixed'; run.photoVerdict = 'approved'; run.evidenceType = 'photo'; }
@@ -208,7 +286,7 @@ function tasksApi(req: http.IncomingMessage, res: http.ServerResponse, url: URL,
     return sendJson(res, 200, {
       ...base,
       setup: savedSetup,
-      storeTypes: storeTypeOptions(),
+      storeTypes: storeTypeOptions().map((t) => ({ ...t, modules: dashboardModules(t.id, t.defaults.fuel) })),
       vendors: [
         { name: 'HLA', category: 'cigarettes' },
         { name: 'ABC', category: 'drinks' },
@@ -219,6 +297,7 @@ function tasksApi(req: http.IncomingMessage, res: http.ServerResponse, url: URL,
         { id: 'candy', label: 'Candy' }, { id: 'lottery', label: 'Lottery' }, { id: 'auto', label: 'Auto / automotive' },
         { id: 'ice', label: 'Ice' }, { id: 'bread', label: 'Bread / bakery' }, { id: 'dairy', label: 'Dairy' }, { id: 'other', label: 'Other' },
       ],
+      ...pictureMapsPayload(),
     });
   }
   if (view === 'inspection') {
@@ -253,8 +332,10 @@ function tasksApi(req: http.IncomingMessage, res: http.ServerResponse, url: URL,
       { id: 'candy', label: 'Candy' }, { id: 'lottery', label: 'Lottery' }, { id: 'auto', label: 'Auto / automotive' },
       { id: 'ice', label: 'Ice' }, { id: 'bread', label: 'Bread / bakery' }, { id: 'dairy', label: 'Dairy' }, { id: 'other', label: 'Other' },
     ],
+    ...pictureMapsPayload(),
     features: Object.entries(STORE_FEATURE_LABEL).map(([id, label]) => ({ id, label })),
     setup: savedSetup,
+    modules: dashboardModules(savedSetup?.storeType ?? null, savedSetup?.fuel),
     canManageOwners: true,
     people: {
       whatsapp: [{ id: 'd1', name: 'Preview Owner', phoneE164: '+15550100100', role: 'OWNER' }],
@@ -313,6 +394,36 @@ async function api(req: http.IncomingMessage, res: http.ServerResponse, url: URL
   }
 
   if (p === '/api/stores/data') {
+    if (req.method === 'POST' && type === 'schedules') {
+      const body = JSON.parse((await readBody(req)) || '{}') as {
+        weekStart?: string;
+        employees?: Array<{ name: string; shifts: Array<{ day?: string; date?: string; start: string; end: string }> }>;
+      };
+      const employees = Array.isArray(body.employees) ? body.employees.filter((e) => e.name && e.shifts?.length) : [];
+      if (!employees.length) return sendJson(res, 400, { error: 'Add at least one person with a start and end time.' }), true;
+      const weekStart = body.weekStart || '2026-11-01';
+      const row = {
+        id: `sched-${storeId}-${weekStart}`,
+        date: new Date().toISOString(),
+        data: {
+          _kind: 'work_schedule',
+          week_start: weekStart,
+          total_hours: employees.length * 40,
+          employees: employees.map((e) => ({ name: e.name, hours: 40, adjusted: false, shifts: e.shifts })),
+        },
+        confidence: 1,
+      };
+      const list = previewSchedules[storeId] || [];
+      previewSchedules[storeId] = [row, ...list.filter((item) => item.data.week_start !== weekStart)];
+      return sendJson(res, 200, { success: true, actionId: row.id, posted: 1 }), true;
+    }
+    if (type === 'schedules') {
+      return sendJson(res, 200, {
+        schedules: previewSchedules[storeId] || [],
+        people: previewPeople[storeId] || [],
+        weekStart: '2026-11-01',
+      }), true;
+    }
     const list = type === 'sales' || type === 'invoices' ? forStore(storeId, type) : [];
     return sendJson(res, 200, { [type]: shaped(list) }), true;
   }

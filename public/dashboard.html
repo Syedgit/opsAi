@@ -200,6 +200,9 @@
             display: flex;
             align-items: center;
             gap: 12px;
+            flex-wrap: wrap;
+            flex: 1;
+            min-width: 0;
         }
         
         .store-selector label {
@@ -241,6 +244,7 @@
             cursor: pointer;
             transition: all 0.2s;
             white-space: nowrap;
+            flex-shrink: 0;
         }
 
         .add-store-btn:hover {
@@ -248,6 +252,39 @@
             transform: translateY(-1px);
             box-shadow: 0 2px 8px rgba(37, 211, 102, 0.3);
         }
+
+        .sched-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .sched-grid {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .sched-grid th, .sched-grid td {
+            border: 1px solid var(--border);
+            padding: 6px;
+            vertical-align: top;
+        }
+        .sched-grid th { background: var(--bg-light); font-size: 12px; font-weight: 600; }
+        .sched-grid input[type="time"] {
+            width: 100%;
+            min-width: 0;
+            padding: 4px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .sched-name { font-weight: 600; min-width: 110px; }
+        .sched-wrap { overflow-x: auto; }
+        .sched-add { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+        .sched-add input[type="text"] { flex: 1; min-width: 140px; padding: 8px; border: 1px solid var(--border); border-radius: 6px; }
+        .sched-note { font-size: 12px; color: var(--text-light); margin-top: 10px; }
+        .sched-status { font-size: 13px; margin-left: 8px; }
 
         /* Modal styles */
         .modal {
@@ -768,12 +805,14 @@
             
             .store-selector {
                 flex: 1;
-                min-width: 100%;
+                min-width: 0;
+                width: 100%;
             }
             
             .store-selector select {
-                width: 100%;
-                min-width: auto;
+                flex: 1;
+                width: auto;
+                min-width: 0;
             }
             
             .user-info {
@@ -967,27 +1006,31 @@
             
             <div class="menu-section">
                 <div class="menu-section-title">Operations</div>
-                <a href="#" class="menu-item" data-page="sales">
+                <a href="#" class="menu-item" data-page="sales" data-mod="money">
                     <span class="menu-item-icon">💰</span>
                     <span>Daily Sales</span>
                 </a>
-                <a href="#" class="menu-item" data-page="invoices">
+                <a href="#" class="menu-item" data-page="invoices" data-mod="money">
                     <span class="menu-item-icon">🧾</span>
                     <span>Invoices</span>
                 </a>
-                <a href="#" class="menu-item" data-page="expenses">
+                <a href="#" class="menu-item" data-page="expenses" data-mod="money">
                     <span class="menu-item-icon">💸</span>
                     <span>Expenses</span>
                 </a>
-                <a href="#" class="menu-item" data-page="fuel">
+                <a href="#" class="menu-item" data-page="fuel" data-mod="fuel">
                     <span class="menu-item-icon">⛽</span>
                     <span>Fuel Sales</span>
                 </a>
-                <a href="#" class="menu-item" data-page="paidouts">
+                <a href="#" class="menu-item" data-page="paidouts" data-mod="money">
                     <span class="menu-item-icon">💵</span>
                     <span>Paid Outs</span>
                 </a>
-                <a href="#" class="menu-item" data-page="orders">
+                <a href="#" class="menu-item" data-page="dashboard" data-open-tab="schedules" data-mod="schedules">
+                    <span class="menu-item-icon">🗓️</span>
+                    <span>Schedule</span>
+                </a>
+                <a href="#" class="menu-item" data-page="orders" data-mod="orders">
                     <span class="menu-item-icon">📦</span>
                     <span>Orders</span>
                 </a>
@@ -997,9 +1040,9 @@
                 </a>
             </div>
             
-            <div class="menu-section">
+            <div class="menu-section" data-mod="money">
                 <div class="menu-section-title">Analytics</div>
-                <a href="#" class="menu-item" data-page="summary">
+                <a href="#" class="menu-item" data-page="summary" data-mod="money">
                     <span class="menu-item-icon">🤖</span>
                     <span>AI Summary</span>
                 </a>
@@ -1099,7 +1142,7 @@
                 <p class="page-subtitle">Overview of your store operations</p>
                 
                 <div class="stats-grid">
-                    <div class="stat-card">
+                    <div class="stat-card" data-mod="money">
                         <div class="stat-card-header">
                             <div>
                                 <h3>Today's Sales</h3>
@@ -1110,7 +1153,7 @@
                         </div>
                     </div>
                     
-                    <div class="stat-card">
+                    <div class="stat-card" data-mod="money">
                         <div class="stat-card-header">
                             <div>
                                 <h3>Today's Invoices</h3>
@@ -1121,7 +1164,7 @@
                         </div>
                     </div>
                     
-                    <div class="stat-card">
+                    <div class="stat-card" data-mod="orders">
                         <div class="stat-card-header">
                             <div>
                                 <h3>Today's Orders</h3>
@@ -1155,12 +1198,12 @@
                 </div>
                 
                 <div class="nav-tabs">
-                    <button class="nav-tab active" data-tab="sales">Daily Sales</button>
-                    <button class="nav-tab" data-tab="invoices">Invoices & Expenses</button>
-                    <button class="nav-tab" data-tab="fuel">Fuel Sales</button>
-                    <button class="nav-tab" data-tab="paidouts">Paid Outs</button>
-                    <button class="nav-tab" data-tab="orders">Orders</button>
-                    <button class="nav-tab" data-tab="schedules">Schedule</button>
+                    <button class="nav-tab active" data-tab="sales" data-mod="money">Daily Sales</button>
+                    <button class="nav-tab" data-tab="invoices" data-mod="money">Invoices & Expenses</button>
+                    <button class="nav-tab" data-tab="fuel" data-mod="fuel">Fuel Sales</button>
+                    <button class="nav-tab" data-tab="paidouts" data-mod="money">Paid Outs</button>
+                    <button class="nav-tab" data-tab="orders" data-mod="orders">Orders</button>
+                    <button class="nav-tab" data-tab="schedules" data-mod="schedules">Schedule</button>
                     <a class="nav-tab" id="tasksLink" href="/tasks" style="text-decoration: none; display: inline-block;">Tasks &amp; alerts &rarr;</a>
                 </div>
                 
@@ -1170,37 +1213,37 @@
             </div>
             
             <!-- Detail Pages (hidden by default) -->
-            <div id="salesPage" class="page" style="display: none;">
+            <div id="salesPage" class="page" style="display: none;" data-mod="money">
                 <h1 class="page-title">Daily Sales</h1>
                 <p class="page-subtitle">View and manage daily sales records</p>
                 <div class="content-area" id="salesContent"></div>
             </div>
             
-            <div id="invoicesPage" class="page" style="display: none;">
+            <div id="invoicesPage" class="page" style="display: none;" data-mod="money">
                 <h1 class="page-title">Invoices</h1>
                 <p class="page-subtitle">Track vendor invoices and payments</p>
                 <div class="content-area" id="invoicesContent"></div>
             </div>
             
-            <div id="expensesPage" class="page" style="display: none;">
+            <div id="expensesPage" class="page" style="display: none;" data-mod="money">
                 <h1 class="page-title">Expenses</h1>
                 <p class="page-subtitle">Monitor store expenses and costs</p>
                 <div class="content-area" id="expensesContent"></div>
             </div>
             
-            <div id="fuelPage" class="page" style="display: none;">
+            <div id="fuelPage" class="page" style="display: none;" data-mod="fuel">
                 <h1 class="page-title">Fuel Sales</h1>
                 <p class="page-subtitle">Fuel sales and performance metrics</p>
                 <div class="content-area" id="fuelContent"></div>
             </div>
             
-            <div id="paidoutsPage" class="page" style="display: none;">
+            <div id="paidoutsPage" class="page" style="display: none;" data-mod="money">
                 <h1 class="page-title">Paid Outs</h1>
                 <p class="page-subtitle">Employee paid out transactions</p>
                 <div class="content-area" id="paidoutsContent"></div>
             </div>
             
-            <div id="ordersPage" class="page" style="display: none;">
+            <div id="ordersPage" class="page" style="display: none;" data-mod="orders">
                 <h1 class="page-title">Orders</h1>
                 <p class="page-subtitle">Vendor orders and inventory requests</p>
                 <div class="content-area" id="ordersContent"></div>
@@ -1238,6 +1281,7 @@
                 <p class="page-subtitle">Configure your store settings</p>
                 <div class="content-area">
                     <p>Reminders, people (WhatsApp numbers, staff, a partner owner), and how this store sends reports are on <a href="/tasks">Tasks &amp; alerts → Store admin</a>. You can change the WhatsApp number you entered at signup there.</p>
+                    <p style="margin-top: 16px;">To add another location you own, use <strong>+ Add Store</strong> at the top of the dashboard, or <a href="/onboarding?add=1">Add another store</a>. Each store keeps its own ID, name, sales, and WhatsApp group.</p>
                 </div>
             </div>
         </div>
@@ -1324,6 +1368,43 @@
         let currentTab = 'sales';
         let currentPage = 'dashboard';
         let activityLog = [];
+        let currentModules = { money: true, fuel: true, orders: true, schedules: true, tasks: true };
+        const SCHED_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        let scheduleDraft = { weekStart: '', rows: [] };
+
+        function applyBusinessModules(modules) {
+            currentModules = modules || { money: true, fuel: true, orders: true, schedules: true, tasks: true };
+            document.querySelectorAll('[data-mod]').forEach(function (el) {
+                const key = el.getAttribute('data-mod');
+                const on = currentModules[key] !== false;
+                if (el.classList.contains('page')) return;
+                el.style.display = on ? '' : 'none';
+            });
+            const subtitle = document.querySelector('.page-subtitle');
+            if (subtitle) {
+                subtitle.textContent = currentModules.money
+                    ? 'Overview of your store operations'
+                    : 'Staff hours and WhatsApp reminders for this location';
+            }
+            const moneyPage = currentPage === 'sales' || currentPage === 'invoices' || currentPage === 'expenses' || currentPage === 'paidouts' || currentPage === 'summary';
+            if ((moneyPage && !currentModules.money) || (currentPage === 'fuel' && !currentModules.fuel) || (currentPage === 'orders' && !currentModules.orders)) {
+                currentPage = 'dashboard';
+                document.querySelectorAll('.page').forEach(function (p) { p.style.display = 'none'; });
+                const dash = document.getElementById('dashboardPage');
+                if (dash) dash.style.display = 'block';
+                document.querySelectorAll('.menu-item').forEach(function (m) {
+                    m.classList.toggle('active', m.getAttribute('data-page') === 'dashboard' && !m.getAttribute('data-open-tab'));
+                });
+            }
+            if (!currentModules.money && (currentTab === 'sales' || currentTab === 'invoices' || currentTab === 'fuel' || currentTab === 'paidouts')) {
+                currentTab = 'schedules';
+            }
+            if (currentTab === 'fuel' && !currentModules.fuel) currentTab = currentModules.money ? 'sales' : 'schedules';
+            if (currentTab === 'orders' && !currentModules.orders) currentTab = currentModules.money ? 'sales' : 'schedules';
+            document.querySelectorAll('.nav-tab[data-tab]').forEach(function (t) {
+                t.classList.toggle('active', t.dataset.tab === currentTab);
+            });
+        }
 
         // Load stores on page load
         async function loadStores() {
@@ -1372,6 +1453,8 @@
                     const option = document.createElement('option');
                     option.value = store.storeId;
                     option.textContent = `${esc(store.storeId)} - ${esc(store.storeName)}`;
+                    option.dataset.storeType = store.storeType || '';
+                    option.dataset.modules = JSON.stringify(store.modules || {});
                     select.appendChild(option);
                 });
                 
@@ -1424,7 +1507,9 @@
                 if (linked) {
                     statusEl.textContent = 'Connected';
                     statusEl.className = 'whatsapp-status linked';
-                    messageEl.textContent = 'Your WhatsApp ops group is linked to this store. Send sales, invoices, or photos in the group and reply OK to confirm.';
+                    messageEl.textContent = currentModules.money
+                        ? 'Your WhatsApp ops group is linked to this store. Send sales, invoices, or photos in the group and reply OK to confirm.'
+                        : 'Your WhatsApp ops group is linked to this location. Staff reply to reminders in the group. Publish the week schedule from the dashboard when it is ready.';
                     return;
                 }
 
@@ -1510,6 +1595,207 @@
             }
         }
 
+        let lastSchedulePayload = { schedules: [], people: [], weekStart: '' };
+
+        function addDaysIso(iso, days) {
+            const d = new Date(iso + 'T12:00:00Z');
+            d.setUTCDate(d.getUTCDate() + days);
+            return d.toISOString().slice(0, 10);
+        }
+
+        function fmtWeekLabel(iso) {
+            if (!iso) return '';
+            const start = new Date(iso + 'T12:00:00Z');
+            const end = new Date(iso + 'T12:00:00Z');
+            end.setUTCDate(end.getUTCDate() + 6);
+            return start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) +
+                ' – ' + end.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        }
+
+        function emptyDays() {
+            const days = {};
+            SCHED_DAYS.forEach(function (day) { days[day] = { start: '', end: '' }; });
+            return days;
+        }
+
+        function toTimeValue(value) {
+            const match = String(value || '').match(/(\d{1,2}):(\d{2})/);
+            if (!match) return '';
+            return String(Number(match[1])).padStart(2, '0') + ':' + match[2];
+        }
+
+        function shiftDayKey(shift) {
+            const three = String(shift.day || '').trim().slice(0, 3);
+            const titled = three.charAt(0).toUpperCase() + three.slice(1).toLowerCase();
+            if (SCHED_DAYS.indexOf(titled) >= 0) return titled;
+            if (shift.date) {
+                const i = new Date(shift.date + 'T12:00:00Z').getUTCDay();
+                if (!isNaN(i)) return SCHED_DAYS[i];
+            }
+            return null;
+        }
+
+        function rowsFromEmployees(employees) {
+            return (employees || []).map(function (person) {
+                const days = emptyDays();
+                (person.shifts || []).forEach(function (shift) {
+                    const day = shiftDayKey(shift);
+                    if (day && shift.start && shift.end) {
+                        days[day] = { start: toTimeValue(shift.start), end: toTimeValue(shift.end) };
+                    }
+                });
+                return { name: person.name || '', days: days };
+            });
+        }
+
+        function initScheduleDraft(data, weekStart) {
+            lastSchedulePayload = data || lastSchedulePayload;
+            const start = weekStart || scheduleDraft.weekStart || data.weekStart || '';
+            const weekChanged = scheduleDraft.weekStart !== start;
+            scheduleDraft.weekStart = start;
+            if (!weekChanged && scheduleDraft.rows.length) return;
+            const match = (data.schedules || []).find(function (item) {
+                return item.data && item.data.week_start === start;
+            });
+            let rows = match ? rowsFromEmployees(match.data.employees) : [];
+            const seen = {};
+            rows.forEach(function (row) { seen[row.name.toLowerCase()] = true; });
+            (data.people || []).forEach(function (person) {
+                const name = person.name || '';
+                if (name && !seen[name.toLowerCase()]) {
+                    rows.push({ name: name, days: emptyDays() });
+                    seen[name.toLowerCase()] = true;
+                }
+            });
+            if (rows.length === 0) rows = [{ name: '', days: emptyDays() }];
+            scheduleDraft.rows = rows;
+        }
+
+        function draftEmployees() {
+            return scheduleDraft.rows.map(function (row) {
+                const shifts = [];
+                SCHED_DAYS.forEach(function (day, i) {
+                    const cell = row.days[day] || {};
+                    if (cell.start && cell.end) {
+                        shifts.push({ day: day, date: addDaysIso(scheduleDraft.weekStart, i), start: cell.start, end: cell.end });
+                    }
+                });
+                return { name: (row.name || '').trim(), shifts: shifts };
+            }).filter(function (row) { return row.name && row.shifts.length; });
+        }
+
+        function renderScheduleBoard(container, data) {
+            initScheduleDraft(data, scheduleDraft.weekStart || data.weekStart);
+            const peopleOpts = (data.people || []).map(function (person) {
+                return '<option value="' + esc(person.name) + '"></option>';
+            }).join('');
+            const head = SCHED_DAYS.map(function (day, i) {
+                const date = scheduleDraft.weekStart ? addDaysIso(scheduleDraft.weekStart, i) : '';
+                const num = date ? new Date(date + 'T12:00:00Z').getUTCDate() : '';
+                return '<th>' + esc(day) + (num ? '<div style="font-weight:400;color:var(--text-light)">' + esc(String(num)) + '</div>' : '') + '</th>';
+            }).join('');
+            const body = scheduleDraft.rows.map(function (row, ri) {
+                const cells = SCHED_DAYS.map(function (day) {
+                    const cell = row.days[day] || { start: '', end: '' };
+                    return '<td><input type="time" data-row="' + ri + '" data-day="' + day + '" data-field="start" value="' + esc(cell.start) + '" aria-label="Start">' +
+                        '<input type="time" data-row="' + ri + '" data-day="' + day + '" data-field="end" value="' + esc(cell.end) + '" aria-label="End"></td>';
+                }).join('');
+                return '<tr><td class="sched-name"><input type="text" data-row="' + ri + '" data-field="name" value="' + esc(row.name) + '" placeholder="Name" list="schedPeople">' +
+                    '<button type="button" class="btn btn-secondary" data-remove-row="' + ri + '" style="margin-top:6px;padding:4px 8px;font-size:12px;">Remove</button></td>' + cells + '</tr>';
+            }).join('');
+            const posted = (data.schedules || []).length
+                ? '<div id="schedHistory"></div>'
+                : '';
+            container.innerHTML =
+                '<div class="sched-toolbar">' +
+                '<button type="button" class="btn btn-secondary" id="schedPrev">Previous</button>' +
+                '<strong>' + esc(fmtWeekLabel(scheduleDraft.weekStart)) + '</strong>' +
+                '<button type="button" class="btn btn-secondary" id="schedNext">Next</button>' +
+                '<button type="button" class="btn btn-secondary" id="schedCopy">Copy last week</button>' +
+                '<button type="button" class="btn btn-primary" id="schedPublish">Publish week</button>' +
+                '<span class="sched-status" id="schedStatus"></span></div>' +
+                '<div class="sched-wrap"><table class="sched-grid"><thead><tr><th>Person</th>' + head + '</tr></thead><tbody>' + body + '</tbody></table></div>' +
+                '<div class="sched-add"><input type="text" id="schedNewName" list="schedPeople" placeholder="Add a person">' +
+                '<button type="button" class="btn btn-secondary" id="schedAddPerson">Add</button></div>' +
+                '<datalist id="schedPeople">' + peopleOpts + '</datalist>' +
+                '<p class="sched-note">Hours only. Publish posts this week to the store WhatsApp group. Pay is never calculated or stored.</p>' +
+                posted;
+            if (posted) renderSchedules(document.getElementById('schedHistory'), data.schedules);
+            bindScheduleBoard(container, data);
+        }
+
+        function bindScheduleBoard(container, data) {
+            container.querySelectorAll('input[data-row]').forEach(function (input) {
+                input.addEventListener('change', function () {
+                    const i = Number(input.getAttribute('data-row'));
+                    const row = scheduleDraft.rows[i];
+                    if (!row) return;
+                    const field = input.getAttribute('data-field');
+                    if (field === 'name') row.name = input.value;
+                    else if (row.days[input.getAttribute('data-day')]) row.days[input.getAttribute('data-day')][field] = input.value;
+                });
+            });
+            container.querySelectorAll('[data-remove-row]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    scheduleDraft.rows.splice(Number(btn.getAttribute('data-remove-row')), 1);
+                    if (scheduleDraft.rows.length === 0) scheduleDraft.rows.push({ name: '', days: emptyDays() });
+                    renderScheduleBoard(container, data);
+                });
+            });
+            const add = document.getElementById('schedAddPerson');
+            if (add) add.addEventListener('click', function () {
+                const name = (document.getElementById('schedNewName').value || '').trim();
+                scheduleDraft.rows.push({ name: name, days: emptyDays() });
+                renderScheduleBoard(container, data);
+            });
+            const prev = document.getElementById('schedPrev');
+            const next = document.getElementById('schedNext');
+            if (prev) prev.addEventListener('click', function () {
+                scheduleDraft.weekStart = addDaysIso(scheduleDraft.weekStart, -7);
+                renderScheduleBoard(container, data);
+            });
+            if (next) next.addEventListener('click', function () {
+                scheduleDraft.weekStart = addDaysIso(scheduleDraft.weekStart, 7);
+                renderScheduleBoard(container, data);
+            });
+            const copy = document.getElementById('schedCopy');
+            if (copy) copy.addEventListener('click', function () {
+                const prevWeek = addDaysIso(scheduleDraft.weekStart, -7);
+                const match = (data.schedules || []).find(function (item) { return item.data && item.data.week_start === prevWeek; });
+                const status = document.getElementById('schedStatus');
+                if (!match) {
+                    if (status) status.textContent = 'No posted week to copy.';
+                    return;
+                }
+                scheduleDraft.rows = rowsFromEmployees(match.data.employees);
+                if (scheduleDraft.rows.length === 0) scheduleDraft.rows = [{ name: '', days: emptyDays() }];
+                renderScheduleBoard(container, data);
+            });
+            const publish = document.getElementById('schedPublish');
+            if (publish) publish.addEventListener('click', async function () {
+                const status = document.getElementById('schedStatus');
+                publish.disabled = true;
+                if (status) status.textContent = 'Publishing…';
+                try {
+                    const response = await fetch('/api/stores/data?storeId=' + encodeURIComponent(currentStoreId) + '&type=schedules', {
+                        method: 'POST',
+                        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ weekStart: scheduleDraft.weekStart, employees: draftEmployees(), postToGroup: true })
+                    });
+                    const body = await response.json().catch(function () { return {}; });
+                    if (!response.ok) throw new Error(body.error || 'Could not publish');
+                    if (status) status.textContent = body.posted ? 'Posted to the WhatsApp group.' : 'Saved. Add a group to send it.';
+                    logActivity('Schedule published', 'Week of ' + scheduleDraft.weekStart);
+                    scheduleDraft.rows = [];
+                    await loadTabData(currentStoreId, 'schedules');
+                } catch (err) {
+                    if (status) status.textContent = err.message || 'Could not publish';
+                } finally {
+                    publish.disabled = false;
+                }
+            });
+        }
+
         // Load data for current tab
         async function loadTabData(storeId, tab) {
             if (!storeId) {
@@ -1546,20 +1832,25 @@
                 console.log(`Items for ${tab}:`, items);
                 console.log(`Items count: ${items.length}`);
 
+                if (tab === 'schedules') {
+                    renderScheduleBoard(contentArea, data);
+                    logActivity('Data loaded', 'Loaded schedule week');
+                    return;
+                }
+
                 if (items.length === 0) {
                     contentArea.innerHTML = `
                         <div class="empty-state">
                             <div class="empty-state-icon">📭</div>
-                            <h3>No ${tab === 'schedules' ? 'schedules' : tab + ' data'} found</h3>
-                            <p>${tab === 'schedules' ? 'Send the weekly schedule sheet in WhatsApp and reply OK. Each person\'s hours will show here.' : 'Data will appear here once messages are processed via WhatsApp'}</p>
+                            <h3>No ${tab} data found</h3>
+                            <p>Data will appear here once messages are processed via WhatsApp</p>
                         </div>
                     `;
                     return;
                 }
 
                 try {
-                    if (tab === 'schedules') renderSchedules(contentArea, items);
-                    else renderTable(contentArea, items, tab);
+                    renderTable(contentArea, items, tab);
                     console.log(`Successfully rendered ${items.length} ${tab} items`);
                 } catch (error) {
                     console.error('Error rendering table:', error);
@@ -2312,6 +2603,11 @@
         document.getElementById('storeSelect').addEventListener('change', (e) => {
             currentStoreId = e.target.value;
             console.log('Store changed to:', currentStoreId);
+            const chosen = e.target.options[e.target.selectedIndex];
+            let modules = currentModules;
+            try { modules = JSON.parse(chosen.dataset.modules || '{}'); } catch (err) { modules = {}; }
+            applyBusinessModules(modules);
+            scheduleDraft = { weekStart: '', rows: [] };
             if (currentStoreId) {
                 loadDashboard(currentStoreId);
                 if (currentPage === 'dashboard') {
@@ -2469,7 +2765,18 @@
                     return;
                 }
                 const page = item.dataset.page;
+                if (item.dataset.openTab) {
+                    currentTab = item.dataset.openTab;
+                    document.querySelectorAll('.nav-tab[data-tab]').forEach(function (t) {
+                        t.classList.toggle('active', t.dataset.tab === currentTab);
+                    });
+                }
                 showPage(page);
+                if (item.dataset.openTab) {
+                    document.querySelectorAll('.menu-item').forEach(function (m) { m.classList.remove('active'); });
+                    item.classList.add('active');
+                    if (currentStoreId) loadTabData(currentStoreId, currentTab);
+                }
             });
         });
 

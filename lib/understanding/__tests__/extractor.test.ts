@@ -12,7 +12,6 @@ import { audioExtension } from '../transcribe';
 
 const rockaway = {
   ...buildDefaultProfile({ storeId: 'rockaway', storeName: 'Rockaway' }),
-  labelAliases: { 'store credit': 'card_sales' as const },
   vendorAliases: { lays: 'Empire Snacks LLC' },
 };
 
@@ -210,6 +209,17 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('dueDate');
     expect(prompt).toContain('Pay by');
     expect(prompt).toContain('"kind":"order"');
+    expect(prompt).toContain('handwritten "store sales" notebook');
+    expect(prompt).toContain('that page is the document');
+    expect(prompt).toContain('footer totals only');
+    expect(prompt).toContain('Grand Total Store Sales Reading');
+    expect(prompt).toContain('Total Fuel Sales');
+    expect(prompt).toContain('Cash Acceptor Cash');
+    expect(prompt).toContain('Store Tender Reading');
+    expect(prompt).toContain('Do not subtract it from Cash Acceptor Cash');
+    expect(prompt).toContain('Usual gas-station POS close');
+    expect(prompt).toContain('"store credit" means card_sales');
+    expect(prompt).toContain('"cash acceptor cash" means cash_sales');
   });
 
   it('lists the store vendors the owner set at signup', () => {
@@ -218,6 +228,29 @@ describe('buildSystemPrompt', () => {
       NOW,
     );
     expect(prompt).toContain('this store orders from: HLA (cigarettes), ABC (drinks)');
+  });
+
+  it('includes an owner picture map for a close photo', () => {
+    const prompt = buildSystemPrompt(
+      [
+        {
+          ...rockaway,
+          pictureTemplates: [
+            {
+              id: 'pic_exxon',
+              kind: 'daily_close',
+              title: 'Exxon Store Close (fuel page)',
+              note: 'Fuel is Total Fuel Sales.',
+              fields: [{ label: 'Total Fuel Sales', purpose: 'fuel' }],
+            },
+          ],
+        },
+      ],
+      NOW,
+    );
+    expect(prompt).toContain('picture map "Exxon Store Close (fuel page)"');
+    expect(prompt).toContain('take "Total Fuel Sales" as fuelSales');
+    expect(prompt).toContain('Owner note: Fuel is Total Fuel Sales.');
   });
 
   it('includes an owner-pasted daily close sample', () => {

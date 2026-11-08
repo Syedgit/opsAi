@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { logger } from '../utils/logger';
 import { resolveStoreIdForIncomingMessage } from '../../lib/whatsappStoreResolution';
 import { applyGroupLifecycleEvent } from '../../lib/whatsappGroupLifecycle';
+import { whatsappInboundParts } from '../../lib/whatsappInbound';
 
 // Webhook verification (Meta challenge)
 export const verifyWebhook = (req: Request, res: Response) => {
@@ -93,12 +94,10 @@ async function processIncomingMessage(
 ) {
   const messageId = message.id as string;
   const phoneE164 = `+${message.from}`;
-  const messageType = message.type as string;
-  const image = message.image as { id?: string; caption?: string } | undefined;
-  const audio = message.audio as { id?: string } | undefined;
-  // A photo's caption is the sender's own description of it.
-  const text = (message.text as { body?: string } | undefined)?.body || image?.caption || '';
-  const imageId = image?.id || audio?.id || null;
+  const inbound = whatsappInboundParts(message);
+  const text = inbound.messageText;
+  const imageId = inbound.mediaId || null;
+  const messageType = inbound.mediaType || (message.type as string);
 
   let storeId: string | null = null;
   let resolveSource: 'group' | 'phone_number' | 'none' = 'none';
@@ -135,7 +134,7 @@ async function processIncomingMessage(
       phoneE164,
       messageText: text || undefined,
       mediaId: imageId || undefined,
-      mediaType: messageType === 'image' ? 'image/jpeg' : messageType === 'audio' ? 'audio' : undefined,
+      mediaType: inbound.mediaType,
       storeId: storeId || undefined,
       groupId,
       phoneNumberId,

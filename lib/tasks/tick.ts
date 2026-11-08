@@ -100,15 +100,16 @@ const toMessageRun = (run: RunRow, instructions?: string | null): MessageRun => 
   fallback: run.fallback,
 });
 
-/** Group first (the shift sees it together); otherwise a private message to each staff member and manager. */
+/** Group first (the shift sees it together). With no group, staff get a DM; a solo owner does too. */
 export async function deliverToStore(prisma: PrismaClient, storeId: string, text: string): Promise<number> {
   const posted = await postToStoreGroups(prisma, storeId, text);
   if (posted > 0) return posted;
 
   const members = await prisma.userDirectory.findMany({ where: { storeId, isActive: true } });
+  const staff = members.filter((member) => member.role !== 'OWNER');
+  const targets = staff.length > 0 ? staff : members.filter((member) => member.role === 'OWNER');
   let sent = 0;
-  for (const member of members) {
-    if (member.role === 'OWNER') continue;
+  for (const member of targets) {
     if (await sendWhatsAppMessage(prisma, member.phoneE164, text, storeId)) sent += 1;
   }
   return sent;

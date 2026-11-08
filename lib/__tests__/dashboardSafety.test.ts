@@ -26,12 +26,15 @@ describe('dashboard.html', () => {
 
   it('has a Schedule tab that escapes names and never mentions pay', () => {
     expect(html).toContain('data-tab="schedules"');
+    expect(html).toContain('sched-grid');
     const fn = html.match(/function renderSchedules\(container, items\) \{[\s\S]*?\n {8}\}\n/);
     expect(fn).not.toBeNull();
     const body = fn![0];
     expect(body).toContain('esc(e.name)');
     expect(body).toContain('esc(week)');
     expect(body).not.toMatch(/wage|salary|payroll|rate|\$/i);
+    expect(html).toContain('esc(row.name)');
+    expect(html).not.toMatch(/wage|salary|payroll/i);
   });
 
   it('never shows made-up data', () => {
@@ -71,6 +74,12 @@ describe('tasks.html', () => {
 
   it('has no pay wording', () => {
     expect(tasks).not.toMatch(/wage|salary|payroll/i);
+  });
+
+  it('lets the owner teach a picture map without storing the photo', () => {
+    expect(tasks).toContain('Picture maps');
+    expect(tasks).toContain('Save picture map');
+    expect(tasks).toContain('The file is not stored');
   });
 
   it('is allowed to show proof photos by the content security policy', () => {

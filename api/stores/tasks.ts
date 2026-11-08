@@ -12,8 +12,24 @@ import { predictInspection } from '../../lib/tasks/inspection';
 import { customTemplate, parseInspectorReport, presetTemplate, proposeFromReport, type ParsedReport } from '../../lib/tasks/inspectorReport';
 import { extractPdfText, NotAPdfError } from '../../lib/tasks/pdfText';
 import { StoreSetupSchema, readStoredSetup, storeTypeOptions, suggestTasks } from '../../lib/tasks/storeSetup';
-import { parseStoredProfile, saveMessageSamples, saveVendors } from '../../lib/understanding/profileStore';
+import { dashboardModules } from '../../lib/businessProfile';
+import {
+  applyStoredProfile,
+  deletePictureTemplate,
+  parseStoredProfile,
+  saveMessageSamples,
+  savePictureTemplate,
+  saveVendors,
+} from '../../lib/understanding/profileStore';
+import {
+  PICTURE_PURPOSE_LABEL,
+  PICTURE_TEMPLATE_KINDS,
+  PICTURE_TEMPLATE_PRESETS,
+  describePictureTemplate,
+} from '../../lib/understanding/pictureTemplate';
+import { sampleFromDailyClosePhoto } from '../../lib/understanding/closeSample';
 import { sampleFromInvoicePhoto } from '../../lib/understanding/invoiceSample';
+import { buildDefaultProfile } from '../../lib/understanding/profile';
 import { StoreVendorsSchema, VENDOR_CATEGORIES, VENDOR_CATEGORY_LABEL } from '../../lib/understanding/vendors';
 import {
   addDashboardMember,
@@ -47,12 +63,32 @@ const BodySchema = z.discriminatedUnion('action', [
     action: z.literal('save_samples'),
     dailyClose: z.string().max(2000).optional(),
     invoice: z.string().max(2000).optional(),
+    dailyCloseImage: z.string().min(80).max(2_500_000).optional(),
+    dailyCloseMime: z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/gif']).optional(),
     invoiceImage: z.string().min(80).max(2_500_000).optional(),
     invoiceMime: z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/gif']).optional(),
   }),
   z.object({
     action: z.literal('save_vendors'),
     vendors: StoreVendorsSchema,
+  }),
+  z.object({
+    action: z.literal('save_picture_template'),
+    template: z.object({
+      id: z.string().trim().max(40).optional(),
+      kind: z.enum(PICTURE_TEMPLATE_KINDS),
+      title: z.string().max(80),
+      note: z.string().max(400).optional(),
+      fields: z.array(z.object({
+        label: z.string().max(80).optional(),
+        purpose: z.enum(['fuel', 'store_credit', 'cash', 'payout', 'ignore']),
+        note: z.string().max(120).optional(),
+      })).max(8),
+    }),
+  }),
+  z.object({
+    action: z.literal('delete_picture_template'),
+    id: z.string().trim().min(1).max(40),
   }),
   // The inspector's report as base64. Preview reads it and says what it would do; apply saves the result and adds the chosen tasks.
   z.object({ action: z.literal('preview_report'), pdf: z.string().min(100).max(3_500_000) }),
@@ -117,6 +153,14 @@ function vendorCatalog(profileJson: unknown) {
   };
 }
 
+function pictureMaps(profileJson: unknown) {
+  return {
+    pictureTemplates: parseStoredProfile(profileJson).pictureTemplates,
+    pictureTemplatePresets: PICTURE_TEMPLATE_PRESETS,
+    picturePurposes: Object.entries(PICTURE_PURPOSE_LABEL).map(([id, label]) => ({ id, label })),
+  };
+}
+
 function templateView(t: {
   id: string; title: string; instructions: string | null; category: string; standardId: string | null; criticality: string | null;
   minValue: number | null; maxValue: number | null; unit: string | null; fallback: string | null; shift: string | null; startTime: string; endTime: string | null;
@@ -170,9 +214,10 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       if (one(req.query.view) === 'setup') {
         res.status(200).json({
           success: true, storeName: store.storeName, canEdit, setup: readStoredSetup(store.setupJson),
-          storeTypes: storeTypeOptions(),
+          storeTypes: storeTypeOptions().map((t) => ({ ...t, modules: dashboardModules(t.id, t.defaults.fuel) })),
           messageSamples: parseStoredProfile(store.profileJson).messageSamples,
           ...vendorCatalog(store.profileJson),
+          ...pictureMaps(store.profileJson),
           buckets: TASK_BUCKETS,
         });
         return;
@@ -240,8 +285,10 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         })),
         features: Object.entries(STORE_FEATURE_LABEL).map(([id, label]) => ({ id, label })),
         setup,
+        modules: dashboardModules(setup?.storeType ?? null, setup?.fuel),
         messageSamples: parseStoredProfile(store.profileJson).messageSamples,
         ...vendorCatalog(store.profileJson),
+        ...pictureMaps(store.profileJson),
         buckets: TASK_BUCKETS,
       });
       return;
@@ -304,7 +351,24 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
     }
 
     if (body.action === 'save_samples') {
+      let dailyClose = body.dailyClose;
       let invoice = body.invoice;
+      if (body.dailyCloseImage) {
+        const profile = applyStoredProfile(
+          buildDefaultProfile({ storeId, storeName: store.storeName, timezone: store.timezone }),
+          parseStoredProfile(store.profileJson),
+        );
+        const read = await sampleFromDailyClosePhoto(
+          { base64: body.dailyCloseImage, mimeType: body.dailyCloseMime ?? 'image/jpeg' },
+          undefined,
+          [profile],
+        );
+        if (!read.ok) {
+          res.status(400).json({ error: read.error });
+          return;
+        }
+        dailyClose = read.text;
+      }
       if (body.invoiceImage) {
         const read = await sampleFromInvoicePhoto({
           base64: body.invoiceImage,
@@ -316,13 +380,33 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         }
         invoice = read.text;
       }
-      await saveMessageSamples(prisma, storeId, { dailyClose: body.dailyClose, invoice });
-      res.status(200).json({ success: true, invoiceSample: invoice?.trim() || undefined });
+      await saveMessageSamples(prisma, storeId, { dailyClose, invoice });
+      res.status(200).json({
+        success: true,
+        dailyCloseSample: dailyClose?.trim() || undefined,
+        invoiceSample: invoice?.trim() || undefined,
+      });
       return;
     }
 
     if (body.action === 'save_vendors') {
       await saveVendors(prisma, storeId, body.vendors);
+      res.status(200).json({ success: true });
+      return;
+    }
+
+    if (body.action === 'save_picture_template') {
+      try {
+        const saved = await savePictureTemplate(prisma, storeId, body.template);
+        res.status(200).json({ success: true, template: saved, summary: describePictureTemplate(saved) });
+      } catch (error) {
+        res.status(400).json({ error: error instanceof Error ? error.message : 'Could not save that picture map.' });
+      }
+      return;
+    }
+
+    if (body.action === 'delete_picture_template') {
+      await deletePictureTemplate(prisma, storeId, body.id);
       res.status(200).json({ success: true });
       return;
     }

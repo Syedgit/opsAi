@@ -1,6 +1,12 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import type { DepositRule, StoreProfile } from './profile';
+import {
+  MAX_PICTURE_TEMPLATES,
+  PictureTemplateSchema,
+  cleanPictureTemplate,
+  type PictureTemplate,
+} from './pictureTemplate';
 import { StoreVendorsSchema, type StoreVendor } from './vendors';
 
 /**
@@ -28,11 +34,20 @@ export const StoredProfileSchema = z.object({
   labelAliases: z.record(CanonicalLabelSchema).default({}),
   vendorAliases: z.record(z.string()).default({}),
   messageSamples: MessageSamplesSchema.default({}),
+  pictureTemplates: z.array(PictureTemplateSchema).max(MAX_PICTURE_TEMPLATES).default([]),
   vendors: StoreVendorsSchema.default([]),
 });
 export type StoredProfile = z.infer<typeof StoredProfileSchema>;
 
-const EMPTY: StoredProfile = { aliases: [], depositRule: null, labelAliases: {}, vendorAliases: {}, messageSamples: {}, vendors: [] };
+const EMPTY: StoredProfile = {
+  aliases: [],
+  depositRule: null,
+  labelAliases: {},
+  vendorAliases: {},
+  messageSamples: {},
+  pictureTemplates: [],
+  vendors: [],
+};
 
 /** Anything unreadable is treated as "nothing taught yet" rather than breaking message handling. */
 export function parseStoredProfile(json: unknown): StoredProfile {
@@ -48,9 +63,10 @@ export function applyStoredProfile(base: StoreProfile, json: unknown): StoreProf
     ...base,
     aliases: stored.aliases,
     depositRule: stored.depositRule,
-    labelAliases: stored.labelAliases,
-    vendorAliases: stored.vendorAliases,
+    labelAliases: { ...base.labelAliases, ...stored.labelAliases },
+    vendorAliases: { ...base.vendorAliases, ...stored.vendorAliases },
     messageSamples: stored.messageSamples,
+    pictureTemplates: stored.pictureTemplates,
     vendors: stored.vendors,
   };
 }
@@ -93,4 +109,24 @@ export async function saveMessageSamples(
 export async function saveVendors(prisma: PrismaClient, storeId: string, vendors: StoreVendor[]): Promise<void> {
   const clean = StoreVendorsSchema.parse(vendors);
   await updateStoredProfile(prisma, storeId, (current) => ({ ...current, vendors: clean }));
+}
+
+export async function savePictureTemplate(prisma: PrismaClient, storeId: string, input: Parameters<typeof cleanPictureTemplate>[0]): Promise<PictureTemplate> {
+  const clean = cleanPictureTemplate(input);
+  if (!clean) throw new Error('Mark at least one line to take or ignore.');
+  await updateStoredProfile(prisma, storeId, (current) => {
+    const rest = current.pictureTemplates.filter((t) => t.id !== clean.id);
+    if (rest.length >= MAX_PICTURE_TEMPLATES && !current.pictureTemplates.some((t) => t.id === clean.id)) {
+      throw new Error(`A store can have up to ${MAX_PICTURE_TEMPLATES} picture maps.`);
+    }
+    return { ...current, pictureTemplates: [...rest, clean] };
+  });
+  return clean;
+}
+
+export async function deletePictureTemplate(prisma: PrismaClient, storeId: string, id: string): Promise<void> {
+  await updateStoredProfile(prisma, storeId, (current) => ({
+    ...current,
+    pictureTemplates: current.pictureTemplates.filter((t) => t.id !== id),
+  }));
 }

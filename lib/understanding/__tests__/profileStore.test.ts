@@ -1,6 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import { buildDefaultProfile } from '../profile';
-import { applyStoredProfile, clearDepositRule, parseStoredProfile, saveDepositRule } from '../profileStore';
+import { applyStoredProfile, clearDepositRule, parseStoredProfile, saveDepositRule, savePictureTemplate, deletePictureTemplate } from '../profileStore';
 import { loadStoreProfiles } from '../storeProfiles';
 
 const rule = { includeCardSales: true, includeFuelSales: true, subtractPayouts: true, floatLeftInRegister: 0 };
@@ -18,7 +18,15 @@ function prismaWith(profileJson: unknown, exists = true) {
 
 describe('parseStoredProfile', () => {
   it('treats nothing as an empty profile', () => {
-    expect(parseStoredProfile(null)).toEqual({ aliases: [], depositRule: null, labelAliases: {}, vendorAliases: {}, messageSamples: {}, vendors: [] });
+    expect(parseStoredProfile(null)).toEqual({
+      aliases: [],
+      depositRule: null,
+      labelAliases: {},
+      vendorAliases: {},
+      messageSamples: {},
+      pictureTemplates: [],
+      vendors: [],
+    });
   });
 
   it('keeps what was taught and fills the rest with defaults', () => {
@@ -41,6 +49,27 @@ describe('applyStoredProfile', () => {
     expect(profile.storeName).toBe('Rockaway');
     expect(profile.depositRule).toEqual(rule);
     expect(profile.labelAliases['store credit']).toBe('card_sales');
+    expect(profile.labelAliases['cash acceptor cash']).toBe('cash_sales');
+  });
+
+  it('keeps the usual gas-station labels when the owner has not taught any', () => {
+    const base = buildDefaultProfile({ storeId: 'S001', storeName: 'Rockaway' });
+    const profile = applyStoredProfile(base, null);
+    expect(profile.labelAliases['store credit']).toBe('card_sales');
+    expect(profile.labelAliases['store cash']).toBe('cash_sales');
+    expect(profile.labelAliases['cash acceptor cash']).toBe('cash_sales');
+  });
+
+  it('keeps owner picture maps on the store', () => {
+    const base = buildDefaultProfile({ storeId: 'S002', storeName: 'Denville' });
+    const map = {
+      id: 'pic_exxon',
+      kind: 'daily_close' as const,
+      title: 'Exxon Store Close (fuel page)',
+      fields: [{ label: 'Total Fuel Sales', purpose: 'fuel' as const }],
+    };
+    const profile = applyStoredProfile(base, { pictureTemplates: [map] });
+    expect(profile.pictureTemplates).toEqual([map]);
   });
 });
 
@@ -70,6 +99,40 @@ describe('saveDepositRule / clearDepositRule', () => {
   it('refuses a malformed rule', async () => {
     const { prisma } = prismaWith(null);
     await expect(saveDepositRule(prisma, 'S001', { ...rule, floatLeftInRegister: -5 })).rejects.toThrow();
+  });
+});
+
+describe('savePictureTemplate / deletePictureTemplate', () => {
+  it('saves a map and keeps other settings', async () => {
+    const { prisma, update } = prismaWith({ vendors: [{ name: 'HLA', category: 'cigarettes' }] });
+    const saved = await savePictureTemplate(prisma, 'S002', {
+      kind: 'daily_close',
+      title: 'Exxon tender page',
+      note: 'Cash is the acceptor line.',
+      fields: [{ label: 'Cash Acceptor Cash', purpose: 'cash' }, { label: 'Credit CRIND', purpose: 'ignore' }],
+    });
+    expect(saved.id).toMatch(/^pic_/);
+    const data = update.mock.calls[0][0].data.profileJson;
+    expect(data.pictureTemplates).toEqual([saved]);
+    expect(data.vendors).toEqual([{ name: 'HLA', category: 'cigarettes' }]);
+  });
+
+  it('refuses a map with no lines', async () => {
+    const { prisma, update } = prismaWith(null);
+    await expect(savePictureTemplate(prisma, 'S002', { kind: 'daily_close', title: 'Empty', fields: [] })).rejects.toThrow(/at least one line/i);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('removes a map by id', async () => {
+    const existing = {
+      id: 'pic_old',
+      kind: 'daily_close',
+      title: 'Old map',
+      fields: [{ label: 'Total Fuel Sales', purpose: 'fuel' }],
+    };
+    const { prisma, update } = prismaWith({ pictureTemplates: [existing] });
+    await deletePictureTemplate(prisma, 'S002', 'pic_old');
+    expect(update.mock.calls[0][0].data.profileJson.pictureTemplates).toEqual([]);
   });
 });
 

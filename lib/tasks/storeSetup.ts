@@ -10,21 +10,64 @@ import { parseHHMM } from './time';
  * No people or phone numbers are collected here.
  */
 
-export const STORE_TYPES = ['seven_eleven', 'convenience', 'gas_station', 'other'] as const;
+export const STORE_TYPES = [
+  'seven_eleven',
+  'convenience',
+  'gas_station',
+  'office',
+  'shipping',
+  'real_estate',
+  'appointments',
+  'personal',
+  'other',
+] as const;
 export type StoreType = (typeof STORE_TYPES)[number];
 
 export const STORE_TYPE_LABEL: Record<StoreType, string> = {
   seven_eleven: '7-Eleven',
   convenience: 'Convenience store',
   gas_station: 'Gas station',
+  office: 'Office',
+  shipping: 'Shipping / UPS-style',
+  real_estate: 'Real estate',
+  appointments: 'Appointments / salon / clinic',
+  personal: 'Personal / solo',
   other: 'Other business',
 };
+
+/** How the setup screen groups types. A restaurant or gym picks Other — not a new industry card. */
+export const STORE_TYPE_FAMILY: Record<StoreType, 'shop' | 'desk' | 'appointments' | 'solo' | 'other'> = {
+  seven_eleven: 'shop',
+  convenience: 'shop',
+  gas_station: 'shop',
+  office: 'desk',
+  shipping: 'desk',
+  real_estate: 'desk',
+  appointments: 'appointments',
+  personal: 'solo',
+  other: 'other',
+};
+
+export const STORE_FAMILY_LABEL: Record<typeof STORE_TYPE_FAMILY[StoreType], string> = {
+  shop: 'Shop and fuel',
+  desk: 'Office and team',
+  appointments: 'Appointments',
+  solo: 'Just you',
+  other: 'Something else',
+};
+
+export const STORE_FAMILY_ORDER: Array<typeof STORE_TYPE_FAMILY[StoreType]> = ['shop', 'desk', 'appointments', 'solo', 'other'];
 
 export const STORE_TYPE_BLURB: Record<StoreType, string> = {
   seven_eleven: 'Franchise store. Shift checks plus 7Clean inspection tasks on a schedule.',
   convenience: 'Shop without pumps. Simple cleaning, coffee, and restock reminders.',
   gas_station: 'Fuel and a shop. Adds pump and spill-kit reminders when you sell fuel.',
-  other: 'Any other business. You pick everyday open, close, cleaning, and restock reminders.',
+  office: 'Desk team, agency, insurance. Who is in, meetings, lock-up. Mail later.',
+  shipping: 'Pack-and-ship counter. Who is on, held packages, last drop-off.',
+  real_estate: 'Agency or team. Showings, keys, lock-up. Open house later.',
+  appointments: 'Salon, barber, clinic, studio. Today’s book, rooms, confirm tomorrow, till close.',
+  personal: 'Just you. Daily plan and wrap-up in WhatsApp — works in a 1:1 chat.',
+  other: 'Any other business — restaurant, gym, auto shop, contractor. Open and lock-up first; add the rest later.',
 };
 
 export const MAX_SHIFTS = 4;
@@ -85,22 +128,34 @@ export type StoreSetup = z.infer<typeof StoreSetupSchema>;
 /** What the setup form starts with for each kind of store. */
 export function defaultSetup(storeType: StoreType): StoreSetup {
   const open24h = storeType === 'seven_eleven';
-  const shifts = open24h
-    ? [
+  if (open24h) {
+    return {
+      storeType,
+      open24h: true,
+      opensAt: null,
+      closesAt: null,
+      shifts: [
         { name: 'Morning', start: '06:00' },
         { name: 'Evening', start: '14:00' },
         { name: 'Night', start: '22:00' },
-      ]
-    : [
-        { name: 'Morning', start: '06:00' },
-        { name: 'Evening', start: '14:00' },
-      ];
+      ],
+      fuel: false,
+    };
+  }
+  const desk =
+    storeType === 'office' || storeType === 'real_estate' || storeType === 'personal' || storeType === 'other'
+      ? { opensAt: '09:00', closesAt: '18:00', shifts: [{ name: 'Morning', start: '09:00' }, { name: 'Afternoon', start: '13:00' }] }
+      : storeType === 'shipping'
+        ? { opensAt: '08:00', closesAt: '19:00', shifts: [{ name: 'Morning', start: '08:00' }, { name: 'Evening', start: '14:00' }] }
+        : storeType === 'appointments'
+          ? { opensAt: '09:00', closesAt: '19:00', shifts: [{ name: 'Morning', start: '09:00' }, { name: 'Evening', start: '14:00' }] }
+          : { opensAt: '06:00', closesAt: '22:00', shifts: [{ name: 'Morning', start: '06:00' }, { name: 'Evening', start: '14:00' }] };
   return {
     storeType,
-    open24h,
-    opensAt: open24h ? null : '06:00',
-    closesAt: open24h ? null : '22:00',
-    shifts,
+    open24h: false,
+    opensAt: desk.opensAt,
+    closesAt: desk.closesAt,
+    shifts: desk.shifts,
     fuel: storeType === 'gas_station',
   };
 }
@@ -110,6 +165,8 @@ export function storeTypeOptions() {
     id,
     label: STORE_TYPE_LABEL[id],
     blurb: STORE_TYPE_BLURB[id],
+    family: STORE_TYPE_FAMILY[id],
+    familyLabel: STORE_FAMILY_LABEL[STORE_TYPE_FAMILY[id]],
     defaults: defaultSetup(id),
   }));
 }
@@ -206,17 +263,32 @@ export interface Suggestion {
   scheduleText: string;
 }
 
-/** What a store that is not a 7-Eleven gets ticked: reports + simple routines, nothing from an inspection. */
-const SIMPLE_RECOMMENDED = new Set([
+/** 7-Eleven and gas/shop keep the existing full starter ticks — those sites are known. */
+const SHOP_RECOMMENDED = new Set([
   'own-daily-close', 'own-deposit', 'own-opening',
   'own-coffee-station', 'own-restroom-check', 'ic-floors', 'own-trash', 'own-restock', 'own-safe-drop', 'own-fire-safety',
   'own-fuel-islands', 'own-pump-check', 'own-spill-kit', 'own-competitor-prices',
 ]);
 
+/**
+ * Office, salon, realty, shipping, personal, and “other” only tick a few on day one.
+ * The rest stay on the list for Store admin — we do not invent a full ops pack for businesses we have not run.
+ */
+const MIN_RECOMMENDED: Record<string, Set<string>> = {
+  office: new Set(['own-coverage', 'own-meetings', 'own-lock-up']),
+  shipping: new Set(['own-who-on', 'own-packages', 'own-cutoff']),
+  real_estate: new Set(['own-showings', 'own-keys', 'own-lock-up']),
+  appointments: new Set(['own-appointments-today', 'own-rooms-ready', 'own-confirm-tomorrow', 'own-daily-close']),
+  personal: new Set(['own-today-plan', 'own-follow-ups', 'own-wrap-up']),
+  other: new Set(['own-open-desk', 'own-lock-up']),
+};
+
 function isRecommended(preset: TaskPreset, setup: StoreSetup): boolean {
+  const min = MIN_RECOMMENDED[setup.storeType];
+  if (min) return min.has(preset.id);
   if (preset.id === 'own-daily-close' || preset.id === 'own-deposit') return true;
   if (preset.id === 'own-competitor-prices') return setup.fuel;
-  if (setup.storeType !== 'seven_eleven') return SIMPLE_RECOMMENDED.has(preset.id);
+  if (setup.storeType !== 'seven_eleven') return SHOP_RECOMMENDED.has(preset.id);
   const t = preset.template;
   if (preset.requires) return preset.source === 'report' && setup.fuel;
   // The routines behind the heavily weighted 7Clean standards, not the whole list: too many tasks wear a team out.

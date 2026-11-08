@@ -125,7 +125,7 @@ export interface CaseFile {
   /** Vendors this store orders from (set at signup), by store name. */
   vendors?: Record<string, Array<{ name: string; category: string }>>;
   /** Store type at signup (convenience, gas_station, seven_eleven, other), by store name. */
-  storeTypes?: Record<string, 'seven_eleven' | 'convenience' | 'gas_station' | 'other'>;
+  storeTypes?: Record<string, 'seven_eleven' | 'convenience' | 'gas_station' | 'office' | 'shipping' | 'real_estate' | 'appointments' | 'personal' | 'other'>;
   steps: Step[];
 }
 

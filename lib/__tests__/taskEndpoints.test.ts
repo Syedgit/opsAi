@@ -332,11 +332,17 @@ describe('Store setup (type, hours, shifts)', () => {
     const { status, body } = await asUser('GET', undefined, { view: 'setup' });
     expect(status).toBe(200);
     expect(body.setup).toBeNull();
-    const types = body.storeTypes as Array<{ id: string; label: string; blurb: string; defaults: { open24h: boolean } }>;
-    expect(types.map((t) => t.id)).toEqual(['seven_eleven', 'convenience', 'gas_station', 'other']);
+    const types = body.storeTypes as Array<{ id: string; label: string; blurb: string; defaults: { open24h: boolean }; modules?: { vendors?: boolean; samples?: boolean } }>;
+    expect(types.map((t) => t.id)).toEqual(['seven_eleven', 'convenience', 'gas_station', 'office', 'shipping', 'real_estate', 'appointments', 'personal', 'other']);
     expect(types[0]).toMatchObject({ label: '7-Eleven', defaults: { open24h: true } });
     expect(types[2]).toMatchObject({ label: 'Gas station' });
-    expect(types[3].blurb.toLowerCase()).toMatch(/other business/);
+    expect(types.find((t) => t.id === 'shipping')).toMatchObject({ label: 'Shipping / UPS-style' });
+    expect(types.find((t) => t.id === 'real_estate')?.modules).toMatchObject({ vendors: false, samples: false });
+    expect(types.find((t) => t.id === 'convenience')?.modules).toMatchObject({ vendors: true, samples: true });
+    expect(types[types.length - 1].blurb.toLowerCase()).toMatch(/other business/);
+    const presets = body.pictureTemplatePresets as Array<{ id: string; title: string }>;
+    expect(presets.map((p) => p.id)).toEqual(['exxon_store_close', 'exxon_tender', 'notebook_store_sales']);
+    expect(body.pictureTemplates).toEqual([]);
   });
 
   it('returns the saved setup on the board and on the setup view', async () => {
@@ -466,6 +472,75 @@ describe('Store setup (type, hours, shifts)', () => {
       where: { storeId: 'S001' },
       data: expect.objectContaining({
         profileJson: expect.objectContaining({ messageSamples: expect.objectContaining({ dailyClose: 'cash 100 card 200 deposit 300' }) }),
+      }),
+    }));
+  });
+
+  it('saves a picture map on the store profile', async () => {
+    userStoreFindFirst.mockResolvedValue({ role: 'OWNER' });
+    storeFindUnique.mockResolvedValue({ storeName: 'Denville', timezone: 'America/New_York', profileJson: null });
+    const { status, body } = await asUser('POST', {
+      action: 'save_picture_template',
+      template: {
+        kind: 'daily_close',
+        title: 'Exxon Store Close (fuel page)',
+        note: 'Fuel is Total Fuel Sales.',
+        fields: [
+          { label: 'Total Fuel Sales', purpose: 'fuel' },
+          { label: 'Grand Total Store Sales Reading', purpose: 'ignore' },
+        ],
+      },
+    });
+    expect(status).toBe(200);
+    expect(String(body.summary)).toMatch(/Total Fuel Sales/);
+    expect(storeUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      where: { storeId: 'S001' },
+      data: expect.objectContaining({
+        profileJson: expect.objectContaining({
+          pictureTemplates: expect.arrayContaining([
+            expect.objectContaining({
+              title: 'Exxon Store Close (fuel page)',
+              fields: expect.arrayContaining([
+                expect.objectContaining({ label: 'Total Fuel Sales', purpose: 'fuel' }),
+              ]),
+            }),
+          ]),
+        }),
+      }),
+    }));
+  });
+
+  it('rejects a picture map with no lines', async () => {
+    userStoreFindFirst.mockResolvedValue({ role: 'OWNER' });
+    storeFindUnique.mockResolvedValue({ storeName: 'Denville', timezone: 'America/New_York', profileJson: null });
+    const { status, body } = await asUser('POST', {
+      action: 'save_picture_template',
+      template: { kind: 'daily_close', title: 'Empty', fields: [] },
+    });
+    expect(status).toBe(400);
+    expect(String(body.error)).toMatch(/at least one line/i);
+    expect(storeUpdate).not.toHaveBeenCalled();
+  });
+
+  it('removes a picture map', async () => {
+    userStoreFindFirst.mockResolvedValue({ role: 'OWNER' });
+    storeFindUnique.mockResolvedValue({
+      storeName: 'Denville',
+      timezone: 'America/New_York',
+      profileJson: {
+        pictureTemplates: [{
+          id: 'pic_old',
+          kind: 'daily_close',
+          title: 'Old map',
+          fields: [{ label: 'Total Fuel Sales', purpose: 'fuel' }],
+        }],
+      },
+    });
+    const { status } = await asUser('POST', { action: 'delete_picture_template', id: 'pic_old' });
+    expect(status).toBe(200);
+    expect(storeUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        profileJson: expect.objectContaining({ pictureTemplates: [] }),
       }),
     }));
   });

@@ -280,6 +280,23 @@ export async function processWhatsAppMessage(
     if (outcome === 'handled') return;
   }
 
+  // Number rules cannot see pixels. Never turn a photo into "Could not classify".
+  if (mediaId) {
+    logApp('wa.path', { messageId, from, storeId, path: understander ? 'photo_unread' : 'ai_off' });
+    await sendWhatsAppMessage(
+      prisma,
+      phoneE164,
+      '📷 I got the photo, but picture reading is not on for this app yet. Type the totals like: cash 298 card 1355 gas 1440.',
+      storeId
+    );
+    await updateMessageLog(prisma, messageId, {
+      classification: understander ? 'AI_UNAVAILABLE' : 'AI_OFF',
+      processed: true,
+      storeId,
+    });
+    return;
+  }
+
   logApp('wa.path', { messageId, from, storeId, path: 'fallback_rules' });
   await executeRuleExtraction(prisma, { messageId, phoneE164, storeId, text });
 }

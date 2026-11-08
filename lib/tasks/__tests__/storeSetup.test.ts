@@ -18,16 +18,22 @@ describe('store setup form', () => {
     for (const type of STORE_TYPES) expect(StoreSetupSchema.safeParse(defaultSetup(type)).success).toBe(true);
   });
 
-  it('describes 7-Eleven, gas, convenience, and other businesses for the setup form', () => {
+  it('describes 7-Eleven, gas, convenience, office, shipping, real estate, and other businesses for the setup form', () => {
     const ids = storeTypeOptions().map((t) => t.id);
-    expect(ids).toEqual(['seven_eleven', 'convenience', 'gas_station', 'other']);
+    expect(ids).toEqual(['seven_eleven', 'convenience', 'gas_station', 'office', 'shipping', 'real_estate', 'appointments', 'personal', 'other']);
     expect(storeTypeOptions().every((t) => t.blurb.length > 20)).toBe(true);
+    expect(storeTypeOptions().map((t) => t.family)).toEqual(['shop', 'shop', 'shop', 'desk', 'desk', 'desk', 'appointments', 'solo', 'other']);
   });
 
   it('starts a 7-Eleven open 24 hours with three shifts, and a gas station with fuel on', () => {
     expect(defaultSetup('seven_eleven')).toMatchObject({ open24h: true, fuel: false });
     expect(defaultSetup('seven_eleven').shifts.map((s) => s.name)).toEqual(['Morning', 'Evening', 'Night']);
     expect(defaultSetup('gas_station').fuel).toBe(true);
+  });
+
+  it('starts an office on weekday hours with no fuel', () => {
+    expect(defaultSetup('office')).toMatchObject({ open24h: false, opensAt: '09:00', closesAt: '18:00', fuel: false });
+    expect(defaultSetup('shipping').opensAt).toBe('08:00');
   });
 
   it('tidies times and orders the shifts', () => {
@@ -137,7 +143,8 @@ describe('placing the starter tasks around the shifts', () => {
     for (const type of STORE_TYPES) {
       for (const fuel of [false, true]) {
         const list = suggestTasks({ ...defaultSetup(type), fuel });
-        expect(list.length).toBeGreaterThan(type === 'seven_eleven' ? 20 : 6);
+        const min = type === 'seven_eleven' ? 20 : type === 'office' || type === 'shipping' || type === 'real_estate' || type === 'appointments' || type === 'personal' ? 1 : 6;
+        expect(list.length).toBeGreaterThan(min);
         for (const s of list) {
           expect(s.title.length).toBeGreaterThan(0);
           expect(s.scheduleText.length).toBeGreaterThan(0);
@@ -173,7 +180,7 @@ describe('which starter tasks are ticked', () => {
   });
 
   it('does not offer the 7Clean inspection standards to a store that is not a 7-Eleven', () => {
-    for (const type of ['convenience', 'gas_station', 'other'] as const) {
+    for (const type of ['convenience', 'gas_station', 'office', 'shipping', 'real_estate', 'appointments', 'personal', 'other'] as const) {
       const list = suggestTasks({ ...defaultSetup(type), fuel: true });
       expect(list.filter((s) => s.source === 'report')).toEqual([]);
       expect(list.some((s) => s.template.standardId)).toBe(false);
@@ -199,6 +206,36 @@ describe('which starter tasks are ticked', () => {
     expect(list.find((s) => s.presetId === 'own-lottery')?.recommended).toBe(false);
     expect(list.every((s) => s.source === 'suggested')).toBe(true);
     expect(list.some((s) => s.bucket === 'daily_reports')).toBe(true);
+  });
+
+  it('gives an office, shipping counter, and real-estate team a short day-one list, not a till close', () => {
+    expect(ticked(defaultSetup('office')).sort()).toEqual(['own-coverage', 'own-lock-up', 'own-meetings']);
+    expect(ticked(defaultSetup('office'))).not.toContain('own-daily-close');
+    expect(suggestTasks(defaultSetup('office')).map((s) => s.presetId)).toEqual(expect.arrayContaining(['own-open-desk', 'own-mail']));
+    expect(suggestTasks(defaultSetup('office')).map((s) => s.presetId)).not.toContain('own-coffee-station');
+    expect(ticked(defaultSetup('shipping')).sort()).toEqual(['own-cutoff', 'own-packages', 'own-who-on']);
+    expect(ticked(defaultSetup('real_estate')).sort()).toEqual(['own-keys', 'own-lock-up', 'own-showings']);
+  });
+
+  it('gives a salon or clinic the book, rooms, and a till close', () => {
+    const ids = ticked(defaultSetup('appointments'));
+    expect(ids.sort()).toEqual(['own-appointments-today', 'own-confirm-tomorrow', 'own-daily-close', 'own-rooms-ready']);
+    expect(ids).not.toContain('own-coffee-station');
+    expect(suggestTasks(defaultSetup('appointments')).map((s) => s.presetId)).toEqual(expect.arrayContaining(['own-open-desk', 'own-lock-up']));
+  });
+
+  it('gives personal/solo use a daily plan, not a shop close', () => {
+    const ids = ticked(defaultSetup('personal'));
+    expect(ids.sort()).toEqual(['own-follow-ups', 'own-today-plan', 'own-wrap-up']);
+    expect(ids).not.toContain('own-daily-close');
+  });
+
+  it('gives an unknown other business open and lock-up only, not a c-store pack', () => {
+    const ids = ticked(defaultSetup('other'));
+    expect(ids.sort()).toEqual(['own-lock-up', 'own-open-desk']);
+    expect(suggestTasks(defaultSetup('other')).map((s) => s.presetId)).toEqual(expect.arrayContaining(['own-today-plan', 'own-daily-close', 'own-restock']));
+    expect(suggestTasks(defaultSetup('other')).map((s) => s.presetId)).not.toContain('own-coffee-station');
+    expect(suggestTasks(defaultSetup('other')).map((s) => s.presetId)).not.toContain('own-lottery');
   });
 
   it('does not give a 7-Eleven the simple routines written for other stores (it has the inspection list)', () => {
@@ -228,7 +265,7 @@ describe('which kinds of store get the inspection', () => {
   });
 
   it('keeps it away from every other kind of store', () => {
-    for (const type of ['convenience', 'gas_station', 'other'] as const) {
+    for (const type of ['convenience', 'gas_station', 'office', 'shipping', 'real_estate', 'appointments', 'personal', 'other'] as const) {
       expect(inspectionApplies(type)).toBe(false);
       expect(presetsForStore(type).every((p) => p.source === 'suggested')).toBe(true);
     }
