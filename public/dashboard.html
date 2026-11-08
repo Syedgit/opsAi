@@ -20,8 +20,8 @@
     <link rel="apple-touch-startup-image" href="/splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
     <link rel="apple-touch-startup-image" href="/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
     <link rel="apple-touch-startup-image" href="/splash-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
-    <link rel="stylesheet" href="/app-shell.css">
-    <script src="/app-shell.js"></script>
+    <link rel="stylesheet" href="/app-shell.css?v=2">
+    <script src="/app-shell.js?v=2"></script>
     <title>opsAi Dashboard</title>
     <style>
         * {
@@ -1387,31 +1387,27 @@
     <script>
         
         // Authentication
-        // Check for token in URL (from OAuth callback) and store from a WhatsApp tap-link.
+        // Store from a WhatsApp tap-link.
         const urlParams = new URLSearchParams(window.location.search);
-        const tokenFromUrl = urlParams.get('token');
         const storeFromUrl = urlParams.get('storeId');
         if (storeFromUrl) sessionStorage.setItem('selectStoreId', storeFromUrl);
-        if (tokenFromUrl) localStorage.setItem('authToken', tokenFromUrl);
-        if (tokenFromUrl || storeFromUrl) {
+        if (storeFromUrl) {
             window.history.replaceState({}, document.title, '/dashboard');
         }
         
         let currentUser = null;
         
         function getAuthHeaders() {
-            const token = localStorage.getItem('authToken');
-            if (token) {
-                return { Authorization: 'Bearer ' + token };
-            }
-            return {};
+            return { 'Content-Type': 'application/json' };
         }
 
         (async function showTrialBanner() {
-            const token = localStorage.getItem('authToken');
-            if (!token) return;
             try {
-                const r = await fetch('/api/auth/me', { headers: { Authorization: 'Bearer ' + token } });
+                const r = await fetch('/api/auth/me');
+                if (!r.ok) {
+                    window.location.replace('/login?next=/dashboard');
+                    return;
+                }
                 const d = await r.json();
                 const b = d.user && d.user.billing;
                 if (!b) return;
@@ -1432,13 +1428,9 @@
         })();
 
         (async function redirectIfNeedsOnboarding() {
-            const token = localStorage.getItem('authToken');
-            if (!token) return;
             if (localStorage.getItem('skipOwnerOnboarding') === '1') return;
             try {
-                const r = await fetch('/api/onboarding/status', {
-                    headers: { Authorization: 'Bearer ' + token },
-                });
+                const r = await fetch('/api/onboarding/status');
                 const d = await r.json();
                 if (d.success && d.needsOnboarding) {
                     window.location.replace('/onboarding');
@@ -2737,10 +2729,8 @@
         }
         
         document.getElementById('logoutBtn')?.addEventListener('click', () => {
-            localStorage.removeItem('authToken');
-            localStorage.removeItem('user');
-            localStorage.removeItem('skipOwnerOnboarding');
-            window.location.href = '/login';
+            if (window.opsai && window.opsai.logout) window.opsai.logout();
+            else window.location.href = '/login';
         });
 
         // Add event listeners for summary controls

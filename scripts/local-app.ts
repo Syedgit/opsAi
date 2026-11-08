@@ -78,6 +78,7 @@ app.get('/billing', sendPage('billing.html'));
 app.all('/api/auth/signup', wrap(authHandler));
 app.all('/api/auth/login', wrap(authHandler));
 app.all('/api/auth/me', wrap(authHandler));
+app.all('/api/auth/logout', wrap(authHandler));
 app.all('/api/billing', wrap(billingHandler));
 app.all('/api/onboarding/status', wrap(onboardingHandler));
 app.all('/api/onboarding/complete-store', wrap(onboardingHandler));

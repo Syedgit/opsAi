@@ -20,8 +20,8 @@
     <link rel="apple-touch-startup-image" href="/splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
     <link rel="apple-touch-startup-image" href="/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
     <link rel="apple-touch-startup-image" href="/splash-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
-    <link rel="stylesheet" href="/app-shell.css">
-    <script src="/app-shell.js"></script>
+    <link rel="stylesheet" href="/app-shell.css?v=2">
+    <script src="/app-shell.js?v=2"></script>
     <title>Set up your store - opsAi</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -276,15 +276,14 @@
         </div>
     </div>
     <script>
-        const token = localStorage.getItem('authToken');
-        if (!token) {
-            window.location.replace('/login?next=/onboarding');
+        if (window.opsai) {
+            window.opsai.me().then(function (d) {
+                if (!d) window.location.replace('/login?next=' + encodeURIComponent(location.pathname + location.search));
+            });
         }
         document.getElementById('logoutBtn').addEventListener('click', function () {
-            localStorage.removeItem('authToken');
-            localStorage.removeItem('user');
-            localStorage.removeItem('skipOwnerOnboarding');
-            window.location.href = '/login';
+            if (window.opsai && window.opsai.logout) window.opsai.logout();
+            else window.location.href = '/login';
         });
 
         let opsDisplayNumber = null;
@@ -308,12 +307,10 @@
 
         (async function checkStatus() {
             try {
-                const r = await fetch('/api/onboarding/status', {
-                    headers: { Authorization: 'Bearer ' + token },
-                });
+                const r = await fetch('/api/onboarding/status');
                 const d = await r.json();
                 if (d.opsWhatsAppDisplayNumber) opsDisplayNumber = d.opsWhatsAppDisplayNumber;
-                if (d.success && !d.needsOnboarding && !isAddMode && !isSetupMode && token !== 'preview') {
+                if (d.success && !d.needsOnboarding && !isAddMode && !isSetupMode && !d.preview) {
                     window.location.replace('/dashboard');
                 }
             } catch (_) {}
@@ -421,7 +418,7 @@
             const qs = new URLSearchParams(Object.assign({ storeId: setupStoreId }, query || {})).toString();
             const res = await fetch('/api/stores/tasks?' + qs, {
                 method: method,
-                headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json' },
                 body: body ? JSON.stringify(body) : undefined,
             });
             let data = {};
@@ -978,7 +975,6 @@
                 const response = await fetch('/api/onboarding/complete-store', {
                     method: 'POST',
                     headers: {
-                        Authorization: 'Bearer ' + token,
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify(body),

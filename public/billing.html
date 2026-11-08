@@ -20,8 +20,8 @@
     <link rel="apple-touch-startup-image" href="/splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
     <link rel="apple-touch-startup-image" href="/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
     <link rel="apple-touch-startup-image" href="/splash-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
-    <link rel="stylesheet" href="/app-shell.css">
-    <script src="/app-shell.js"></script>
+    <link rel="stylesheet" href="/app-shell.css?v=2">
+    <script src="/app-shell.js?v=2"></script>
     <title>Plan and usage - opsAi</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -80,8 +80,9 @@
         </div>
     </main>
     <script>
-        const token = localStorage.getItem('authToken');
-        if (!token) window.location.href = '/login';
+        if (window.opsai) {
+            window.opsai.me().then(function (d) { if (!d) window.location.href = '/login'; });
+        }
         const params = new URLSearchParams(window.location.search);
         function esc(value) {
             return String(value == null ? '' : value)
@@ -94,7 +95,7 @@
         async function billingAction(action) {
             const res = await fetch('/api/billing', {
                 method: 'POST',
-                headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: action })
             });
             const data = await res.json();
@@ -107,7 +108,7 @@
                 const billingUrl = sessionId
                     ? '/api/billing?session_id=' + encodeURIComponent(sessionId)
                     : '/api/billing';
-                const res = await fetch(billingUrl, { headers: { Authorization: 'Bearer ' + token } });
+                const res = await fetch(billingUrl);
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || 'Could not load billing');
                 const b = data.billing || {};

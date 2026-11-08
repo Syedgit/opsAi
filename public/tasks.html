@@ -20,8 +20,8 @@
     <link rel="apple-touch-startup-image" href="/splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
     <link rel="apple-touch-startup-image" href="/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
     <link rel="apple-touch-startup-image" href="/splash-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
-    <link rel="stylesheet" href="/app-shell.css">
-    <script src="/app-shell.js"></script>
+    <link rel="stylesheet" href="/app-shell.css?v=2">
+    <script src="/app-shell.js?v=2"></script>
     <title>opsAi · Tasks &amp; alerts</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -170,9 +170,10 @@
     let editing = null; // template being edited, or {} for a new one
     const features = {}; // store-type switches for the starter list, e.g. { fuel: true }
 
-    const token = localStorage.getItem('authToken');
-    if (!token) location.href = '/login';
-    const authHeaders = () => ({ Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' });
+    if (window.opsai) {
+        window.opsai.me().then(function (d) { if (!d) location.href = '/login'; });
+    }
+    const authHeaders = () => ({ 'Content-Type': 'application/json' });
 
     function esc(value) {
         return String(value === null || value === undefined ? '' : value)
@@ -1004,10 +1005,8 @@
         const el = e.target.closest('button, .tab');
         if (!el) return;
         if (el.id === 'logoutBtn') {
-            localStorage.removeItem('authToken');
-            localStorage.removeItem('user');
-            localStorage.removeItem('skipOwnerOnboarding');
-            location.href = '/login';
+            if (window.opsai && window.opsai.logout) window.opsai.logout();
+            else location.href = '/login';
             return;
         }
         if (el.classList.contains('tab')) { view = el.dataset.view; editing = null; note('', ''); if (view === 'inspection') { loadInspection(); } else if (board) render(); return; }
@@ -1143,7 +1142,7 @@
             const box = document.querySelector('[data-photo-box="' + id + '"]');
             el.disabled = true;
             try {
-                const res = await fetch('/api/stores/tasks?' + new URLSearchParams({ storeId: storeId, photo: id }), { headers: { Authorization: 'Bearer ' + token } });
+                const res = await fetch('/api/stores/tasks?' + new URLSearchParams({ storeId: storeId, photo: id }));
                 if (!res.ok) throw new Error('The photo is no longer available (WhatsApp keeps photos about 30 days).');
                 const img = document.createElement('img');
                 img.alt = 'Proof photo';

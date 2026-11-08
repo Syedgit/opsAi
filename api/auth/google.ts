@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
-import { sign } from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
-import { getJwtSecret } from '../../lib/apiAuth';
+import { signSession } from '../../lib/apiAuth';
+import { setSessionCookie } from '../../lib/authCookie';
 import { googleOAuthStep } from '../../lib/googleOAuth';
 import { logAppError, loggedHandler, serializeError } from '../../lib/requestLog';
 import { newAccountBilling } from '../../lib/billing/plans';
@@ -148,43 +148,8 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       });
     }
 
-    // Generate JWT token
-    const token = sign(
-      {
-        userId: user.id,
-        email: user.email,
-      },
-      getJwtSecret(),
-      { expiresIn: '7d' }
-    );
-
-    // Store token in localStorage via redirect
-    // In production, consider using httpOnly cookies
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Signing in...</title>
-        </head>
-        <body>
-          <script>
-            localStorage.setItem('authToken', '${token}');
-            localStorage.setItem('user', JSON.stringify(${JSON.stringify({
-              id: user.id,
-              email: user.email,
-              name: user.name,
-              stores: user.stores.map((us) => ({
-                storeId: us.store.storeId,
-                storeName: us.store.storeName,
-                role: us.role,
-              })),
-            })}));
-            window.location.href = ${JSON.stringify(user.stores.length === 0 ? '/onboarding' : '/dashboard')};
-          </script>
-        </body>
-      </html>
-    `;
-    res.send(html);
+    setSessionCookie(res, signSession(user), req);
+    res.redirect(user.stores.length === 0 ? '/onboarding' : '/dashboard');
   } catch (error: unknown) {
     logAppError('auth.google', serializeError(error));
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';

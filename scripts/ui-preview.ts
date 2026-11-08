@@ -440,8 +440,12 @@ const MIME: Record<string, string> = {
 };
 const PAGES: Record<string, string> = { '/dashboard': 'dashboard.html', '/tasks': 'tasks.html', '/login': 'login.html', '/signup': 'signup.html', '/onboarding': 'onboarding.html', '/pricing': 'pricing.html', '/billing': 'billing.html', '/': 'dashboard.html' };
 
-function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
-  res.writeHead(status, { 'Content-Type': 'application/json' });
+const PREVIEW_COOKIE = 'opsai_session=preview; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400';
+
+function sendJson(res: http.ServerResponse, status: number, body: unknown, setCookie = false): void {
+  const headers: Record<string, string | string[]> = { 'Content-Type': 'application/json' };
+  if (setCookie) headers['Set-Cookie'] = PREVIEW_COOKIE;
+  res.writeHead(status, headers);
   res.end(JSON.stringify(body));
 }
 
@@ -554,6 +558,7 @@ async function api(req: http.IncomingMessage, res: http.ServerResponse, url: URL
         role: 'OWNER',
         groupSetupMode: 'manual',
         opsWhatsAppDisplayNumber: '+1 (555) 010-0100',
+        preview: true,
       }),
       true
     );
@@ -565,9 +570,8 @@ async function api(req: http.IncomingMessage, res: http.ServerResponse, url: URL
     return (
       sendJson(res, 201, {
         success: true,
-        token: 'preview',
         user: { id: 'preview-user', email: parsed.email, name: parsed.name, stores: [] },
-      }),
+      }, true),
       true
     );
   }
@@ -578,14 +582,13 @@ async function api(req: http.IncomingMessage, res: http.ServerResponse, url: URL
       return (
         sendJson(res, 200, {
           success: true,
-          token: 'preview',
           user: {
             id: 'preview-user',
             email: 'preview@opsai.local',
             name: 'Preview Owner',
             stores: [{ storeId: 'S001', storeName: 'Rockaway', role: 'OWNER' }],
           },
-        }),
+        }, true),
         true
       );
     }
@@ -594,23 +597,27 @@ async function api(req: http.IncomingMessage, res: http.ServerResponse, url: URL
     return (
       sendJson(res, 200, {
         success: true,
-        token: 'preview',
         user: {
           id: 'preview-user',
           email: parsed.email,
           name: 'Preview Owner',
           stores: [{ storeId: 'S001', storeName: 'Rockaway', role: 'OWNER' }],
         },
-      }),
+      }, true),
       true
     );
   }
 
+  if (p === '/api/auth/logout' && req.method === 'POST') {
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Set-Cookie': 'opsai_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
+    });
+    res.end(JSON.stringify({ success: true }));
+    return true;
+  }
+
   if (p === '/api/auth/me' && req.method === 'GET') {
-    const auth = req.headers.authorization;
-    if (typeof auth !== 'string' || !auth.startsWith('Bearer ') || !auth.substring(7)) {
-      return sendJson(res, 401, { error: 'No token provided' }), true;
-    }
     return (
       sendJson(res, 200, {
         success: true,
@@ -653,10 +660,9 @@ const server = http.createServer(async (req, res) => {
       res.end('Not found');
       return;
     }
-    if (['tasks.html', 'onboarding.html'].includes(path.basename(full))) {
-      // The preview has no login: give the page a pretend token so it does not send you to /login.
-      const html = fs.readFileSync(full, 'utf8').replace('<head>', "<head><script>localStorage.setItem('authToken','preview')</script>");
-      res.writeHead(200, { 'Content-Type': MIME['.html'] });
+    if (['tasks.html', 'onboarding.html', 'dashboard.html', 'billing.html'].includes(path.basename(full))) {
+      const html = fs.readFileSync(full, 'utf8');
+      res.writeHead(200, { 'Content-Type': MIME['.html'], 'Set-Cookie': PREVIEW_COOKIE });
       res.end(html);
       return;
     }

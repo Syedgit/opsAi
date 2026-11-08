@@ -6,7 +6,7 @@ export const MAX_NAME_LENGTH = 80;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export type AuthAction = 'login' | 'signup' | 'me';
+export type AuthAction = 'login' | 'signup' | 'me' | 'logout';
 
 export type CredentialError = { ok: false; error: string; status: number };
 
@@ -42,6 +42,7 @@ export function authActionFromUrl(url?: string): AuthAction | null {
   const path = (url || '').split('?')[0].replace(/\/+$/, '');
   if (path.endsWith('/signup')) return 'signup';
   if (path.endsWith('/login')) return 'login';
+  if (path.endsWith('/logout')) return 'logout';
   if (path.endsWith('/me')) return 'me';
   return null;
 }

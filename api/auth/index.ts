@@ -1,8 +1,16 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-import { sign, verify } from 'jsonwebtoken';
-import { getJwtSecret } from '../../lib/apiAuth';
+import { getAuthUser, signSession } from '../../lib/apiAuth';
+import { clearSessionCookie, setSessionCookie } from '../../lib/authCookie';
+import {
+  AUTH_LOCKED,
+  clearAuthFailures,
+  clientIp,
+  inspectAuthLimit,
+  noteAuthAttempt,
+  noteAuthFailure,
+} from '../../lib/authLimit';
 import {
   DUPLICATE_EMAIL_ERROR,
   INVALID_LOGIN_ERROR,
@@ -45,8 +53,23 @@ function publicUser(
   };
 }
 
-function signToken(user: { id: string; email: string }): string {
-  return sign({ typ: 'session', userId: user.id, email: user.email }, getJwtSecret(), { expiresIn: '7d' });
+function rejectLocked(res: VercelResponse, retryAfterSec: number): void {
+  res.setHeader('Retry-After', String(retryAfterSec));
+  res.status(429).json({ error: AUTH_LOCKED });
+}
+
+function issueSession(
+  req: VercelRequest,
+  res: VercelResponse,
+  user: { id: string; email: string; name: string | null; plan?: string | null; planStatus?: string | null; trialEndsAt?: Date | null; createdAt?: Date },
+  stores: StoreRow[],
+  status: number,
+): void {
+  setSessionCookie(res, signSession(user), req);
+  res.status(status).json({
+    success: true,
+    user: publicUser(user, stores),
+  });
 }
 
 function isDuplicateEmail(error: unknown): boolean {
@@ -55,17 +78,25 @@ function isDuplicateEmail(error: unknown): boolean {
 
 /**
  * Unified auth endpoint
- * POST /api/auth/login - Login
- * POST /api/auth/signup - Signup (returns a session token, same as login)
+ * POST /api/auth/login - Login (HttpOnly session cookie)
+ * POST /api/auth/signup - Signup
+ * POST /api/auth/logout - Clear session cookie
  * GET /api/auth/me - Get current user
  */
 async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   const action = authActionFromRequest(req);
+  const ip = clientIp(req);
 
   if (action === 'login' && req.method === 'POST') {
     try {
       const body = readJsonBody(req.body);
       if (typeof body.link === 'string' && body.link.trim()) {
+        const gate = inspectAuthLimit(ip);
+        if (!gate.ok) {
+          rejectLocked(res, gate.retryAfterSec);
+          return;
+        }
+        noteAuthAttempt(ip);
         const link = verifyWhatsAppLogin(body.link.trim());
         if (!link) {
           logApp('auth.login', { via: 'wa_link', ok: false });
@@ -84,11 +115,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
           return;
         }
         logApp('auth.login', { via: 'wa_link', ok: true, storeId: link.storeId, userId: linked.id });
-        res.status(200).json({
-          success: true,
-          token: signToken(linked),
-          user: publicUser(linked, linked.stores),
-        });
+        issueSession(req, res, linked, linked.stores, 200);
         return;
       }
 
@@ -97,6 +124,13 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         res.status(parsed.status).json({ error: parsed.error });
         return;
       }
+
+      const gate = inspectAuthLimit(ip, parsed.email);
+      if (!gate.ok) {
+        rejectLocked(res, gate.retryAfterSec);
+        return;
+      }
+      noteAuthAttempt(ip);
 
       const user = await prisma.user.findUnique({
         where: { email: parsed.email },
@@ -108,12 +142,14 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       });
 
       if (!user || !user.isActive) {
+        noteAuthFailure(parsed.email);
         logApp('auth.login', { via: 'password', ok: false, reason: 'no_user' });
         res.status(401).json({ error: INVALID_LOGIN_ERROR });
         return;
       }
 
       if (!user.password) {
+        noteAuthFailure(parsed.email);
         logApp('auth.login', { via: 'password', ok: false, reason: 'no_password' });
         res.status(401).json({ error: NO_PASSWORD_ERROR });
         return;
@@ -121,17 +157,15 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
 
       const isValidPassword = await bcrypt.compare(parsed.password, user.password);
       if (!isValidPassword) {
+        noteAuthFailure(parsed.email);
         logApp('auth.login', { via: 'password', ok: false, reason: 'bad_password' });
         res.status(401).json({ error: INVALID_LOGIN_ERROR });
         return;
       }
 
+      clearAuthFailures(parsed.email);
       logApp('auth.login', { via: 'password', ok: true, userId: user.id, stores: user.stores.length });
-      res.status(200).json({
-        success: true,
-        token: signToken(user),
-        user: publicUser(user, user.stores),
-      });
+      issueSession(req, res, user, user.stores, 200);
     } catch (error: unknown) {
       logAppError('auth.login', { ok: false, ...serializeError(error) });
       res.status(500).json({ error: 'Failed to login' });
@@ -146,6 +180,13 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         res.status(parsed.status).json({ error: parsed.error });
         return;
       }
+
+      const gate = inspectAuthLimit(ip);
+      if (!gate.ok) {
+        rejectLocked(res, gate.retryAfterSec);
+        return;
+      }
+      noteAuthAttempt(ip);
 
       const existingUser = await prisma.user.findUnique({
         where: { email: parsed.email },
@@ -179,11 +220,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       });
 
       logApp('auth.signup', { ok: true, userId: user.id });
-      res.status(201).json({
-        success: true,
-        token: signToken(user),
-        user: publicUser(user),
-      });
+      issueSession(req, res, user, [], 201);
     } catch (error: unknown) {
       if (isDuplicateEmail(error)) {
         res.status(409).json({ error: DUPLICATE_EMAIL_ERROR });
@@ -195,30 +232,22 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
     return;
   }
 
+  if (action === 'logout' && req.method === 'POST') {
+    clearSessionCookie(res, req);
+    res.status(200).json({ success: true });
+    return;
+  }
+
   if (action === 'me' && req.method === 'GET') {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        res.status(401).json({ error: 'No token provided' });
-        return;
-      }
-
-      const token = authHeader.substring(7);
-      let decoded: { userId: string; email: string; typ?: string };
-
-      try {
-        decoded = verify(token, getJwtSecret()) as { userId: string; email: string; typ?: string };
-      } catch {
-        res.status(401).json({ error: 'Invalid or expired token' });
-        return;
-      }
-      if (decoded.typ && decoded.typ !== 'session') {
-        res.status(401).json({ error: 'Invalid or expired token' });
+      const session = getAuthUser(req);
+      if (!session) {
+        res.status(401).json({ error: 'Authentication required' });
         return;
       }
 
       const user = await prisma.user.findUnique({
-        where: { id: decoded.userId },
+        where: { id: session.userId },
         include: {
           stores: {
             include: { store: true },

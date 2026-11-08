@@ -1,5 +1,6 @@
-import { verify } from 'jsonwebtoken';
+import { sign, verify } from 'jsonwebtoken';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { readSessionToken } from './authCookie';
 
 export interface AuthUser {
   userId: string;
@@ -23,11 +24,12 @@ export function getJwtSecret(): string {
   return 'dev-only-insecure-jwt-secret';
 }
 
-export function getAuthUser(req: VercelRequest): AuthUser | null {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith('Bearer ')) return null;
+export function signSession(user: { id: string; email: string }): string {
+  return sign({ typ: 'session', userId: user.id, email: user.email }, getJwtSecret(), { expiresIn: '7d' });
+}
 
-  const token = authHeader.substring(7);
+function userFromToken(token: string | null): AuthUser | null {
+  if (!token) return null;
   try {
     const payload = verify(token, getJwtSecret()) as AuthUser & { typ?: string };
     if (!payload?.userId || !payload?.email) return null;
@@ -37,6 +39,15 @@ export function getAuthUser(req: VercelRequest): AuthUser | null {
   } catch {
     return null;
   }
+}
+
+export function getAuthUser(req: VercelRequest): AuthUser | null {
+  const fromCookie = userFromToken(readSessionToken(req));
+  if (fromCookie) return fromCookie;
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) return null;
+  return userFromToken(authHeader.substring(7));
 }
 
 /** Returns authenticated user or sends 401 and returns null. */

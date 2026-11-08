@@ -50,6 +50,10 @@
       "destination": "/api/auth/index.ts"
     },
     {
+      "source": "/api/auth/logout",
+      "destination": "/api/auth/index.ts"
+    },
+    {
       "source": "/api/stores/dashboard",
       "destination": "/api/stores/index.ts"
     },
@@ -122,6 +126,10 @@
         {
           "key": "X-Content-Type-Options",
           "value": "nosniff"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=63072000; includeSubDomains; preload"
         },
         {
           "key": "Referrer-Policy",

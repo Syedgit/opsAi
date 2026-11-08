@@ -43,13 +43,20 @@ describe('getJwtSecret', () => {
 describe('getAuthUser', () => {
   it('returns user for valid bearer token', () => {
     process.env.JWT_SECRET = 'unit-test-secret';
-    const token = sign({ userId: 'u1', email: 'a@b.com' }, getJwtSecret(), { expiresIn: '1h' });
+    const token = sign({ typ: 'session', userId: 'u1', email: 'a@b.com' }, getJwtSecret(), { expiresIn: '1h' });
     const req = { headers: { authorization: `Bearer ${token}` } } as VercelRequest;
     expect(getAuthUser(req)).toMatchObject({ userId: 'u1', email: 'a@b.com' });
   });
 
   it('returns null without header', () => {
     expect(getAuthUser({ headers: {} } as VercelRequest)).toBeNull();
+  });
+
+  it('returns user for a valid session cookie', () => {
+    process.env.JWT_SECRET = 'unit-test-secret';
+    const token = sign({ typ: 'session', userId: 'u1', email: 'a@b.com' }, getJwtSecret(), { expiresIn: '1h' });
+    const req = { headers: { cookie: `opsai_session=${token}` } } as VercelRequest;
+    expect(getAuthUser(req)).toMatchObject({ userId: 'u1', email: 'a@b.com' });
   });
 
   it('rejects a WhatsApp tap-link used as a session', () => {

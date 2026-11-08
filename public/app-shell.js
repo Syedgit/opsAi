@@ -1,4 +1,22 @@
 (function () {
+  window.opsai = {
+    me: function () {
+      return fetch('/api/auth/me').then(function (r) {
+        return r.ok ? r.json() : null;
+      }).catch(function () { return null; });
+    },
+    logout: function () {
+      return fetch('/api/auth/logout', { method: 'POST' }).catch(function () {}).then(function () {
+        try {
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('user');
+          localStorage.removeItem('skipOwnerOnboarding');
+        } catch (e) {}
+        location.href = '/login';
+      });
+    }
+  };
+
   var root = document.documentElement;
   var mode = root.getAttribute('data-app-shell') || 'app';
   var standalone =

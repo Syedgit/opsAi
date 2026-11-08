@@ -12,6 +12,7 @@ describe('authActionFromUrl', () => {
     expect(authActionFromUrl('/api/auth/signup')).toBe('signup');
     expect(authActionFromUrl('/api/auth/login?next=/onboarding')).toBe('login');
     expect(authActionFromUrl('/api/auth/me/')).toBe('me');
+    expect(authActionFromUrl('/api/auth/logout')).toBe('logout');
     expect(authActionFromUrl('/api/auth/index.ts')).toBeNull();
   });
 });

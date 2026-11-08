@@ -1,20 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-import { sign, verify } from 'jsonwebtoken';
+import type { VercelRequest } from '@vercel/node';
+import { getAuthUser, signSession } from '../../lib/apiAuth';
+import { clearSessionCookie, setSessionCookie } from '../../lib/authCookie';
 import { newAccountBilling } from '../../lib/billing/plans';
 
 const router = Router();
 const prisma = new PrismaClient();
-function resolveJwtSecret(): string {
-  const secret = process.env.JWT_SECRET?.trim();
-  if (secret) return secret;
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('JWT_SECRET must be set in production');
-  }
-  return 'dev-only-insecure-jwt-secret';
-}
-const JWT_SECRET = resolveJwtSecret();
 
 /**
  * Signup endpoint
@@ -59,6 +52,7 @@ router.post('/signup', async (req: Request, res: Response) => {
       },
     });
 
+    setSessionCookie(res, signSession(user), req);
     res.status(201).json({
       success: true,
       user,
@@ -99,10 +93,7 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 
     if (!user.password) {
-      res.status(401).json({ 
-        error: 'This account uses Google Sign-In. Please sign in with Google.',
-        useOAuth: true 
-      });
+      res.status(401).json({ error: 'Invalid email or password' });
       return;
     }
 
@@ -112,15 +103,9 @@ router.post('/login', async (req: Request, res: Response) => {
       return;
     }
 
-    const token = sign(
-      { userId: user.id, email: user.email },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
+    setSessionCookie(res, signSession(user), req);
     res.status(200).json({
       success: true,
-      token,
       user: {
         id: user.id,
         email: user.email,
@@ -187,26 +172,21 @@ router.get('/users', async (_req: Request, res: Response) => {
   }
 });
 
+router.post('/logout', (req: Request, res: Response) => {
+  clearSessionCookie(res, req);
+  res.status(200).json({ success: true });
+});
+
 router.get('/me', async (req: Request, res: Response) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      res.status(401).json({ error: 'No token provided' });
-      return;
-    }
-
-    const token = authHeader.substring(7);
-    let decoded: { userId: string; email: string };
-    
-    try {
-      decoded = verify(token, JWT_SECRET) as { userId: string; email: string };
-    } catch (error) {
-      res.status(401).json({ error: 'Invalid or expired token' });
+    const session = getAuthUser(req as unknown as VercelRequest);
+    if (!session) {
+      res.status(401).json({ error: 'Authentication required' });
       return;
     }
 
     const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
+      where: { id: session.userId },
       include: {
         stores: {
           include: { store: true },

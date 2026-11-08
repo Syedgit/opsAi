@@ -13,8 +13,8 @@
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="apple-touch-icon" href="/icon-180.png">
     <link rel="icon" type="image/png" href="/icon-192.png">
-    <link rel="stylesheet" href="/app-shell.css">
-    <script src="/app-shell.js"></script>
+    <link rel="stylesheet" href="/app-shell.css?v=2">
+    <script src="/app-shell.js?v=2"></script>
     <title>opsAi - Simplify Daily Store Reporting for Small Businesses</title>
     <style>
         * {
@@ -1077,33 +1077,22 @@
 
         // Check if user is logged in
         (async function checkAuth() {
-            const token = localStorage.getItem('authToken');
-            if (token) {
-                try {
-                    const response = await fetch('/api/auth/me', {
-                        headers: {
-                            'Authorization': `Bearer ${token}`
-                        }
-                    });
-                    if (response.ok) {
-                        document.getElementById('authButtons').style.display = 'none';
-                        document.getElementById('userMenu').style.display = 'inline-flex';
-                        const logout = document.getElementById('logoutLink');
-                        if (logout) {
-                            logout.addEventListener('click', function (e) {
-                                e.preventDefault();
-                                localStorage.removeItem('authToken');
-                                localStorage.removeItem('user');
-                                localStorage.removeItem('skipOwnerOnboarding');
-                                window.location.href = '/login';
-                            });
-                        }
-                    } else {
-                        localStorage.removeItem('authToken');
+            try {
+                const response = await fetch('/api/auth/me');
+                if (response.ok) {
+                    document.getElementById('authButtons').style.display = 'none';
+                    document.getElementById('userMenu').style.display = 'inline-flex';
+                    const logout = document.getElementById('logoutLink');
+                    if (logout) {
+                        logout.addEventListener('click', function (e) {
+                            e.preventDefault();
+                            if (window.opsai && window.opsai.logout) window.opsai.logout();
+                            else window.location.href = '/login';
+                        });
                     }
-                } catch (error) {
-                    console.error('Auth check failed:', error);
                 }
+            } catch (error) {
+                console.error('Auth check failed:', error);
             }
         })();
     </script>
