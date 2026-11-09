@@ -142,17 +142,19 @@ function eachDay(from: string, to: string): string[] {
   return out;
 }
 
+/** Bills are often posted weeks after the printed date; file them on the day they were posted so they are counted. */
 export function businessDayOfRow(
-  row: { createdAt: Date; payloadJson?: unknown },
+  row: { type?: string; createdAt: Date; payloadJson?: unknown },
   timeZone: string,
 ): string {
   const p = payloadOf(row);
+  if (row.type === 'INVOICE_EXPENSE' || p._kind === 'invoice' || p._kind === 'invoice_payment') {
+    return localDateString(row.createdAt, timeZone);
+  }
   const report = reportFromClosePayload(p);
   if (isIsoDay(report?.reportDate)) return report.reportDate;
-  const invoice = invoiceFromPayload(p);
-  if (isIsoDay(invoice?.invoiceDate)) return invoice.invoiceDate;
   const receipt = p.receipt && typeof p.receipt === 'object' ? (p.receipt as { depositDate?: unknown }) : null;
-  for (const value of [p.report_date, p.invoice_date, p.deposit_date, receipt?.depositDate]) {
+  for (const value of [p.report_date, p.deposit_date, receipt?.depositDate]) {
     if (isIsoDay(typeof value === 'string' ? value : null)) return value as string;
   }
   const fuel = fuelFigures(p);

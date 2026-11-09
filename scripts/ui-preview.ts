@@ -176,12 +176,41 @@ for (const [date, card, cash, gas, payout] of demo) {
       remainingDue: 400,
       remainingMethod: 'check',
       payBy: '2026-10-17',
+      payments: [{ amount: 500, method: 'cash' as const, date: '2026-10-12' }],
     },
   };
   const entry = planUnderstanding(understanding, ctx).entries[0];
   items.push({
     id: `p${++seq}`,
     date: '2026-10-12T16:00:00-04:00',
+    storeId: entry.storeId,
+    type: 'invoices',
+    data: entry.payload,
+    confidence: entry.confidence,
+  });
+}
+{
+  const understanding: Understanding = {
+    kind: 'invoice',
+    confidence: 0.9,
+    needsReview: [],
+    invoice: {
+      vendorName: 'JCP&L',
+      invoiceNumber: '4412',
+      invoiceDate: '2026-10-11',
+      dueDate: '2026-10-25',
+      storeHint: 'Rockaway',
+      lineItems: [],
+      total: 320,
+      paymentStatus: 'paid_other',
+      remainingDue: 0,
+      payments: [{ amount: 320, method: 'check', date: '2026-10-11' }],
+    },
+  };
+  const entry = planUnderstanding(understanding, ctx).entries[0];
+  items.push({
+    id: `p${++seq}`,
+    date: '2026-10-11T11:00:00-04:00',
     storeId: entry.storeId,
     type: 'invoices',
     data: entry.payload,

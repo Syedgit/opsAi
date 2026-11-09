@@ -134,6 +134,34 @@ describe('store report totals', () => {
     expect(report.totals.expenses).toBe(0);
   });
 
+  it('counts an old-dated invoice on the day it was posted', () => {
+    const report = buildStoreReport(
+      [
+        {
+          type: 'INVOICE_EXPENSE',
+          createdAt: new Date('2026-11-08T16:22:08Z'),
+          payloadJson: {
+            _kind: 'invoice',
+            vendor: 'LA PROVEEDORA LATINA LLC',
+            amount: 1061.53,
+            invoice_date: '2026-10-22',
+            invoice: {
+              vendorName: 'LA PROVEEDORA LATINA LLC',
+              total: 1061.53,
+              invoiceDate: '2026-10-22',
+              lineItems: [{ description: 'groceries', amount: 1061.53 }],
+            },
+          },
+        },
+      ],
+      { from: '2026-11-02', to: '2026-11-08', label: 'week', period: 'week' },
+      { storeId: 'S002', storeName: 'Test-Store', timeZone: TZ },
+    );
+    expect(report.totals.buying).toBe(1061.53);
+    expect(report.totals.invoices).toBe(1);
+    expect(report.days.find((d) => d.day === '2026-11-08')?.buying).toBe(1061.53);
+  });
+
   it('does not mention wages in the fallback copy', () => {
     const report = buildStoreReport(
       [],

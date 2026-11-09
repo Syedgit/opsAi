@@ -1349,7 +1349,7 @@
             
             <div id="invoicesPage" class="page" style="display: none;" data-mod="money">
                 <h1 class="page-title">Invoices</h1>
-                <p class="page-subtitle">Track vendor invoices and payments</p>
+                <p class="page-subtitle">Vendor bills with cash or check, remaining, and due date. Till cash also shows on Paid outs.</p>
                 <div class="content-area" id="invoicesContent"></div>
             </div>
             
@@ -1493,12 +1493,64 @@
         }
         function invoiceRemaining(d) {
             if (typeof d.remaining === 'number' && Number.isFinite(d.remaining)) return Math.max(0, d.remaining);
+            const inv = d.invoice || {};
+            if (typeof inv.remainingDue === 'number' && Number.isFinite(inv.remainingDue)) return Math.max(0, inv.remainingDue);
             if (d.paid === 'Y') return 0;
             const n = Number(d.amount);
             return Number.isFinite(n) ? n : 0;
         }
         function invoiceIsPaid(d) {
             return invoiceRemaining(d) <= 0.005;
+        }
+        function invoicePayments(d) {
+            const inv = d.invoice && typeof d.invoice === 'object' ? d.invoice : null;
+            const raw = (inv && Array.isArray(inv.payments) ? inv.payments : null)
+                || (Array.isArray(d.payments) ? d.payments : []);
+            return raw.filter(function (p) {
+                return p && typeof p.amount === 'number' && Number.isFinite(p.amount) && p.amount > 0;
+            });
+        }
+        function invoiceMethodLabel(method) {
+            if (method === 'cash') return 'cash';
+            if (method === 'check') return 'check';
+            if (method === 'other') return 'other';
+            return '';
+        }
+        function invoiceMethods(d) {
+            const methods = [];
+            invoicePayments(d).forEach(function (p) {
+                const label = invoiceMethodLabel(p.method);
+                if (label && methods.indexOf(label) === -1) methods.push(label);
+            });
+            const inv = d.invoice || {};
+            if (!methods.length) {
+                if (inv.paymentStatus === 'paid_cash') methods.push('cash');
+                else if (inv.remainingMethod) methods.push(invoiceMethodLabel(inv.remainingMethod) || inv.remainingMethod);
+                else if (d.remaining_method) methods.push(invoiceMethodLabel(d.remaining_method) || d.remaining_method);
+            }
+            return methods;
+        }
+        function invoiceHowPaid(d) {
+            const methods = invoiceMethods(d);
+            const how = methods.join(' + ');
+            if (invoiceIsPaid(d)) return how ? 'Paid ' + how : 'Paid';
+            if (invoicePayments(d).length) return how ? 'Partial · ' + how : 'Partial';
+            return how ? 'Open · ' + how : 'Open';
+        }
+        function invoiceDueDate(d) {
+            const inv = d.invoice || {};
+            return d.due_date || inv.payBy || inv.dueDate || null;
+        }
+        function invoicePaidSoFar(d) {
+            const listed = invoicePayments(d).reduce(function (sum, p) { return sum + p.amount; }, 0);
+            if (listed > 0) return listed;
+            const n = Number(d.amount_paid);
+            if (Number.isFinite(n) && n > 0) return n;
+            if (invoiceIsPaid(d)) {
+                const total = Number(d.amount);
+                return Number.isFinite(total) ? total : 0;
+            }
+            return 0;
         }
         // 'YYYY-MM-DD' is a calendar day, not a moment in time: do not let the timezone move it.
         function fmtDay(value) {
@@ -2242,24 +2294,25 @@
                     }
                 });
             } else if (type === 'invoices') {
-                tableHTML += '<th>Date</th><th>Vendor</th><th>Invoice #</th><th>Amount</th><th>Remaining</th><th>Due Date</th><th>Paid</th><th>Actions</th></tr></thead><tbody>';
+                tableHTML += '<th>Date</th><th>Vendor</th><th>Invoice #</th><th>Amount</th><th>How paid</th><th>Remaining</th><th>Due</th><th>Actions</th></tr></thead><tbody>';
                 items.forEach((item, index) => {
                     try {
                         const d = item.data || {};
                         const dateStr = item.date ? (typeof item.date === 'string' ? item.date : item.date.toISOString()) : new Date().toISOString();
-                        const displayDate = new Date(dateStr).toLocaleDateString();
-                        const displayDueDate = d.due_date ? fmtDay(d.due_date) : 'N/A';
+                        const displayDate = d.invoice_date ? fmtDay(d.invoice_date) : new Date(dateStr).toLocaleDateString();
+                        const due = invoiceDueDate(d);
                         const paid = invoiceIsPaid(d);
                         const left = invoiceRemaining(d);
+                        const how = invoiceHowPaid(d);
                         tableHTML += `
                             <tr onclick="viewDetail('invoices', '${item.id}')" style="cursor: pointer;">
-                                <td>${displayDate}</td>
+                                <td>${esc(displayDate)}</td>
                                 <td><strong>${esc(d.vendor || 'N/A')}</strong></td>
                                 <td>${esc(d.invoice_number || 'N/A')}</td>
                                 <td>${money(d.amount)}</td>
-                                <td>${paid ? '\u2014' : money(left)}</td>
-                                <td>${displayDueDate}</td>
-                                <td><span class="badge ${paid ? 'badge-success' : 'badge-pending'}">${paid ? 'Paid' : 'Open'}</span></td>
+                                <td><span class="badge ${paid ? 'badge-success' : 'badge-pending'}">${esc(how)}</span></td>
+                                <td>${money(left)}</td>
+                                <td>${due ? esc(fmtDay(due)) : '\u2014'}</td>
                                 <td><button onclick="event.stopPropagation(); viewDetail('invoices', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
                             </tr>
                         `;
@@ -2341,7 +2394,7 @@
                         tableHTML += `
                             <tr onclick="viewDetail('paidouts', '${item.id}')" style="cursor: pointer;">
                                 <td>${displayDate}</td>
-                                <td>$${esc(d.amount || 0)}</td>
+                                <td>${money(d.amount)}</td>
                                 <td>${esc(d.reason || 'N/A')}</td>
                                 <td>${esc(d.employee || 'N/A')}</td>
                                 <td><button onclick="event.stopPropagation(); viewDetail('paidouts', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
@@ -2412,7 +2465,7 @@
                 <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 20px;">
                     <div style="background: white; border-radius: 12px; max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
                         <div style="padding: 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-                            <h2 style="font-size: 24px; font-weight: 700; color: var(--text);">${type.charAt(0).toUpperCase() + type.slice(1)} Details</h2>
+                            <h2 style="font-size: 24px; font-weight: 700; color: var(--text);">${({ sales: 'Daily sales', invoices: 'Invoice', expenses: 'Expense', paidouts: 'Paid out', fuel: 'Fuel sales', orders: 'Order' })[type] || 'Details'}</h2>
                             <button onclick="closeDetailModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-light);">&times;</button>
                         </div>
                         <div style="padding: 24px;">
@@ -2444,6 +2497,17 @@
             } else if (type === 'invoices') {
                 const paid = invoiceIsPaid(d);
                 const left = invoiceRemaining(d);
+                const due = invoiceDueDate(d);
+                const how = invoiceHowPaid(d);
+                const remainingHow = d.remaining_method || (d.invoice && d.invoice.remainingMethod) || '';
+                const payments = invoicePayments(d);
+                const payLines = payments.length
+                    ? payments.map(function (p) {
+                        const when = p.date ? ' \u00b7 ' + fmtDay(p.date) : '';
+                        const note = p.note ? ' \u00b7 ' + esc(p.note) : '';
+                        return '<div style="display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--border);"><span>' + esc(invoiceMethodLabel(p.method) || 'paid') + when + note + '</span><strong>' + money(p.amount) + '</strong></div>';
+                    }).join('')
+                    : '<div style="font-size:16px;font-weight:600;">' + money(invoicePaidSoFar(d)) + (how && how !== 'Open' ? ' \u00b7 ' + esc(how.replace(/^Paid /i, '').replace(/^Partial · /, '')) : '') + '</div>';
                 modalHTML += `
                     <div style="margin-bottom: 20px;">
                         <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Invoice Number</div>
@@ -2459,25 +2523,29 @@
                             <div style="font-size: 24px; font-weight: 700; color: var(--primary);">${money(d.amount)}</div>
                         </div>
                         <div>
+                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">How paid</div>
+                            <span class="badge ${paid ? 'badge-success' : 'badge-pending'}">${esc(how)}</span>
+                        </div>
+                        <div>
                             <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Paid so far</div>
-                            <div style="font-size: 16px; font-weight: 600;">${money(d.amount_paid)}</div>
+                            <div style="font-size: 16px; font-weight: 600;">${money(invoicePaidSoFar(d))}</div>
                         </div>
                         <div>
                             <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Remaining</div>
-                            <div style="font-size: 16px; font-weight: 600;">${paid ? 'Paid' : money(left)}${!paid && d.remaining_method ? ` \u00b7 ${esc(d.remaining_method)}` : ''}</div>
+                            <div style="font-size: 16px; font-weight: 600;">${money(left)}${!paid && remainingHow ? ` \u00b7 ${esc(remainingHow)}` : ''}</div>
                         </div>
                         <div>
-                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Status</div>
-                            <span class="badge ${paid ? 'badge-success' : 'badge-pending'}">${paid ? 'Paid' : 'Open'}</span>
+                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">${paid || left <= 0.005 ? 'Due date' : 'Pay remaining by'}</div>
+                            <div style="font-size: 16px;">${due ? esc(fmtDay(due)) : '\u2014'}</div>
                         </div>
                         <div>
-                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Date</div>
-                            <div style="font-size: 16px;">${new Date(item.date).toLocaleDateString()}</div>
+                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Invoice date</div>
+                            <div style="font-size: 16px;">${d.invoice_date ? esc(fmtDay(d.invoice_date)) : esc(new Date(item.date).toLocaleDateString())}</div>
                         </div>
-                        <div>
-                            <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">Pay remaining by</div>
-                            <div style="font-size: 16px;">${d.due_date ? fmtDay(d.due_date) : 'N/A'}</div>
-                        </div>
+                    </div>
+                    <div style="margin-bottom: 20px;">
+                        <div style="font-size: 12px; color: var(--text-light); margin-bottom: 6px;">Payments</div>
+                        ${payLines}
                     </div>
                     ${d.notes ? `<div style="padding: 16px; background: var(--bg); border-radius: 8px; margin-top: 20px;"><strong>Notes:</strong> ${esc(d.notes)}</div>` : ''}
                 `;
@@ -2502,6 +2570,23 @@
                             <div style="font-size: 16px;">${new Date(item.date).toLocaleDateString()}</div>
                         </div>
                     </div>
+                `;
+            } else if (type === 'paidouts') {
+                const id = String(item.id || '');
+                const source = id.includes(':cash:') ? 'Cash paid on an invoice' : id.includes(':payout:') ? 'Payout line on the daily close' : 'Paid-out message';
+                const who = d.employee && d.employee !== 'N/A' ? d.employee : '';
+                modalHTML += `
+                    <div style="margin-bottom: 20px;">
+                        <div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">What</div>
+                        <div style="font-size: 20px; font-weight: 700;">${esc(d.reason || 'Paid out')}</div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                        ${statCell('Amount', money(d.amount), 24, 'var(--primary)')}
+                        ${statCell('From', esc(source), 16, 'var(--text)')}
+                        ${statCell('Date', esc(new Date(item.date).toLocaleDateString()), 16, 'var(--text)')}
+                        ${who ? statCell('Who', esc(who), 16, 'var(--text)') : ''}
+                    </div>
+                    ${id.includes(':cash:') ? '<p style="font-size: 13px; color: var(--text-light);">The full bill, remaining, and due date are on Invoices.</p>' : ''}
                 `;
             } else if (type === 'orders') {
                 const vendors = d.vendor_groups || [];
@@ -2556,7 +2641,7 @@
                     </div>
                 `;
             } else {
-                modalHTML += `<pre style="background: var(--bg); padding: 16px; border-radius: 8px; overflow-x: auto;">${JSON.stringify(d, null, 2)}</pre>`;
+                modalHTML += `<pre style="background: var(--bg); padding: 16px; border-radius: 8px; overflow-x: auto;">${esc(JSON.stringify(d, null, 2))}</pre>`;
             }
             
             modalHTML += `
