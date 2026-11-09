@@ -6,7 +6,7 @@ import { loadStoreTeam } from '../../lib/tasks/people';
 import { localDateString } from '../../lib/tasks/time';
 import { publishDashboardSchedule, type PublishScheduleInput } from '../../lib/publishSchedule';
 import { managerPhonesForStore } from '../../lib/whatsappMessaging';
-import { flattenTillPaidOuts } from '../../lib/understanding/tillPaidOuts';
+import { flattenTillExpenses, flattenTillPaidOuts } from '../../lib/understanding/tillPaidOuts';
 import { flattenFuelSales } from '../../lib/understanding/fuelSalesRows';
 import { storeTypeOf } from '../../lib/understanding/daySummary';
 import { scheduleWeekStartOf } from '../../lib/understanding/schedule';
@@ -204,7 +204,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   }
 
   if (!type) {
-    res.status(400).json({ error: 'Type required (?type=sales|invoices|fuel|paidouts|orders|schedules)' });
+    res.status(400).json({ error: 'Type required (?type=sales|invoices|expenses|fuel|paidouts|orders|schedules)' });
     return;
   }
 
@@ -260,6 +260,9 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       case 'invoices':
         dbType = 'INVOICE_EXPENSE';
         break;
+      case 'expenses':
+        dbType = 'PAID_OUT';
+        break;
       case 'fuel':
         dbType = 'FUEL_SALES';
         break;
@@ -283,6 +286,20 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       default:
         res.status(400).json({ error: 'Invalid type' });
         return;
+    }
+
+    if (type === 'expenses') {
+      const tillRows = await prisma.pendingActions.findMany({
+        where: {
+          storeId,
+          status: 'CONFIRMED',
+          type: { in: ['PAID_OUT', 'STORE_SALES'] },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+      });
+      res.json({ expenses: flattenTillExpenses(tillRows) });
+      return;
     }
 
     if (type === 'paidouts') {

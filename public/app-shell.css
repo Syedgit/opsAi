@@ -2,11 +2,18 @@
 html {
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
-  overscroll-behavior: none;
+  overscroll-behavior-x: none;
+  height: auto;
+  overflow-x: clip;
+  overflow-y: auto;
 }
 body {
-  overscroll-behavior: none;
+  overscroll-behavior-x: none;
   -webkit-overflow-scrolling: touch;
+  min-height: 100dvh;
+  height: auto;
+  overflow-x: clip;
+  overflow-y: auto;
 }
 a, button, [role="button"], .menu-item, .nav-tab, .tab {
   -webkit-tap-highlight-color: transparent;

@@ -91,3 +91,34 @@ describe('Fuel Sales tab', () => {
     expect((body.fuel as Array<{ data: { fuel_sales: number } }>)[0].data.fuel_sales).toBe(6086.32);
   });
 });
+
+describe('Expenses tab', () => {
+  it('lists close payouts and paid-outs instead of rejecting the type', async () => {
+    findFirst.mockReset().mockResolvedValue({ role: 'OWNER' });
+    findMany.mockReset().mockResolvedValue([
+      {
+        actionId: 'close1',
+        type: 'STORE_SALES',
+        createdAt: new Date('2026-11-08T01:47:00Z'),
+        payloadJson: { _kind: 'daily_close', report: { payouts: [{ label: 'Lays', amount: 142 }] } },
+        confidence: 0.9,
+      },
+      {
+        actionId: 'po1',
+        type: 'PAID_OUT',
+        createdAt: new Date('2026-11-08T01:47:00Z'),
+        payloadJson: { amount: 50, reason: 'ice from till' },
+        confidence: 0.9,
+      },
+    ]);
+    const { status, body } = await call('expenses');
+    expect(status).toBe(200);
+    expect(findMany.mock.calls[0][0].where.type).toEqual({ in: ['PAID_OUT', 'STORE_SALES'] });
+    expect((body.expenses as Array<{ data: { description: string; amount: number } }>).map((r) => r.data)).toEqual(
+      expect.arrayContaining([
+        { amount: 142, category: 'Till payout', description: 'Lays', paid: 'Y' },
+        { amount: 50, category: 'Paid out', description: 'ice from till', paid: 'Y' },
+      ])
+    );
+  });
+});

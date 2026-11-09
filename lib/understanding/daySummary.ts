@@ -2,6 +2,7 @@ import type { PrismaClient } from '@prisma/client';
 import { PendingStatus } from '@prisma/client';
 import { formatMoney } from './checks';
 import { invoiceFromPayload, remainingOf, stillDue, tillCashPayments } from './invoiceBalance';
+import { pickDaySalesRows } from './salesPick';
 import { readStoredSetup } from '../tasks/storeSetup';
 import { addDaysLocal, localDateString, localToUtc } from '../tasks/time';
 
@@ -110,14 +111,11 @@ export function collectPaidOuts(rows: DayActivityRow[]): Array<{ label: string; 
 export function closeCashOf(rows: DayActivityRow[]): number | null {
   let cash = 0;
   let found = false;
-  for (const row of rows) {
-    const p = payloadOf(row);
-    if (row.type === 'STORE_SALES' || p._kind === 'daily_close') {
-      const n = num(p.cash);
-      if (n != null) {
-        cash += n;
-        found = true;
-      }
+  for (const row of pickDaySalesRows(rows)) {
+    const n = num(payloadOf(row).cash);
+    if (n != null) {
+      cash += n;
+      found = true;
     }
   }
   return found ? round2(cash) : null;
@@ -196,15 +194,17 @@ function formatStoreDaySummary(activity: DayActivity): string | null {
   const deposits: number[] = [];
   let orders = 0;
 
+  for (const row of pickDaySalesRows(activity.rows)) {
+    const p = payloadOf(row);
+    hasSales = true;
+    cash += num(p.cash) ?? 0;
+    card += num(p.card) ?? 0;
+    fuel += num(p.fuel_sales) ?? 0;
+    if (num(p.deposit) != null) deposit += num(p.deposit) as number;
+  }
+
   for (const row of activity.rows) {
     const p = payloadOf(row);
-    if (row.type === 'STORE_SALES' || p._kind === 'daily_close') {
-      hasSales = true;
-      cash += num(p.cash) ?? 0;
-      card += num(p.card) ?? 0;
-      fuel += num(p.fuel_sales) ?? 0;
-      if (num(p.deposit) != null) deposit += num(p.deposit) as number;
-    }
     if ((row.type === 'INVOICE_EXPENSE' || p._kind === 'invoice') && p._kind !== 'invoice_payment') {
       const amount = num(p.amount) ?? num(p.total) ?? 0;
       invoiceTotal += amount;

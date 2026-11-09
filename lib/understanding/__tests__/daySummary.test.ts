@@ -67,6 +67,32 @@ describe('summaryKindForStore', () => {
 });
 
 describe('formatDaySummary', () => {
+  it('uses the POS screen, not an earlier typed test close, for cash and card', () => {
+    const activity: DayActivity = {
+      storeName: 'Test-Store',
+      day: '2026-11-08',
+      kind: 'store_day',
+      rows: [
+        { type: 'STORE_SALES', payload: { cash: 100, card: 200, total_inside: 300, raw_text: 'fake close' } },
+        {
+          type: 'STORE_SALES',
+          payload: {
+            _kind: 'daily_close',
+            cash: 614.98,
+            card: 1150.6,
+            report: { cashSales: 614.98, cardSales: 1150.6, periodClosed: false, payouts: [] },
+          },
+        },
+      ],
+      inspection: null,
+    };
+    const text = formatDaySummary(activity);
+    expect(text).toContain('cash $614.98');
+    expect(text).toContain('card $1,150.60');
+    expect(text).not.toContain('$714.98');
+    expect(text).not.toContain('$1,350.60');
+  });
+
   it('posts a short non-7-Eleven wrap-up of sales, paid-outs and invoices', () => {
     const activity: DayActivity = {
       storeName: 'Corner',

@@ -472,6 +472,36 @@ export function matchStore(hint: string | null | undefined, profiles: StoreProfi
   return { profile: ambiguous ? null : best.profile, score: best.score, ambiguous };
 }
 
+/** Caption / typed text: "Denville" under a photo wins over an unmatched name on the POS screen. */
+export function matchStoreFromText(text: string | null | undefined, profiles: StoreProfile[]): StoreMatch {
+  if (!text?.trim() || profiles.length === 0) {
+    return { profile: null, score: 0, ambiguous: false };
+  }
+  const parts = new Set<string>();
+  parts.add(text.trim());
+  for (const line of text.split(/\n+/)) {
+    const trimmed = line.trim();
+    if (trimmed) parts.add(trimmed);
+  }
+  for (const word of text.split(/[^a-zA-Z]+/)) {
+    if (word.length >= 4) parts.add(word);
+  }
+
+  const hits = new Map<string, { profile: StoreProfile; score: number }>();
+  for (const part of parts) {
+    const match = matchStore(part, profiles);
+    if (!match.profile || match.score < STORE_MATCH_THRESHOLD) continue;
+    const prev = hits.get(match.profile.storeId);
+    if (!prev || match.score > prev.score) hits.set(match.profile.storeId, { profile: match.profile, score: match.score });
+  }
+  if (hits.size === 0) return { profile: null, score: 0, ambiguous: false };
+  const ranked = [...hits.values()].sort((a, b) => b.score - a.score);
+  if (ranked.length > 1 && ranked[0].score - ranked[1].score < 0.08) {
+    return { profile: null, score: ranked[0].score, ambiguous: true };
+  }
+  return { profile: ranked[0].profile, score: ranked[0].score, ambiguous: false };
+}
+
 /* --------------------------------- summary -------------------------------- */
 
 export function worstStatus(checks: Check[]): CheckStatus {

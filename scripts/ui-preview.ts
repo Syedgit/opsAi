@@ -13,7 +13,7 @@ import fs from 'fs';
 import http from 'http';
 import path from 'path';
 import { dailyClosePayload, invoicePayload, planUnderstanding } from '../lib/understanding/plan';
-import { flattenTillPaidOuts, sourceActionId } from '../lib/understanding/tillPaidOuts';
+import { flattenTillExpenses, flattenTillPaidOuts, sourceActionId } from '../lib/understanding/tillPaidOuts';
 import { buildDefaultProfile } from '../lib/understanding/profile';
 import type { Understanding } from '../lib/understanding/schema';
 import { describeSchedule } from '../lib/tasks/schedule';
@@ -510,6 +510,20 @@ async function api(req: http.IncomingMessage, res: http.ServerResponse, url: URL
         weekStart: storeId === 'S001' ? '2026-10-30' : '2026-11-01',
       }), true;
     }
+    if (type === 'expenses') {
+      const till = flattenTillExpenses(
+        items
+          .filter((i) => i.storeId === storeId && i.type === 'sales')
+          .map((i) => ({
+            actionId: i.id,
+            type: 'STORE_SALES',
+            createdAt: new Date(i.date),
+            payloadJson: i.data,
+            confidence: i.confidence,
+          }))
+      );
+      return sendJson(res, 200, { expenses: till }), true;
+    }
     if (type === 'paidouts') {
       const till = flattenTillPaidOuts(
         items
@@ -530,19 +544,18 @@ async function api(req: http.IncomingMessage, res: http.ServerResponse, url: URL
 
   if (p === '/api/stores/detail') {
     const id = url.searchParams.get('id');
-    if (type === 'paidouts' && id) {
+    if ((type === 'paidouts' || type === 'expenses') && id) {
       const source = items.find((i) => i.id === sourceActionId(id) && i.storeId === storeId);
       if (!source) return sendJson(res, 404, { error: 'Item not found' }), true;
-      const till = flattenTillPaidOuts([
-        {
-          actionId: source.id,
-          type: source.type === 'sales' ? 'STORE_SALES' : source.type === 'invoices' ? 'INVOICE_EXPENSE' : 'PAID_OUT',
-          createdAt: new Date(source.date),
-          payloadJson: source.data,
-          confidence: source.confidence,
-        },
-      ]);
-      const hit = till.find((row) => row.id === id) ?? till[0];
+      const row = {
+        actionId: source.id,
+        type: source.type === 'sales' ? 'STORE_SALES' : source.type === 'invoices' ? 'INVOICE_EXPENSE' : 'PAID_OUT',
+        createdAt: new Date(source.date),
+        payloadJson: source.data,
+        confidence: source.confidence,
+      };
+      const till = type === 'expenses' ? flattenTillExpenses([row]) : flattenTillPaidOuts([row]);
+      const hit = till.find((item) => item.id === id) ?? till[0];
       return hit ? (sendJson(res, 200, { item: hit }), true) : (sendJson(res, 404, { error: 'Item not found' }), true);
     }
     const item = items.find((i) => i.id === id && i.storeId === storeId);

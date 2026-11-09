@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Usage · opsAi</title>
     <link rel="icon" type="image/png" href="/icon-192.png">
-    <link rel="stylesheet" href="/app-shell.css?v=2">
+    <link rel="stylesheet" href="/app-shell.css?v=3">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -36,6 +36,8 @@
         .chart h2 { font-size: 13px; font-weight: 600; margin-bottom: 12px; }
         .bar { display: grid; grid-template-columns: 72px 1fr 28px; gap: 8px; align-items: center; margin-bottom: 6px; font-size: 12px; color: #525252; }
         .bar i { display: block; height: 10px; background: #111; border-radius: 2px; min-width: 0; }
+        html, body { overflow-x: clip; overflow-y: auto; }
+        .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 8px; }
         table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e5e5e5; border-radius: 10px; overflow: hidden; font-size: 13px; }
         th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #f0f0f0; }
         th { color: #737373; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -88,8 +90,8 @@
             return '—';
         }
         function table(headers, rows) {
-            return '<table><thead><tr>' + headers.map(function (h) { return '<th>' + h + '</th>'; }).join('') +
-                '</tr></thead><tbody>' + rows.join('') + '</tbody></table>';
+            return '<div class="table-wrap"><table><thead><tr>' + headers.map(function (h) { return '<th>' + h + '</th>'; }).join('') +
+                '</tr></thead><tbody>' + rows.join('') + '</tbody></table></div>';
         }
         (async function () {
             const root = document.getElementById('root');

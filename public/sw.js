@@ -1,7 +1,7 @@
 /* Cache the install shell only. HTML always comes from the network. */
-var SHELL = 'opsai-shell-v2';
+var SHELL = 'opsai-shell-v3';
 var SHELL_URLS = [
-  '/app-shell.css?v=2',
+  '/app-shell.css?v=3',
   '/app-shell.js?v=2',
   '/icon-180.png',
   '/icon-192.png',

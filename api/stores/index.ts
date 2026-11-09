@@ -8,7 +8,7 @@ import { isMissingTable } from '../../lib/prismaMissing';
 import { logAppError, loggedHandler, serializeError } from '../../lib/requestLog';
 import { readStoredSetup } from '../../lib/tasks/storeSetup';
 import { dashboardModules } from '../../lib/businessProfile';
-import { flattenTillPaidOuts, sourceActionId } from '../../lib/understanding/tillPaidOuts';
+import { flattenTillExpenses, flattenTillPaidOuts, sourceActionId } from '../../lib/understanding/tillPaidOuts';
 import { utcMonthRange } from '../../lib/billing/plans';
 import { summarizeUsage } from '../../lib/understanding/usage';
 
@@ -154,6 +154,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       const dbTypeMap: Record<string, string> = {
         sales: 'STORE_SALES',
         invoices: 'INVOICE_EXPENSE',
+        expenses: 'PAID_OUT',
         fuel: 'FUEL_SALES',
         paidouts: 'PAID_OUT',
         orders: 'ORDER_REQUEST',
@@ -164,16 +165,27 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         return;
       }
 
-      const lookupId = type === 'paidouts' ? sourceActionId(id) : id;
+      const lookupId = type === 'paidouts' || type === 'expenses' ? sourceActionId(id) : id;
       const item = await prisma.pendingActions.findFirst({
         where:
-          type === 'paidouts' || type === 'fuel'
+          type === 'paidouts' || type === 'expenses' || type === 'fuel'
             ? { actionId: lookupId, storeId }
             : { actionId: lookupId, storeId, type: dbType as 'STORE_SALES' | 'INVOICE_EXPENSE' | 'FUEL_SALES' | 'PAID_OUT' | 'ORDER_REQUEST' },
       });
 
       if (!item) {
         res.status(404).json({ error: 'Item not found' });
+        return;
+      }
+
+      if (type === 'expenses') {
+        const flat = flattenTillExpenses([item]);
+        const hit = flat.find((row) => row.id === id) ?? flat[0];
+        if (!hit) {
+          res.status(404).json({ error: 'Item not found' });
+          return;
+        }
+        res.json({ item: hit });
         return;
       }
 

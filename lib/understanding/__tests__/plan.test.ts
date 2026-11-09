@@ -123,6 +123,115 @@ describe('planUnderstanding: daily close', () => {
     expect(plan.entries.map((e) => e.lines.join('\n')).join('\n')).not.toMatch(/salary|wage|hourly|hours/i);
   });
 
+  it('uses the POS address when the caption does not name a store', () => {
+    const understanding: Understanding = {
+      kind: 'daily_close',
+      confidence: 0.9,
+      needsReview: [],
+      reports: [
+        {
+          storeHint: 'Greenpond Exxon',
+          reportDate: '2026-11-08',
+          cashSales: 1185.07,
+          payouts: [],
+        },
+      ],
+    };
+    const profilesWithAddress = [
+      { ...profiles[0], aliases: ['Greenpond Exxon'] },
+      profiles[1],
+    ];
+    const [entry] = planUnderstanding(understanding, {
+      ...ctx,
+      profiles: profilesWithAddress,
+      messageText: '',
+    }).entries;
+    expect(entry.storeId).toBe('S001');
+    expect(entry.storeName).toBe('Rockaway');
+    expect(entry.checks.some((c) => c.id === 'store_unmatched')).toBe(false);
+  });
+
+  it('files under Denville when the caption says Denville and the POS address does not match', () => {
+    const understanding: Understanding = {
+      kind: 'daily_close',
+      confidence: 0.9,
+      needsReview: [],
+      reports: [
+        {
+          storeHint: 'Greenpond Exxon',
+          reportDate: '2026-11-08',
+          cashSales: 1185.07,
+          cardSales: 396.19,
+          payouts: [],
+        },
+      ],
+    };
+    const [entry] = planUnderstanding(understanding, { ...ctx, messageText: 'Denville' }).entries;
+    expect(entry.storeId).toBe('S002');
+    expect(entry.storeName).toBe('Denville');
+    expect(entry.checks.some((c) => c.id === 'store_unmatched')).toBe(false);
+    expect(entry.lines.join('\n')).not.toContain('I could not match "Greenpond Exxon"');
+  });
+
+  it('prefers the caption store when the POS address matches a different store', () => {
+    const understanding: Understanding = {
+      kind: 'daily_close',
+      confidence: 0.9,
+      needsReview: [],
+      reports: [
+        {
+          storeHint: 'Greenpond Exxon',
+          reportDate: '2026-11-08',
+          cashSales: 1185.07,
+          payouts: [],
+        },
+      ],
+    };
+    const [entry] = planUnderstanding(understanding, {
+      ...ctx,
+      profiles: [{ ...profiles[0], aliases: ['Greenpond Exxon'] }, profiles[1]],
+      messageText: 'Denville',
+    }).entries;
+    expect(entry.storeId).toBe('S002');
+    expect(entry.storeName).toBe('Denville');
+  });
+
+
+  it('does not add an unmatched POS screen onto another store\'s close', () => {
+    const understanding: Understanding = {
+      kind: 'daily_close',
+      confidence: 0.9,
+      needsReview: [],
+      reports: [
+        {
+          storeHint: 'Greenpond Exxon',
+          reportDate: '2026-11-08',
+          fuelSales: 10448.8,
+          payouts: [],
+        },
+      ],
+    };
+    const [entry] = planUnderstanding(understanding, {
+      ...ctx,
+      openCloses: [
+        {
+          actionId: 'test-store-close',
+          storeId: 'S001',
+          status: 'CONFIRMED',
+          report: {
+            storeHint: 'Test-Store',
+            reportDate: '2026-11-08',
+            cashSales: 614.98,
+            cardSales: 1150.6,
+            payouts: [],
+          },
+        },
+      ],
+    }).entries;
+    expect(entry.payload.updates_action_id).toBeUndefined();
+    expect(entry.lines[0]).not.toContain('adding to this close');
+  });
+
   it('keeps the sender store and warns when the store name matches nothing', () => {
     const understanding: Understanding = {
       ...twoStoreText,
@@ -236,6 +345,54 @@ describe('planUnderstanding: daily close', () => {
       total_inside: 765.14,
     });
     expect(second.lines[0]).toContain('adding to this close');
+  });
+
+  it('replies when typed gas does not match the screenshot already on file', () => {
+    const typed: Understanding = {
+      kind: 'daily_close',
+      confidence: 0.9,
+      needsReview: [],
+      reports: [
+        {
+          storeHint: 'Denville',
+          reportDate: '2026-11-07',
+          fuelSales: 6100,
+          reportedDeposit: 6800,
+          payouts: [],
+        },
+      ],
+    };
+    const [entry] = planUnderstanding(typed, {
+      ...ctx,
+      openCloses: [
+        {
+          actionId: 'close-1',
+          storeId: 'S002',
+          status: 'CONFIRMED',
+          report: {
+            storeHint: 'Denville Exxon',
+            reportDate: '2026-11-07',
+            cardSales: 0,
+            cashSales: null,
+            storeSalesTotal: 0,
+            fuelSales: 6086.32,
+            fuelGallons: 1455.226,
+            fuelDiscounts: 2.84,
+            payouts: [],
+            reportedDeposit: null,
+            reportedDayTotal: 6086.32,
+            periodClosed: false,
+          },
+        },
+      ],
+    }).entries;
+    const text = entry.lines.join('\n');
+    expect(entry.payload.fuel_sales).toBe(6086.32);
+    expect(text).toContain('adding to this close');
+    expect(text).toContain('Gas on the screenshot does not match');
+    expect(text).toContain('FIX gas 6086.32');
+    expect(text).toContain('FIX gas 6100');
+    expect(text).toContain('Deposit $6,800');
   });
 });
 

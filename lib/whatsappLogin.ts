@@ -19,6 +19,16 @@ export function publicAppUrl(): string {
   return `https://${raw.replace(/\/$/, '')}`;
 }
 
+/** Phone tap-links only work when the app is on a public host, not this computer. */
+export function isPublicAppUrl(url = publicAppUrl()): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host !== 'localhost' && host !== '127.0.0.1' && !host.endsWith('.local');
+  } catch {
+    return false;
+  }
+}
+
 export function signWhatsAppLogin(user: { id: string; email: string }, storeId: string): string {
   return sign(
     { typ: WA_LOGIN_TYP, userId: user.id, email: user.email, storeId },
@@ -50,7 +60,12 @@ export function privateDashboardChatText(storeName: string, url: string): string
 }
 
 export function groupDashboardHint(): string {
-  return `Want this in the browser? I sent owners a private link in a chat with opsAi. It expires in ${WA_LOGIN_MINUTES} minutes — do not forward it.`;
+  return `Want this in the browser? Open the separate 1:1 chat with this opsAi number — not this group. The tap-link there expires in ${WA_LOGIN_MINUTES} minutes — do not forward it.`;
+}
+
+export function computerDashboardHint(storeName: string): string {
+  const name = storeName.trim() || 'this store';
+  return `Want this in the browser? Open ${name} on the dashboard on your computer — Daily Sales. A phone tap-link is not sent while the app is only on this computer.`;
 }
 
 function normName(value: string | null | undefined): string {
@@ -111,6 +126,7 @@ export async function sendPrivateDashboardLinks(
   storeId: string,
   storeName: string,
 ): Promise<number> {
+  if (!isPublicAppUrl()) return 0;
   const team = await loadStoreTeam(prisma, storeId);
   const targets = pairWhatsAppDashboardLogins(team);
   let sent = 0;

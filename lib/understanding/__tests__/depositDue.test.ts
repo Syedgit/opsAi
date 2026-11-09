@@ -115,6 +115,28 @@ describe('foldDepositBag', () => {
     const events = eventsFromRows([closeRow('2026-10-12')], rule, 'America/New_York');
     expect(foldDepositBag(events, '2026-10-12', { includeTodayCloses: true }).remaining).toBe(1653);
   });
+
+  it('does not add a typed test close on top of a POS day total', () => {
+    const events = eventsFromRows(
+      [
+        { type: 'STORE_SALES', payload: { cash: 100, card: 200, total_inside: 300 }, createdAt: new Date('2026-11-08T05:32:57Z') },
+        {
+          type: 'STORE_SALES',
+          payload: {
+            _kind: 'daily_close',
+            cash: 614.98,
+            card: 1150.6,
+            report_date: '2026-11-08',
+            report: { cashSales: 614.98, cardSales: 1150.6, periodClosed: false, payouts: [] },
+          },
+          createdAt: new Date('2026-11-08T23:53:12Z'),
+        },
+      ],
+      rule,
+      'America/New_York'
+    );
+    expect(foldDepositBag(events, '2026-11-08', { includeTodayCloses: true }).remaining).toBe(1765.58);
+  });
 });
 
 describe('formatDepositDue', () => {

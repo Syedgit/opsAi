@@ -2,7 +2,7 @@ import type { PrismaClient } from '@prisma/client';
 import { PendingStatus } from '@prisma/client';
 import { format, startOfDay, endOfDay } from 'date-fns';
 import { deliverStoreMessage, postToStoreGroups, sendWhatsAppMessage } from './whatsappMessaging';
-import { groupDashboardHint, sendPrivateDashboardLinks } from './whatsappLogin';
+import { computerDashboardHint, groupDashboardHint, isPublicAppUrl, sendPrivateDashboardLinks } from './whatsappLogin';
 import {
   cancelPendingAction,
   confirmPendingAction,
@@ -316,6 +316,7 @@ async function maybePostDaySummary(
     try {
       const privateLinks = await sendPrivateDashboardLinks(prisma, storeId, store?.storeName || 'Store');
       if (privateLinks > 0) text += `\n${groupDashboardHint()}`;
+      else if (!isPublicAppUrl()) text += `\n${computerDashboardHint(store?.storeName || 'this store')}`;
     } catch (e) {
       console.warn('Could not send private dashboard links', e instanceof Error ? e.message : e);
     }

@@ -1,4 +1,4 @@
-import { pairWhatsAppDashboardLogins, publicAppUrl, verifyWhatsAppLogin, signWhatsAppLogin } from '../whatsappLogin';
+import { isPublicAppUrl, pairWhatsAppDashboardLogins, publicAppUrl, verifyWhatsAppLogin, signWhatsAppLogin } from '../whatsappLogin';
 import type { StoreTeam } from '../tasks/people';
 
 const team = (over: Partial<StoreTeam> = {}): StoreTeam => ({
@@ -72,7 +72,13 @@ describe('publicAppUrl', () => {
     const prev = process.env.APP_URL;
     process.env.APP_URL = 'https://ops.example.com/';
     expect(publicAppUrl()).toBe('https://ops.example.com');
+    expect(isPublicAppUrl()).toBe(true);
     if (prev === undefined) delete process.env.APP_URL;
     else process.env.APP_URL = prev;
+  });
+
+  it('treats localhost as not phone-reachable', () => {
+    expect(isPublicAppUrl('http://localhost:3000')).toBe(false);
+    expect(isPublicAppUrl('https://ops.example.com')).toBe(true);
   });
 });

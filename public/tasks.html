@@ -20,7 +20,7 @@
     <link rel="apple-touch-startup-image" href="/splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
     <link rel="apple-touch-startup-image" href="/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
     <link rel="apple-touch-startup-image" href="/splash-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
-    <link rel="stylesheet" href="/app-shell.css?v=2">
+    <link rel="stylesheet" href="/app-shell.css?v=3">
     <script src="/app-shell.js?v=2"></script>
     <title>opsAi · Tasks &amp; alerts</title>
     <style>
@@ -30,8 +30,8 @@
             --bg: #f5f7fa; --card: #fff; --text: #1a1a1a; --light: #666; --border: #e0e0e0;
             --ok: #10b981; --warn: #f59e0b; --bad: #ef4444;
         }
-        html { -webkit-text-size-adjust: 100%; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: var(--bg); color: var(--text); }
+        html { -webkit-text-size-adjust: 100%; overflow-x: clip; overflow-y: auto; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: var(--bg); color: var(--text); min-height: 100dvh; overflow-x: clip; overflow-y: auto; }
         header { background: #111; color: #fff; padding: 14px 20px; padding-top: max(14px, env(safe-area-inset-top)); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
         header a { color: #fff; text-decoration: none; opacity: .85; font-size: 14px; }
         header .brand-logo { line-height: 0; opacity: 1; background: #fff; border-radius: 8px; padding: 4px 8px; }

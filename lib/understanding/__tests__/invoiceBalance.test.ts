@@ -8,7 +8,7 @@ import {
   stillDue,
   tillCashPayments,
 } from '../invoiceBalance';
-import { flattenTillPaidOuts, sourceActionId } from '../tillPaidOuts';
+import { flattenTillExpenses, flattenTillPaidOuts, sourceActionId } from '../tillPaidOuts';
 import type { Invoice } from '../schema';
 
 const pepsi: Invoice = {
@@ -130,5 +130,59 @@ describe('flattenTillPaidOuts', () => {
       ])
     );
     expect(sourceActionId('close1:payout:0')).toBe('close1');
+  });
+});
+
+describe('flattenTillExpenses', () => {
+  const day = new Date('2026-10-12T18:00:00Z');
+
+  it('lists close payouts and paid-outs, not invoice cash', () => {
+    const rows = flattenTillExpenses([
+      {
+        actionId: 'close1',
+        type: 'STORE_SALES',
+        createdAt: day,
+        confidence: 0.9,
+        payloadJson: { _kind: 'daily_close', report: { payouts: [{ label: 'Lays', amount: 142 }] } },
+      },
+      {
+        actionId: 'inv1',
+        type: 'INVOICE_EXPENSE',
+        createdAt: day,
+        confidence: 0.9,
+        payloadJson: {
+          _kind: 'invoice',
+          vendor: 'Pepsi',
+          invoice: settleInvoice({ ...pepsi, remainingDue: 400, remainingMethod: 'check' }),
+        },
+      },
+      {
+        actionId: 'po1',
+        type: 'PAID_OUT',
+        createdAt: day,
+        confidence: 0.9,
+        payloadJson: { amount: 50, reason: 'ice from till' },
+      },
+    ]);
+    expect(rows.map((r) => r.data)).toEqual(
+      expect.arrayContaining([
+        { amount: 142, category: 'Till payout', description: 'Lays', paid: 'Y' },
+        { amount: 50, category: 'Paid out', description: 'ice from till', paid: 'Y' },
+      ])
+    );
+    expect(rows.some((r) => String(r.data.description).includes('Pepsi'))).toBe(false);
+  });
+
+  it('skips zero-amount paid-outs', () => {
+    const rows = flattenTillExpenses([
+      {
+        actionId: 'po0',
+        type: 'PAID_OUT',
+        createdAt: day,
+        confidence: 0.9,
+        payloadJson: { amount: 0, reason: 'nothing' },
+      },
+    ]);
+    expect(rows).toEqual([]);
   });
 });

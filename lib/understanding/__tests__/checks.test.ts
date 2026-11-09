@@ -9,6 +9,7 @@ import {
   inferDepositRules,
   matchInvoiceToPayout,
   matchStore,
+  matchStoreFromText,
   worstStatus,
 } from '../checks';
 import { buildDefaultProfile, type DepositRule } from '../profile';
@@ -343,6 +344,22 @@ describe('matchStore', () => {
 
   it('returns no match with no hint', () => {
     expect(matchStore(null, stores).profile).toBeNull();
+  });
+});
+
+describe('matchStoreFromText', () => {
+  const stores = [
+    buildDefaultProfile({ storeId: 'S001', storeName: 'Rockaway' }),
+    buildDefaultProfile({ storeId: 'S002', storeName: 'Denville' }),
+  ];
+
+  it('picks Denville from a caption under the photo', () => {
+    expect(matchStoreFromText('Denville', stores).profile?.storeId).toBe('S002');
+    expect(matchStoreFromText('save this to Denville', stores).profile?.storeId).toBe('S002');
+  });
+
+  it('does not treat an unmatched POS address as a store', () => {
+    expect(matchStoreFromText('Greenpond Exxon', stores).profile).toBeNull();
   });
 });
 

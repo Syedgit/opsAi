@@ -5,7 +5,7 @@ import { generateBusinessSummary, BusinessSummary } from '../services/aiSummariz
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, format } from 'date-fns';
 import { isGroupAutoProvisionEnabled } from '../../lib/whatsappGroupConfig';
 import { startWhatsAppGroupProvision } from '../../lib/whatsappGroupProvision';
-import { flattenTillPaidOuts, sourceActionId } from '../../lib/understanding/tillPaidOuts';
+import { flattenTillExpenses, flattenTillPaidOuts, sourceActionId } from '../../lib/understanding/tillPaidOuts';
 import { flattenFuelSales } from '../../lib/understanding/fuelSalesRows';
 
 const router = Router();
@@ -416,6 +416,9 @@ router.get('/data', async (req: Request, res: Response) => {
       case 'invoices':
         dbType = 'INVOICE_EXPENSE';
         break;
+      case 'expenses':
+        dbType = 'PAID_OUT';
+        break;
       case 'fuel':
         dbType = 'FUEL_SALES';
         break;
@@ -428,6 +431,20 @@ router.get('/data', async (req: Request, res: Response) => {
       default:
         res.status(400).json({ error: 'Invalid type' });
         return;
+    }
+
+    if (type === 'expenses') {
+      const tillRows = await prisma.pendingActions.findMany({
+        where: {
+          storeId,
+          status: 'CONFIRMED',
+          type: { in: ['PAID_OUT', 'STORE_SALES'] },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+      });
+      res.json({ expenses: flattenTillExpenses(tillRows) });
+      return;
     }
 
     if (type === 'paidouts') {
@@ -505,6 +522,7 @@ router.get('/detail', async (req: Request, res: Response) => {
     const dbTypeMap: Record<string, string> = {
       sales: 'STORE_SALES',
       invoices: 'INVOICE_EXPENSE',
+      expenses: 'PAID_OUT',
       fuel: 'FUEL_SALES',
       paidouts: 'PAID_OUT',
       orders: 'ORDER_REQUEST',
@@ -515,16 +533,27 @@ router.get('/detail', async (req: Request, res: Response) => {
       return;
     }
 
-    const lookupId = type === 'paidouts' ? sourceActionId(id) : id;
+    const lookupId = type === 'paidouts' || type === 'expenses' ? sourceActionId(id) : id;
     const item = await prisma.pendingActions.findFirst({
       where:
-        type === 'paidouts' || type === 'fuel'
+        type === 'paidouts' || type === 'expenses' || type === 'fuel'
           ? { actionId: lookupId, storeId }
           : { actionId: lookupId, storeId, type: dbType as any },
     });
 
     if (!item) {
       res.status(404).json({ error: 'Item not found' });
+      return;
+    }
+
+    if (type === 'expenses') {
+      const flat = flattenTillExpenses([item]);
+      const hit = flat.find((row) => row.id === id) ?? flat[0];
+      if (!hit) {
+        res.status(404).json({ error: 'Item not found' });
+        return;
+      }
+      res.json({ item: hit });
       return;
     }
 

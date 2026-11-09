@@ -103,6 +103,8 @@ describe('OK posts an end-of-day wrap-up', () => {
   beforeEach(() => {
     (postToStoreGroups as jest.Mock).mockReset();
     (postToStoreGroups as jest.Mock).mockResolvedValue(0);
+    (sendWhatsAppMessage as jest.Mock).mockReset();
+    (sendWhatsAppMessage as jest.Mock).mockResolvedValue(true);
   });
 
   it('for a convenience store, totals the day and posts it to the group', async () => {
@@ -145,31 +147,70 @@ describe('OK posts an end-of-day wrap-up', () => {
   });
 
   it('sends a private dashboard link 1:1 and keeps it out of the group', async () => {
-    const { prisma } = makePrisma({ pending: [pendingRow(closePayload)] });
-    (prisma.storeConfig.findUnique as jest.Mock).mockResolvedValue({
-      storeId: 'S001',
-      storeName: 'Rockaway',
-      timezone: 'America/New_York',
-      profileJson: null,
-      setupJson: defaultSetup('convenience'),
-    });
-    (prisma.userDirectory.findMany as jest.Mock).mockResolvedValue([
-      { id: 'd1', name: 'Sam', phoneE164: PHONE, role: 'OWNER' },
-    ]);
-    (prisma.userStore.findMany as jest.Mock).mockResolvedValue([
-      { userId: 'u1', role: 'OWNER', user: { email: 'sam@store.com', name: 'Sam' } },
-    ]);
-    (sendWhatsAppMessage as jest.Mock).mockResolvedValue(true);
-    (postToStoreGroups as jest.Mock).mockResolvedValue(1);
+    const prevApp = process.env.APP_URL;
+    process.env.APP_URL = 'https://app.example.com';
+    try {
+      const { prisma } = makePrisma({ pending: [pendingRow(closePayload)] });
+      (prisma.storeConfig.findUnique as jest.Mock).mockResolvedValue({
+        storeId: 'S001',
+        storeName: 'Rockaway',
+        timezone: 'America/New_York',
+        profileJson: null,
+        setupJson: defaultSetup('convenience'),
+      });
+      (prisma.userDirectory.findMany as jest.Mock).mockResolvedValue([
+        { id: 'd1', name: 'Sam', phoneE164: PHONE, role: 'OWNER' },
+      ]);
+      (prisma.userStore.findMany as jest.Mock).mockResolvedValue([
+        { userId: 'u1', role: 'OWNER', user: { email: 'sam@store.com', name: 'Sam' } },
+      ]);
+      (sendWhatsAppMessage as jest.Mock).mockResolvedValue(true);
+      (postToStoreGroups as jest.Mock).mockResolvedValue(1);
 
-    const result = await handleWhatsAppCommand(prisma, PHONE, 'OK');
-    const privateText = (sendWhatsAppMessage as jest.Mock).mock.calls.map((c) => String(c[2])).find((t) => t.includes('/login?wa='));
-    expect(privateText).toContain('/login?wa=');
-    expect(privateText).toContain('expires in 20 minutes');
-    const groupText = String((postToStoreGroups as jest.Mock).mock.calls[0][2]);
-    expect(groupText).not.toContain('/login?wa=');
-    expect(groupText).toContain('private link');
-    expect(result.message).toContain('private link');
+      const result = await handleWhatsAppCommand(prisma, PHONE, 'OK');
+      const privateText = (sendWhatsAppMessage as jest.Mock).mock.calls.map((c) => String(c[2])).find((t) => t.includes('/login?wa='));
+      expect(privateText).toContain('/login?wa=');
+      expect(privateText).toContain('expires in 20 minutes');
+      const groupText = String((postToStoreGroups as jest.Mock).mock.calls[0][2]);
+      expect(groupText).not.toContain('/login?wa=');
+      expect(groupText).toContain('1:1 chat');
+      expect(result.message).toContain('1:1 chat');
+    } finally {
+      if (prevApp === undefined) delete process.env.APP_URL;
+      else process.env.APP_URL = prevApp;
+    }
+  });
+
+  it('does not send a localhost tap-link; tells them to open the computer dashboard', async () => {
+    const prevApp = process.env.APP_URL;
+    delete process.env.APP_URL;
+    try {
+      const { prisma } = makePrisma({ pending: [pendingRow(closePayload)] });
+      (prisma.storeConfig.findUnique as jest.Mock).mockResolvedValue({
+        storeId: 'S001',
+        storeName: 'Rockaway',
+        timezone: 'America/New_York',
+        profileJson: null,
+        setupJson: defaultSetup('convenience'),
+      });
+      (prisma.userDirectory.findMany as jest.Mock).mockResolvedValue([
+        { id: 'd1', name: 'Sam', phoneE164: PHONE, role: 'OWNER' },
+      ]);
+      (prisma.userStore.findMany as jest.Mock).mockResolvedValue([
+        { userId: 'u1', role: 'OWNER', user: { email: 'sam@store.com', name: 'Sam' } },
+      ]);
+      (sendWhatsAppMessage as jest.Mock).mockResolvedValue(true);
+      (postToStoreGroups as jest.Mock).mockResolvedValue(1);
+
+      const result = await handleWhatsAppCommand(prisma, PHONE, 'OK');
+      const privateText = (sendWhatsAppMessage as jest.Mock).mock.calls.map((c) => String(c[2])).find((t) => t.includes('/login?wa='));
+      expect(privateText).toBeUndefined();
+      expect(result.message).toContain('dashboard on your computer');
+      expect(result.message).not.toContain('1:1 chat');
+    } finally {
+      if (prevApp === undefined) delete process.env.APP_URL;
+      else process.env.APP_URL = prevApp;
+    }
   });
 
   it('does nothing when the store type is not set', async () => {

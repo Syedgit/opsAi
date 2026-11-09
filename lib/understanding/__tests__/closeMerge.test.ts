@@ -1,4 +1,4 @@
-import { applyStoreCredit, matchOpenClose, mergeDailyCloseReports, openCloseFromAction } from '../closeMerge';
+import { applyStoreCredit, matchOpenClose, mergeCloseReports, mergeDailyCloseReports, openCloseFromAction } from '../closeMerge';
 import type { DailyCloseReport } from '../schema';
 
 const fuelPage: DailyCloseReport = {
@@ -55,6 +55,43 @@ describe('mergeDailyCloseReports', () => {
     const withPayout = { ...fuelPage, payouts: [{ label: 'Lays', amount: 12 }] };
     expect(mergeDailyCloseReports(withPayout, cashPage).payouts).toEqual([{ label: 'Lays', amount: 12 }]);
   });
+
+  it('keeps screenshot gas when the typed close disagrees, and flags it', () => {
+    const typed = { ...cashPage, fuelSales: 6100, reportedDeposit: 6800 };
+    const { report, mismatches } = mergeCloseReports(fuelPage, typed);
+    expect(report.fuelSales).toBe(6086.32);
+    expect(report.cashSales).toBe(765.14);
+    expect(report.reportedDeposit).toBe(6800);
+    expect(mismatches.find((c) => c.id === 'screenshot_gas')?.status).toBe('fail');
+    expect(mismatches.find((c) => c.id === 'screenshot_deposit')).toBeUndefined();
+  });
+
+  it('confirms gas when the text matches the screenshot', () => {
+    const typed = { ...cashPage, fuelSales: 6086.32 };
+    const { report, mismatches } = mergeCloseReports(fuelPage, typed);
+    expect(report.fuelSales).toBe(6086.32);
+    expect(mismatches.find((c) => c.id === 'screenshot_gas')?.status).toBe('pass');
+  });
+
+  it('keeps screenshot deposit when the typed close disagrees', () => {
+    const screen = { ...fuelPage, reportedDeposit: 1653 };
+    const { report, mismatches } = mergeCloseReports(screen, { ...cashPage, reportedDeposit: 1700 });
+    expect(report.reportedDeposit).toBe(1653);
+    expect(mismatches.find((c) => c.id === 'screenshot_deposit')?.status).toBe('fail');
+  });
+});
+
+describe('loadOpenCloses date fallback', () => {
+  it('keeps a typed close with no report date so a later POS screen can merge', () => {
+    const close = openCloseFromAction({
+      actionId: 'fake-1',
+      storeId: 'S002',
+      status: 'CONFIRMED',
+      payloadJson: { cash: 100, card: 200, total_inside: 300 },
+    });
+    expect(close?.report.cashSales).toBe(100);
+    expect(close?.report.reportDate).toBeNull();
+  });
 });
 
 describe('matchOpenClose', () => {
@@ -63,6 +100,8 @@ describe('matchOpenClose', () => {
     expect(matchOpenClose('S002', '2026-11-07', [open])?.actionId).toBe('close-1');
     expect(matchOpenClose('S001', '2026-11-07', [open])).toBeNull();
     expect(matchOpenClose('S002', '2026-11-06', [open])).toBeNull();
+    expect(matchOpenClose('S002', null, [open], ['2026-11-07', '2026-11-06'])?.actionId).toBe('close-1');
+    expect(matchOpenClose('S002', null, [open], ['2026-11-08'])).toBeNull();
   });
 });
 

@@ -5,6 +5,7 @@ import { parseStoredProfile } from './profileStore';
 import { DailyCloseReportSchema, type DailyCloseReport } from './schema';
 import type { DepositRule } from './profile';
 import { storeTypeOf } from './daySummary';
+import { pickDaySalesRows } from './salesPick';
 import { readStoredSetup } from '../tasks/storeSetup';
 import { addDaysLocal, localDateString, localMinutesOfDay, localToUtc, parseHHMM } from '../tasks/time';
 
@@ -112,15 +113,14 @@ export function eventsFromRows(
   timeZone: string
 ): DepositEvent[] {
   const out: DepositEvent[] = [];
+  const closesByDay = new Map<string, Array<(typeof rows)[number] & { seq: number }>>();
   rows.forEach((row, seq) => {
     const payload = payloadOf(row);
     const day = eventDay(payload, row.createdAt, timeZone);
     if (payload._kind === 'daily_close' || row.type === 'STORE_SALES') {
-      const report = reportFromClosePayload(payload);
-      if (!report) return;
-      const amount = expectedDepositAmount(report, rule);
-      if (amount == null || amount <= 0) return;
-      out.push({ day, kind: 'close', amount, seq });
+      const list = closesByDay.get(day) ?? [];
+      list.push({ ...row, seq });
+      closesByDay.set(day, list);
       return;
     }
     if (payload._kind === 'deposit_receipt') {
@@ -129,6 +129,15 @@ export function eventsFromRows(
       out.push({ day, kind: 'slip', amount, seq });
     }
   });
+  for (const [day, list] of closesByDay) {
+    for (const row of pickDaySalesRows(list)) {
+      const report = reportFromClosePayload(payloadOf(row));
+      if (!report) continue;
+      const amount = expectedDepositAmount(report, rule);
+      if (amount == null || amount <= 0) continue;
+      out.push({ day, kind: 'close', amount, seq: row.seq });
+    }
+  }
   return out.sort((a, b) => a.day.localeCompare(b.day) || a.kind.localeCompare(b.kind) || a.seq - b.seq);
 }
 

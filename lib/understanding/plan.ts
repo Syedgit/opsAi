@@ -8,7 +8,7 @@ import {
   remainingOf,
   settleInvoice,
 } from './invoiceBalance';
-import { localDateString } from '../tasks/time';
+import { addDaysLocal, localDateString } from '../tasks/time';
 import {
   checkDailyClose,
   checkDepositReceipt,
@@ -18,6 +18,7 @@ import {
   formatMoney,
   inferDepositRules,
   matchStore,
+  matchStoreFromText,
   worstStatus,
   type Check,
 } from './checks';
@@ -26,7 +27,7 @@ import { formatHours, hoursLines, sheetLines, summarizeSchedule, type ScheduleSu
 import { WorkScheduleSchema } from './schema';
 import type { DailyCloseReport, DepositReceipt, EquipmentIssue, FuelPrices, Invoice, Order, OrderItem, Understanding, WorkSchedule } from './schema';
 import { extraTillForDay, type TillCashItem } from './daySummary';
-import { applyStoreCredit, matchOpenClose, mergeDailyCloseReports, type OpenClose } from './closeMerge';
+import { applyStoreCredit, matchOpenClose, mergeCloseReports, type OpenClose } from './closeMerge';
 import { describeVendorCatalog, matchOrderVendor, matchVendorName, VENDOR_CATEGORY_LABEL, type StoreVendor } from './vendors';
 import {
   applyFuelPriceFix,
@@ -133,7 +134,7 @@ function insideTotal(report: DailyCloseReport): number {
 
 function checkLine(check: Check): string | null {
   if (check.status === 'pass') {
-    return ['deposit_explained', 'deposit_rule', 'day_total_sum', 'lines_sum_total', 'invoice_matches_payout', 'cash_after_payouts'].includes(
+    return ['deposit_explained', 'deposit_rule', 'day_total_sum', 'lines_sum_total', 'invoice_matches_payout', 'cash_after_payouts', 'screenshot_gas', 'screenshot_deposit'].includes(
       check.id
     )
       ? `✅ ${check.message}`
@@ -469,8 +470,36 @@ interface ResolvedStore {
 function resolveStore(hint: string | null | undefined, ctx: PlanContext): ResolvedStore {
   const primary = ctx.profiles.find((p) => p.storeId === ctx.primaryStoreId) ?? null;
   const primaryName = primary?.storeName ?? ctx.primaryStoreId;
-
   const trimmed = hint?.trim();
+  // Caption name first (Denville under the photo). If none, the POS header / address (Greenpond Exxon).
+  const caption = matchStoreFromText(ctx.messageText, ctx.profiles);
+  const screen = trimmed ? matchStore(trimmed, ctx.profiles) : { profile: null, score: 0, ambiguous: false };
+
+  if (caption.profile && !caption.ambiguous) {
+    if (screen.profile && screen.profile.storeId !== caption.profile.storeId) {
+      return {
+        storeId: caption.profile.storeId,
+        storeName: caption.profile.storeName,
+        profile: caption.profile,
+        warning: {
+          id: 'store_caption',
+          status: 'warn',
+          message: `Screen says "${trimmed}"; filing under ${caption.profile.storeName} from your caption. CANCEL if that is wrong.`,
+        },
+      };
+    }
+    return {
+      storeId: caption.profile.storeId,
+      storeName: caption.profile.storeName,
+      profile: caption.profile,
+      warning: null,
+    };
+  }
+
+  if (screen.profile) {
+    return { storeId: screen.profile.storeId, storeName: screen.profile.storeName, profile: screen.profile, warning: null };
+  }
+
   if (!trimmed) {
     return {
       storeId: ctx.primaryStoreId,
@@ -486,11 +515,6 @@ function resolveStore(hint: string | null | undefined, ctx: PlanContext): Resolv
     };
   }
 
-  const match = matchStore(trimmed, ctx.profiles);
-  if (match.profile) {
-    return { storeId: match.profile.storeId, storeName: match.profile.storeName, profile: match.profile, warning: null };
-  }
-
   // Money must not land on the wrong store silently: keep it on the sender's store, say so, and
   // the sender confirms (or cancels) before anything is saved.
   return {
@@ -500,7 +524,7 @@ function resolveStore(hint: string | null | undefined, ctx: PlanContext): Resolv
     warning: {
       id: 'store_unmatched',
       status: 'warn',
-      message: match.ambiguous
+      message: screen.ambiguous
         ? `"${trimmed}" could be more than one of your stores, so this is under ${primaryName}. CANCEL if that is wrong.`
         : `I could not match "${trimmed}" to your stores, so this is under ${primaryName}. CANCEL if that is wrong.`,
     },
@@ -535,17 +559,27 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
       const entries = understanding.reports.map((report): PlannedEntry => {
         const store = resolveStore(report.storeHint, ctx);
         const credited = applyStoreCredit(report);
-        const existing = matchOpenClose(store.storeId, credited.reportDate, ctx.openCloses);
-        const merged = existing ? mergeDailyCloseReports(existing.report, credited) : credited;
+        const tz = store.profile?.timezone || 'America/New_York';
+        const today = localDateString(ctx.now, tz);
+        const existing =
+          store.warning?.id === 'store_unmatched'
+            ? null
+            : matchOpenClose(store.storeId, credited.reportDate, ctx.openCloses, [
+                today,
+                addDaysLocal(today, -1),
+              ]);
+        const mergedClose = existing ? mergeCloseReports(existing.report, credited) : { report: credited, mismatches: [] };
+        const merged = mergedClose.report;
         const extraTill = extraTillForDay(
           ctx.tillCash,
           store.storeId,
-          merged.reportDate ?? localDateString(ctx.now, store.profile?.timezone || 'America/New_York')
+          merged.reportDate ?? today
         );
         const dateCheck = checkReportDate(merged.reportDate, ctx.now);
         const checks = [
           ...(store.warning ? [store.warning] : []),
           ...(dateCheck ? [dateCheck] : []),
+          ...mergedClose.mismatches,
           ...checkDailyClose(merged, store.profile, extraTill),
         ];
         const suggestedRule = suggestDepositRule(merged, store.profile, checks, ctx.canTeachRules);

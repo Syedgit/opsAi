@@ -12,6 +12,13 @@ export type TillPaidOutRow = {
   confidence: number;
 };
 
+export type TillExpenseRow = {
+  id: string;
+  date: Date;
+  data: { amount: number; category: string; description: string; paid: 'Y' };
+  confidence: number;
+};
+
 export function sourceActionId(id: string): string {
   return id.replace(/:(?:payout|cash):\d+$/, '');
 }
@@ -76,4 +83,29 @@ export function flattenTillPaidOuts(
     }
   }
   return out.sort((a, b) => b.date.getTime() - a.date.getTime());
+}
+
+/** Close payouts and typed paid-outs only. Invoice cash is buying, not an expense. Never wages. */
+export function flattenTillExpenses(
+  rows: Array<{
+    actionId: string;
+    type: string;
+    createdAt: Date;
+    payloadJson: unknown;
+    confidence: number;
+  }>
+): TillExpenseRow[] {
+  return flattenTillPaidOuts(rows.filter((row) => row.type !== 'INVOICE_EXPENSE'))
+    .filter((row) => row.data.amount > 0)
+    .map((row) => ({
+    id: row.id,
+    date: row.date,
+    confidence: row.confidence,
+    data: {
+      amount: row.data.amount,
+      category: row.id.includes(':payout:') ? 'Till payout' : 'Paid out',
+      description: row.data.reason,
+      paid: 'Y',
+    },
+  }));
 }
