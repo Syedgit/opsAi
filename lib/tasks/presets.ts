@@ -285,7 +285,7 @@ export const TASK_PRESETS: TaskPreset[] = [
   preset('own-daily-close', REPORTS, 'suggested', {
     category: 'reports', shift: 'End of shift', points: 3,
     title: 'Send the daily close report',
-    instructions: 'In the ops group, send yesterday’s cash, card, gas, payouts and deposit. A photo of the POS close screen is fine. Reply OK after opsAi reads it.',
+    instructions: 'Send opsAi yesterday’s cash, card, gas, payouts and deposit on WhatsApp. A photo of the POS close screen is fine. Reply OK after opsAi reads it.',
     startTime: '22:00', evidence: 'either',
   }, 'till', [...RETAIL, ...SERVICE, ...OPTIONAL_FLOOR]),
   preset('own-deposit', REPORTS, 'suggested', {

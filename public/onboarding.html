@@ -261,16 +261,16 @@
         <div id="successPanel" class="step-panel">
             <div class="success-icon">✅</div>
             <div class="auth-header">
-                <h1>Store created</h1>
-                <p>Store <span class="store-badge" id="successStoreId"></span> is ready. Connect WhatsApp:</p>
+                <h1>Business created</h1>
+                <p><span id="groupNameHint">Your business</span> <span class="store-badge" id="successStoreId"></span> is ready. Start on WhatsApp:</p>
             </div>
             <ol class="steps-list">
-                <li>Open an <strong>existing</strong> store group, or create one (e.g. “<span id="groupNameHint">Your Store</span> — ops”). Either works.</li>
-                <li>Add the <strong>opsAi business number</strong> to that group:<br>
+                <li>Save the <strong>opsAi WhatsApp number</strong> in your phone as “opsAi”:<br>
                     <div class="number-highlight" id="opsNumberDisplay">See dashboard for number</div>
                 </li>
-                <li>From <strong>your registered WhatsApp number</strong>, send any message in that group (e.g. “hello” or “Sales cash 100 card 200”).</li>
-                <li>opsAi will reply when the group is connected — then send real ops messages and reply <strong>OK</strong> to confirm.</li>
+                <li>From <strong>your registered WhatsApp number</strong>, send opsAi a message in a direct chat (e.g. “hi” or “cash 100 card 200”).</li>
+                <li>Add your staff’s WhatsApp numbers on <strong>Tasks &amp; alerts → Store admin</strong>. They message the same opsAi number directly.</li>
+                <li>opsAi replies with what it read. Reply <strong>OK</strong> to save it, or FIX to correct it.</li>
             </ol>
             <div class="number-highlight" id="tasksHint" style="font-size: 14px; font-weight: 600; display: none;"></div>
             <div class="number-highlight" style="font-size: 15px; font-weight: 600;">
@@ -299,13 +299,13 @@
         // ?add=1: an existing owner adding another location (no phone needed, no redirect away).
         const isAddMode = new URLSearchParams(window.location.search).get('add') === '1';
         if (isAddMode) {
-            document.querySelector('#setupPanel h1').textContent = 'Add another store';
+            document.querySelector('#setupPanel h1').textContent = 'Add another business';
             document.querySelector('#setupPanel .auth-header p').textContent =
-                'Your WhatsApp number stays the same. Each store keeps its own sales, invoices and deposits.';
+                'Your WhatsApp number stays the same. Each business keeps its own sales, invoices and deposits.';
             const phoneInput = document.getElementById('ownerPhoneE164');
             phoneInput.required = false;
             phoneInput.closest('.form-group').style.display = 'none';
-            document.getElementById('submitBtn').textContent = 'Add store';
+            document.getElementById('submitBtn').textContent = 'Add business';
             document.querySelector('#setupPanel .auth-footer').style.display = 'none';
         }
 
@@ -938,21 +938,21 @@
                 const hint = document.getElementById('tasksHint');
                 hint.style.display = '';
                 hint.textContent = tasksAdded > 0
-                    ? tasksAdded + ' reminders are scheduled. After the ops group is connected they post there at the times you chose. Owners and managers can edit any of them on Tasks & alerts → Store admin.'
+                    ? tasksAdded + ' reminders are scheduled. They come to your team on WhatsApp at the times you chose. Owners and managers can edit any of them on Tasks & alerts → Store admin.'
                     : 'Hours and shifts are saved. Add reminders on Tasks & alerts → Store admin when you are ready.';
             }
             document.getElementById('successStoreId').textContent = storeId;
             // The dashboard opens on the store that was just added.
             sessionStorage.setItem('selectStoreId', storeId);
             if (isAddMode) {
-                document.querySelector('#successPanel h1').textContent = 'Store added';
+                document.querySelector('#successPanel h1').textContent = 'Business added';
                 document.querySelector('#successPanel .auth-header p').innerHTML =
-                    'Store <span class="store-badge">' + storeId + '</span> is ready. Keep messaging opsAi from the same WhatsApp number and include the store name, for example: <strong>' +
+                    'Business <span class="store-badge">' + storeId + '</span> is ready. Keep messaging opsAi from the same WhatsApp number and include the store name, for example: <strong>' +
                     (storeName || 'Store').replace(/[<>&"]/g, '') + ' cash 100 card 200 gas 500</strong>.';
                 document.querySelector('#successPanel .steps-list').style.display = 'none';
                 return;
             }
-            document.getElementById('groupNameHint').textContent = storeName || 'Your Store';
+            document.getElementById('groupNameHint').textContent = storeName || 'Your business';
             document.getElementById('opsNumberDisplay').textContent =
                 opsDisplayNumber || 'Add the opsAi number from your welcome email or dashboard';
         }

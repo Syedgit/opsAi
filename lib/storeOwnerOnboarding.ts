@@ -153,7 +153,7 @@ export async function completeOwnerStoreOnboarding(
       provision: {
         status: 'skipped',
         reason:
-          'Manual group setup (Path A): create a WhatsApp group on your phone, add the opsAi business number, then send any message from your registered number in that group to connect it.',
+          'Direct chat: save the opsAi WhatsApp number and message it from your registered number. Add staff numbers on Store admin.',
       },
     };
   }

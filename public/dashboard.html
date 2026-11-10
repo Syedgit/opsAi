@@ -1191,7 +1191,7 @@
                 <select id="storeSelect">
                     <option value="">Select Store...</option>
                 </select>
-                <button class="add-store-btn" id="addStoreBtn">+ Add Store</button>
+                <button class="add-store-btn" id="addStoreBtn">+ Add Business</button>
             </div>
             <div class="user-info">
                 <div class="user-avatar">U</div>
@@ -1207,12 +1207,12 @@
         <div class="modal" id="addStoreModal">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h3>Add Store</h3>
+                    <h3>Add Business</h3>
                     <button class="modal-close" id="closeModal">&times;</button>
                 </div>
                 <div style="margin-bottom: 20px;">
-                    <p style="margin: 0 0 10px; font-size: 14px; color: var(--text-light);">Own another location? Add it to your account. Each store keeps its own sales, invoices and deposits.</p>
-                    <a href="/onboarding?add=1" class="btn btn-primary" style="display: block; text-align: center; text-decoration: none;">Add a store I own</a>
+                    <p style="margin: 0 0 10px; font-size: 14px; color: var(--text-light);">Own another business or location? Add it to your account. Each one keeps its own sales, invoices and deposits.</p>
+                    <a href="/onboarding?add=1" class="btn btn-primary" style="display: block; text-align: center; text-decoration: none;">Add a business I own</a>
                 </div>
                 <div style="text-align: center; margin: 0 0 16px; font-size: 13px; color: var(--text-light);">or join a team that already exists</div>
                 <div class="error-message" id="errorMessage"></div>
@@ -1245,7 +1245,7 @@
                     </div>
                     <div class="modal-actions">
                         <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
-                        <button type="submit" class="btn btn-primary" id="submitBtn">Add Store</button>
+                        <button type="submit" class="btn btn-primary" id="submitBtn">Join team</button>
                     </div>
                 </form>
             </div>
@@ -1315,11 +1315,11 @@
                 </div>
 
                 <div class="whatsapp-setup-card" id="whatsappSetupCard">
-                    <h3>WhatsApp ops group</h3>
-                    <p>One opsAi number for all stores. Add it to an existing store group, or to a new one. Then message from your registered phone to connect.</p>
+                    <h3>WhatsApp</h3>
+                    <p>One opsAi number for all your businesses. You and your staff message it directly — no group needed.</p>
                     <div id="whatsappProvisionStatus" class="whatsapp-status none">Checking…</div>
                     <div id="whatsappProvisionBody">
-                        <p id="whatsappProvisionMessage">Loading group status…</p>
+                        <p id="whatsappProvisionMessage">Loading WhatsApp status…</p>
                         <ol id="whatsappManualSteps" class="steps-list" style="display:none; margin-top:12px; padding-left:20px; font-size:14px; line-height:1.6; color: var(--text-light);"></ol>
                     </div>
                 </div>
@@ -1415,7 +1415,7 @@
                 <div class="content-area">
                     <p>Reminders, people (WhatsApp numbers, staff, a partner owner), and how this store sends reports are on <a href="/tasks">Tasks &amp; alerts → Store admin</a>. You can change the WhatsApp number you entered at signup there.</p>
                     <p style="margin-top: 16px;">Plan, trial, and AI readings per store are on <a href="/billing">Plan and usage</a>.</p>
-                    <p style="margin-top: 16px;">To add another location you own, use <strong>+ Add Store</strong> at the top of the dashboard, or <a href="/onboarding?add=1">Add another store</a>. Each store keeps its own ID, name, sales, and WhatsApp group.</p>
+                    <p style="margin-top: 16px;">To add another business or location you own, use <strong>+ Add Business</strong> at the top of the dashboard, or <a href="/onboarding?add=1">Add another business</a>. Each one keeps its own ID, name, sales, and reports.</p>
                 </div>
             </div>
         </div>
@@ -1713,7 +1713,7 @@
                 if (!r.ok) {
                     statusEl.textContent = 'Unavailable';
                     statusEl.className = 'whatsapp-status none';
-                    messageEl.textContent = data.error || 'Could not load WhatsApp group status.';
+                    messageEl.textContent = data.error || 'Could not load WhatsApp status.';
                     return;
                 }
 
@@ -1754,22 +1754,28 @@
                     return;
                 }
 
-                statusEl.textContent = 'Not connected';
-                statusEl.className = 'whatsapp-status pending';
-                messageEl.textContent = 'Connect your ops group manually:';
+                statusEl.textContent = 'Direct chat';
+                statusEl.className = 'whatsapp-status linked';
+                messageEl.textContent = 'Message opsAi 1:1 on WhatsApp:';
+                let opsNumber = '';
+                try {
+                    const s = await fetch('/api/onboarding/status');
+                    const sd = s.ok ? await s.json() : null;
+                    if (sd && sd.opsWhatsAppDisplayNumber) opsNumber = sd.opsWhatsAppDisplayNumber;
+                } catch (e) { /* number is optional */ }
                 if (stepsEl) {
                     stepsEl.style.display = 'block';
                     stepsEl.innerHTML = [
-                        '<li>Open an existing WhatsApp group, or create one, and add the opsAi business number.</li>',
-                        '<li>From your registered owner phone, send any message in that group.</li>',
-                        '<li>opsAi will confirm when the group is linked.</li>',
-                        '<li>Staff already in the group can message once you add their WhatsApp on Store admin.</li>',
+                        '<li>Save the opsAi number' + (opsNumber ? ' <strong>' + esc(opsNumber) + '</strong>' : '') + ' in your phone as “opsAi”.</li>',
+                        '<li>Send closes, invoices, paid outs, or photos to it in a direct chat from your registered WhatsApp.</li>',
+                        '<li>Add staff numbers on <a href="/tasks">Tasks &amp; alerts → Store admin</a>. They message the same number directly.</li>',
+                        '<li>opsAi replies with what it read. Reply OK to save it, or FIX to correct it.</li>',
                     ].join('');
                 }
             } catch (e) {
                 statusEl.textContent = 'Error';
                 statusEl.className = 'whatsapp-status failed';
-                messageEl.textContent = 'Failed to load WhatsApp group status.';
+                messageEl.textContent = 'Failed to load WhatsApp status.';
             }
         }
 
@@ -2040,8 +2046,8 @@
                 '<button type="button" class="btn btn-secondary" id="schedAddPerson">Add</button></div>' +
                 '<datalist id="schedPeople">' + peopleOpts + '</datalist>' +
                 '<p class="sched-note">' + (weekFromSheet
-                    ? 'This week is from the sheet posted in WhatsApp. Edit here, or send a new photo of the 7-Eleven Shift Schedule in the group and I\'ll add up hours from Time In / Time Out.'
-                    : 'Send a photo of the 7-Eleven Shift Schedule in the WhatsApp group (Time In / Time Out, Friday through Thursday). I add up hours from the sheet and ignore Pay Period. Or type 9-5 here / tap Weekdays 9–5.') +
+                    ? 'This week is from the sheet posted in WhatsApp. Edit here, or send opsAi a new photo of the 7-Eleven Shift Schedule on WhatsApp and I\'ll add up hours from Time In / Time Out.'
+                    : 'Send opsAi a photo of the 7-Eleven Shift Schedule on WhatsApp (Time In / Time Out, Friday through Thursday). I add up hours from the sheet and ignore Pay Period. Or type 9-5 here / tap Weekdays 9–5.') +
                 ' Hours only. Every Thursday owners and managers get this week\'s hours. Pay is never calculated or stored.</p>' +
                 posted;
             if (posted) renderSchedules(document.getElementById('schedHistory'), data.schedules);
@@ -3035,7 +3041,7 @@
                 errorMessage.textContent = 'Invite code is required to join a store.';
                 errorMessage.classList.add('active');
                 submitBtn.disabled = false;
-                submitBtn.textContent = 'Add Store';
+                submitBtn.textContent = 'Join team';
                 return;
             }
 
@@ -3048,7 +3054,7 @@
 
             // Disable submit button
             submitBtn.disabled = true;
-            submitBtn.textContent = 'Adding...';
+            submitBtn.textContent = 'Joining...';
             errorMessage.classList.remove('active');
             successMessage.classList.remove('active');
 
@@ -3065,7 +3071,7 @@
                 const data = await response.json();
 
                 if (response.ok && data.success) {
-                    successMessage.textContent = `Successfully added store ${storeId}!`;
+                    successMessage.textContent = `You joined ${storeId}.`;
                     successMessage.classList.add('active');
                     logActivity('Store added', `Added store ${storeId} as ${esc(role)}`);
                     
@@ -3090,7 +3096,7 @@
                 errorMessage.classList.add('active');
             } finally {
                 submitBtn.disabled = false;
-                submitBtn.textContent = 'Add Store';
+                submitBtn.textContent = 'Join team';
             }
         });
 

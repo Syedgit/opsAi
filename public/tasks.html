@@ -543,7 +543,7 @@
                 (board.canEdit ? '<button type="button" class="small" data-remove-vendor="' + i + '">Remove</button>' : '') + '</div>';
         }).join('');
         return '<div class="card"><h2>Vendors</h2>' +
-            '<p class="muted card-help">When someone sends an order photo or a typed list, opsAi asks the group to confirm the vendor. Change these names to yours.</p>' +
+            '<p class="muted card-help">When someone sends an order photo or a typed list, opsAi asks them to confirm the vendor. Change these names to yours.</p>' +
             (board.canEdit
                 ? '<form id="vendorsForm">' + (rows || '<div class="muted">No vendors yet.</div>') +
                   '<div class="row" style="margin-top: 10px;"><button type="button" class="small" id="addVendorBtn">+ Add vendor</button><button type="submit" class="primary">Save vendors</button></div></form>'
@@ -726,7 +726,7 @@
         const canOwners = board.canManageOwners;
         if (!board.canEdit && team.whatsapp.length === 0) return '';
         let html = '<div class="card"><div class="row" style="justify-content: space-between; align-items: baseline; margin-bottom: 8px;"><h2 style="margin:0;">WhatsApp team</h2>' + (team.whatsapp.length ? '<span class="count">' + team.whatsapp.length + '</span>' : '') + '</div>';
-        html += '<p class="muted card-help">Numbers can be changed later. Staff here can message in the ops group. A partner can be a second owner.</p>';
+        html += '<p class="muted card-help">Numbers can be changed later. Everyone listed here can message the opsAi number directly on WhatsApp. A partner can be a second owner.</p>';
         if (team.whatsapp.length === 0) html += '<div class="muted" style="margin-bottom: 8px;">No WhatsApp numbers yet.</div>';
         else {
             html += '<table><thead><tr><th>Name</th><th>Number</th><th>Role</th>' + (board.canEdit ? '<th></th>' : '') + '</tr></thead><tbody>';
@@ -780,8 +780,8 @@
 
     function addStoreCard() {
         if (!board.canManageOwners) return '';
-        return '<div class="card"><h2>Add another store</h2><p class="muted card-help">Same login and WhatsApp number. Each location gets its own ID (S001, S002) and name. Give it its own ops group, or name the store in the message if one group covers more than one location.</p>' +
-            '<a href="/onboarding?add=1"><button type="button" class="primary">Add another store</button></a></div>';
+        return '<div class="card"><h2>Add another business</h2><p class="muted card-help">Same login and WhatsApp number. Each business or location gets its own ID (S001, S002) and name. Name it in the message (for example "Denville cash 120") so opsAi files it in the right place.</p>' +
+            '<a href="/onboarding?add=1"><button type="button" class="primary">Add another business</button></a></div>';
     }
 
     function removeStoreCard() {
@@ -1227,7 +1227,7 @@
         if (e.target.id === 'vendorsForm') {
             e.preventDefault();
             const vendors = readVendorRows().filter(function (v) { return v.name; });
-            if (await act({ action: 'save_vendors', vendors: vendors }, 'Vendors saved. The next order photo or list will ask the group to confirm the vendor.')) load();
+            if (await act({ action: 'save_vendors', vendors: vendors }, 'Vendors saved. The next order photo or list will ask the sender to confirm the vendor.')) load();
             return;
         }
         if (e.target.id === 'pictureMapForm') {

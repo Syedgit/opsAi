@@ -691,7 +691,7 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
             ...hoursLines(summary),
             `Total ${formatHours(summary.totalHours)}`,
             '',
-            'Only the owner or a manager can save and post it. Ask them to send the same sheet in the group.',
+            'Only the owner or a manager can save and post it. Ask them to send opsAi the same sheet.',
           ].join('\n'),
           equipment: null,
         };

@@ -202,7 +202,7 @@ async function handleOK(prisma: PrismaClient, phoneE164: string, inboundGroupId?
         });
         if (result.scheduled) {
           invoiceReminders.push(
-            `⏰ I'll remind the group on ${formatInvoiceDay(result.reminderDate)} to pay ${result.title.replace(/^Pay /, '')}.`
+            `⏰ I'll send a reminder on ${formatInvoiceDay(result.reminderDate)} to pay ${result.title.replace(/^Pay /, '')}.`
           );
         }
       } catch (e) {
@@ -566,7 +566,7 @@ async function handleHelp(): Promise<CommandResult> {
       '📸 Send a photo or text for sales, invoices, orders, fuel, or paid-outs.',
       '💵 Partial pay: Pepsi paid cash 500 remaining 400 send check Friday.',
       '✅ Answer a task by sending its number with a photo or a few words, for example: 2 190F',
-      '📅 Send a photo of the 7-Eleven Shift Schedule in the group (Time In / Time Out). I add up hours from the sheet. Owners and managers reply OK to save it.',
+      '📅 Send me a photo of the 7-Eleven Shift Schedule (Time In / Time Out). I add up hours from the sheet. Owners and managers reply OK to save it.',
     ].join('\n'),
   };
 }

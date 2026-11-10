@@ -168,7 +168,7 @@ async function handleInboundWhatsApp(
       await sendWhatsAppMessage(
         prisma,
         phoneE164,
-        '📱 Store not linked.\n\nComplete onboarding at opsAi, then create your ops WhatsApp group, add our business number, and message from your registered phone.',
+        "📱 I don't recognize this number yet.\n\nOwners: sign up at opsai.us with this WhatsApp number. Staff: ask your owner to add your number on Tasks & alerts → Store admin, then message me again.",
         undefined
       );
     }
