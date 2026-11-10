@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { managerPhonesForStore, postToStoreGroups, sendWhatsAppMessage } from '../whatsappMessaging';
 import { maybeMorningDepositText } from '../understanding/depositDue';
+import { releaseAwaitingCloses } from '../understanding/awaitingText';
 import { maybeThursdayHoursText } from '../understanding/hoursDigest';
 import { alertMessage, escalationMessage, reminderMessage, type MessageRun } from './messages';
 import { dueSoFar } from './schedule';
@@ -270,6 +271,12 @@ async function tickMorningDeposits(
     select: { storeId: true, storeName: true, timezone: true, setupJson: true, profileJson: true, active: true },
   });
   for (const store of stores) {
+    try {
+      await releaseAwaitingCloses(prisma, store, now);
+    } catch (error) {
+      result.errors += 1;
+      logAppError('tick.awaiting_text', { storeId: store.storeId, ...serializeError(error) });
+    }
     try {
       const due = await maybeMorningDepositText(prisma, store, now);
       if (!due) continue;

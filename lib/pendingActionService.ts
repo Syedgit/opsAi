@@ -32,12 +32,16 @@ export async function createPendingAction(
   return actionId;
 }
 
+/** Photos waiting for the store's daily text are not confirmed (or cancelled) by a plain OK. */
+const NOT_AWAITING_TEXT = { NOT: { payloadJson: { path: ['awaiting_text'], equals: true } } };
+
 export async function getLatestPendingAction(prisma: PrismaClient, phoneE164: string) {
   return prisma.pendingActions.findFirst({
     where: {
       phoneE164,
       status: PendingStatus.PENDING,
       expiresAt: { gt: new Date() },
+      ...NOT_AWAITING_TEXT,
     },
     orderBy: { createdAt: 'desc' },
   });
@@ -56,6 +60,7 @@ export async function getLatestPendingBatch(prisma: PrismaClient, phoneE164: str
       status: PendingStatus.PENDING,
       expiresAt: { gt: new Date() },
       messageIdInbound: latest.messageIdInbound,
+      ...NOT_AWAITING_TEXT,
     },
     orderBy: { createdAt: 'asc' },
   });

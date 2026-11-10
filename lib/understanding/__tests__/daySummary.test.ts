@@ -235,3 +235,28 @@ describe('businessDayOf', () => {
     ).toBe('2026-10-12');
   });
 });
+
+describe('end-of-day summary for owners and managers', () => {
+  it('uses the typed post labels and lists missed tasks by name', () => {
+    const text = formatDaySummary(
+      {
+        storeName: 'Rockaway',
+        day: '2026-11-09',
+        kind: 'store_day',
+        inspection: null,
+        tasks: { done: 5, late: 1, missed: ['Clean restroom'], open: 0 },
+        rows: [
+          {
+            type: 'STORE_SALES',
+            payload: { _kind: 'daily_close', report_date: '2026-11-09', card: 253, cash: 105, fuel_sales: 1476, deposit: 1834, text_report: {} },
+          },
+        ],
+      },
+      { withDepositBag: true }
+    );
+    expect(text).toContain('📋 Rockaway · Mon, Nov 9 — end of day');
+    expect(text).toContain('💰 Sales: store credit $253 · store cash $105 · gas cash $1,476');
+    expect(text).toContain('⚠️ Tasks: 5 done · 1 late · 1 missed — missed: Clean restroom');
+    expect(text).not.toContain('Deposit $1,834');
+  });
+});

@@ -21,6 +21,15 @@ export interface DayActivity {
   kind: 'store_day' | 'paid_outs';
   rows: DayActivityRow[];
   inspection: { percent: number } | null;
+  tasks?: DayTasks | null;
+}
+
+/** How the day's checklist went: done, done late, missed (by name), still open. */
+export interface DayTasks {
+  done: number;
+  late: number;
+  missed: string[];
+  open: number;
 }
 
 function num(value: unknown): number | null {
@@ -164,8 +173,20 @@ export function extraTillForDay(
   return items.filter((item) => item.storeId === storeId && item.day === day).map(({ label, amount }) => ({ label, amount }));
 }
 
-export function formatDaySummary(activity: DayActivity): string | null {
-  return activity.kind === 'paid_outs' ? formatPaidOutSummary(activity) : formatStoreDaySummary(activity);
+/** `withDepositBag`: the caller adds the to-the-bank lines, so the close's deposit is not repeated. */
+export function formatDaySummary(activity: DayActivity, options: { withDepositBag?: boolean } = {}): string | null {
+  return activity.kind === 'paid_outs' ? formatPaidOutSummary(activity) : formatStoreDaySummary(activity, options);
+}
+
+function tasksLine(tasks: DayTasks | null | undefined): string | null {
+  if (!tasks || tasks.done + tasks.missed.length + tasks.open === 0) return null;
+  const bits = [`${tasks.done} done`];
+  if (tasks.late > 0) bits.push(`${tasks.late} late`);
+  if (tasks.missed.length > 0) bits.push(`${tasks.missed.length} missed`);
+  if (tasks.open > 0) bits.push(`${tasks.open} still open`);
+  const names = tasks.missed.slice(0, 3).join(', ');
+  const more = tasks.missed.length > 3 ? ` +${tasks.missed.length - 3} more` : '';
+  return `${tasks.missed.length > 0 ? '⚠️' : '✅'} Tasks: ${bits.join(' · ')}${names ? ` — missed: ${names}${more}` : ''}`;
 }
 
 function formatPaidOutSummary(activity: DayActivity): string | null {
@@ -182,8 +203,8 @@ function formatPaidOutSummary(activity: DayActivity): string | null {
   return lines.join('\n');
 }
 
-function formatStoreDaySummary(activity: DayActivity): string | null {
-  const lines = [`📋 ${activity.storeName} · ${dayLabel(activity.day)}`];
+function formatStoreDaySummary(activity: DayActivity, options: { withDepositBag?: boolean } = {}): string | null {
+  const lines = [`📋 ${activity.storeName} · ${dayLabel(activity.day)} — end of day`];
   let cash = 0;
   let card = 0;
   let fuel = 0;
@@ -193,10 +214,12 @@ function formatStoreDaySummary(activity: DayActivity): string | null {
   let invoiceTotal = 0;
   const deposits: number[] = [];
   let orders = 0;
+  let fromText = false;
 
   for (const row of pickDaySalesRows(activity.rows)) {
     const p = payloadOf(row);
     hasSales = true;
+    if (p.text_report) fromText = true;
     cash += num(p.cash) ?? 0;
     card += num(p.card) ?? 0;
     fuel += num(p.fuel_sales) ?? 0;
@@ -235,27 +258,35 @@ function formatStoreDaySummary(activity: DayActivity): string | null {
   if (hasSales) {
     const bits = [];
     const inside = Boolean(fuel);
-    if (cash) bits.push(`${inside ? 'inside cash' : 'cash'} ${formatMoney(round2(cash))}`);
-    if (card) bits.push(`${inside ? 'inside card' : 'card'} ${formatMoney(round2(card))}`);
-    if (fuel) bits.push(`gas ${formatMoney(round2(fuel))}`);
-    lines.push(bits.length > 0 ? `Sales: ${bits.join(' · ')}` : 'Sales posted');
+    if (fromText) {
+      if (card) bits.push(`store credit ${formatMoney(round2(card))}`);
+      if (cash) bits.push(`store cash ${formatMoney(round2(cash))}`);
+      if (fuel) bits.push(`gas cash ${formatMoney(round2(fuel))}`);
+    } else {
+      if (cash) bits.push(`${inside ? 'inside cash' : 'cash'} ${formatMoney(round2(cash))}`);
+      if (card) bits.push(`${inside ? 'inside card' : 'card'} ${formatMoney(round2(card))}`);
+      if (fuel) bits.push(`gas ${formatMoney(round2(fuel))}`);
+    }
+    lines.push(bits.length > 0 ? `💰 Sales: ${bits.join(' · ')}` : '💰 Sales posted');
+  }
+  if (invoices.length > 0) {
+    lines.push(`🧾 Invoices: ${invoices.join(', ')}${invoices.length > 1 ? ` · total ${formatMoney(round2(invoiceTotal))}` : ''}`);
   }
   if (paid.length > 0) {
-    lines.push(`Paid out: ${paid.map((p) => `${p.label} ${formatMoney(p.amount)}`).join(', ')}`);
+    lines.push(`💸 Paid out: ${paid.map((p) => `${p.label} ${formatMoney(p.amount)}`).join(', ')}${paid.length > 1 ? ` · total ${formatMoney(paidOutTotal(paid))}` : ''}`);
     if (cashReported != null) {
       lines.push(`Cash after paid-outs ${formatMoney(round2(cashReported - paidOutTotal(paid)))}`);
     }
   }
-  if (invoices.length > 0) {
-    lines.push(`Invoices: ${invoices.join(', ')}${invoices.length > 1 ? ` · total ${formatMoney(round2(invoiceTotal))}` : ''}`);
-  }
   if (deposits.length > 0) {
-    lines.push(`Bank deposit ${formatMoney(round2(deposits.reduce((s, n) => s + n, 0)))}`);
-  } else if (hasSales && deposit) {
-    lines.push(`Deposit ${formatMoney(round2(deposit))}`);
+    lines.push(`🏦 Bank slip ${formatMoney(round2(deposits.reduce((s, n) => s + n, 0)))}`);
+  } else if (hasSales && deposit && !options.withDepositBag) {
+    lines.push(`🏦 Deposit ${formatMoney(round2(deposit))}`);
   }
-  if (orders > 0) lines.push(`Orders: ${orders}`);
-  if (activity.inspection) lines.push(`Inspection ${activity.inspection.percent}%`);
+  const taskLine = tasksLine(activity.tasks);
+  if (taskLine) lines.push(taskLine);
+  if (orders > 0) lines.push(`📦 Orders: ${orders}`);
+  if (activity.inspection) lines.push(`🔎 Inspection ${activity.inspection.percent}%`);
 
   return lines.length > 1 ? lines.join('\n') : null;
 }
@@ -323,7 +354,34 @@ export async function loadDayActivity(
     kind,
     rows: rows.map(({ type, payload }) => ({ type, payload })),
     inspection,
+    tasks: await loadDayTasks(prisma, storeId, day, now),
   };
+}
+
+async function loadDayTasks(prisma: PrismaClient, storeId: string, day: string, now: Date): Promise<DayTasks | null> {
+  try {
+    const runs = await prisma.taskRun.findMany({
+      where: { storeId, localDate: day },
+      select: { title: true, status: true, dueAt: true, completedAt: true, lateAfterMinutes: true },
+      orderBy: { dueAt: 'asc' },
+    });
+    const tasks: DayTasks = { done: 0, late: 0, missed: [], open: 0 };
+    for (const run of runs) {
+      const lateMs = run.lateAfterMinutes * 60000;
+      if (run.status === 'DONE') {
+        tasks.done += 1;
+        if (run.completedAt && run.completedAt.getTime() - run.dueAt.getTime() > lateMs) tasks.late += 1;
+      } else if (run.status === 'MISSED' || (run.status === 'OPEN' && now.getTime() - run.dueAt.getTime() > lateMs)) {
+        tasks.missed.push(run.title);
+      } else if (run.status === 'OPEN') {
+        tasks.open += 1;
+      }
+    }
+    return tasks;
+  } catch {
+    // Tasks are optional; the wrap-up still goes out without them.
+    return null;
+  }
 }
 
 export function storeTypeOf(setupJson: unknown): string | null {

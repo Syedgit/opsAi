@@ -234,7 +234,7 @@ export function checkDailyClose(
     checks.push({
       id: 'period_open',
       status: 'warn',
-      message: 'This looks like a partial day (the register period is still open).',
+      message: 'Register still open — this may not be the full day.',
     });
   }
 

@@ -27,7 +27,8 @@ import { formatHours, hoursLines, sheetLines, summarizeSchedule, type ScheduleSu
 import { WorkScheduleSchema } from './schema';
 import type { DailyCloseReport, DepositReceipt, EquipmentIssue, FuelPrices, Invoice, Order, OrderItem, Understanding, WorkSchedule } from './schema';
 import { extraTillForDay, type TillCashItem } from './daySummary';
-import { applyStoreCredit, matchOpenClose, mergeCloseReports, type OpenClose } from './closeMerge';
+import { applyStoreCredit, looksLikePosScreen, matchOpenClose, mergeCloseReports, openCloseFromAction, type OpenClose } from './closeMerge';
+import { mergeTexts, proofChecks, splitSources, storeForSheet, textOverPhoto, type CloseSource } from './closeSources';
 import { describeVendorCatalog, matchOrderVendor, matchVendorName, VENDOR_CATEGORY_LABEL, type StoreVendor } from './vendors';
 import {
   applyFuelPriceFix,
@@ -61,6 +62,8 @@ export interface PlannedEntry {
   /** Lines shown to the sender, without the footer. */
   lines: string[];
   checks: Check[];
+  /** Photo proof held until the store's daily text arrives; nothing to confirm yet. */
+  awaitingText?: boolean;
 }
 
 export interface UnderstandingPlan {
@@ -94,6 +97,10 @@ export interface PlanContext {
   messageText?: string;
   /** Recent daily closes, so a later POS page (fuel then cash) updates the same day. */
   openCloses?: OpenClose[];
+  /** Typed text is the record when it exists; photos prove it. Defaults to text. */
+  source?: CloseSource;
+  /** Stores that send a daily typed post. Their photos wait for it instead of asking for OK. */
+  textStores?: string[];
 }
 
 /* --------------------------------- helpers -------------------------------- */
@@ -134,9 +141,10 @@ function insideTotal(report: DailyCloseReport): number {
 
 function checkLine(check: Check): string | null {
   if (check.status === 'pass') {
-    return ['deposit_explained', 'deposit_rule', 'day_total_sum', 'lines_sum_total', 'invoice_matches_payout', 'cash_after_payouts', 'screenshot_gas', 'screenshot_deposit'].includes(
-      check.id
-    )
+    return check.id.startsWith('proof_') ||
+      ['deposit_explained', 'deposit_rule', 'day_total_sum', 'lines_sum_total', 'invoice_matches_payout', 'cash_after_payouts', 'screenshot_gas', 'screenshot_deposit', 'written_credit'].includes(
+        check.id
+      )
       ? `✅ ${check.message}`
       : null;
   }
@@ -163,7 +171,13 @@ export function dailyClosePayload(
   checks: Check[],
   needsReview: string[] = [],
   suggestedDepositRule: DepositRule | null = null,
-  extra: { updatesActionId?: string } = {}
+  extra: {
+    updatesActionId?: string;
+    insideFromSheet?: boolean;
+    textReport?: DailyCloseReport | null;
+    photoReport?: DailyCloseReport | null;
+    awaitingText?: boolean;
+  } = {}
 ): Record<string, unknown> {
   const credited = applyStoreCredit(report);
   return {
@@ -181,6 +195,10 @@ export function dailyClosePayload(
     fuel_sales: credited.fuelSales ?? 0,
     gallons: credited.fuelGallons ?? 0,
     deposit: credited.reportedDeposit ?? null,
+    ...(extra.insideFromSheet ? { inside_from_sheet: true } : {}),
+    ...(extra.textReport ? { text_report: extra.textReport } : {}),
+    ...(extra.photoReport ? { photo_report: extra.photoReport } : {}),
+    ...(extra.awaitingText ? { awaiting_text: true } : {}),
     ...(extra.updatesActionId ? { updates_action_id: extra.updatesActionId } : {}),
   };
 }
@@ -318,26 +336,77 @@ export function scheduleGroupMessage(payload: Record<string, unknown>, storeName
   return scheduleSheetMessage(payload, storeName);
 }
 
+/** A short receipt for photos that wait for the daily text: what was seen, nothing to confirm. */
+function awaitingTextLines(report: DailyCloseReport, storeName: string, warning: Check | null): string[] {
+  const seen: string[] = [];
+  if (report.fuelGallons != null) seen.push(`${report.fuelGallons.toLocaleString('en-US', { maximumFractionDigits: 3 })} gal`);
+  if (report.cashSales != null) seen.push(`cash ${formatMoney(report.cashSales)}`);
+  if ((report.cardSales ?? 0) > 0) seen.push(`credit ${formatMoney(report.cardSales as number)}`);
+  return [
+    `📷 ${storeName} · ${dateLabel(report.reportDate)}${seen.length ? ` — ${seen.join(', ')}` : ''}`,
+    ...(warning?.id === 'store_not_named'
+      ? ['No store name on this sheet — I will match it to the daily text by its numbers.']
+      : warning
+        ? [`⚠️ ${warning.message}`]
+        : []),
+    "I'll check this against the daily text when it comes. Nothing to confirm yet.",
+  ];
+}
+
+type CloseView = { fromText: boolean; posFuelSales: number | null };
+
+/** From typed text, "Gas" is pump cash; the POS fuel total is shown apart, for information. */
+function closeView(text: DailyCloseReport | null | undefined, photo: DailyCloseReport | null | undefined): CloseView {
+  return {
+    fromText: Boolean(text),
+    posFuelSales: text && photo && looksLikePosScreen(photo) ? photo.fuelSales ?? null : null,
+  };
+}
+
 function dailyCloseLines(
   report: DailyCloseReport,
   storeName: string,
   checks: Check[],
-  extraTill: Array<{ label: string; amount: number }> = []
+  extraTill: Array<{ label: string; amount: number }> = [],
+  view: CloseView = { fromText: false, posFuelSales: null }
 ): string[] {
   const lines = [`🧾 ${storeName} · ${dateLabel(report.reportDate)}`];
 
-  const sales: string[] = [];
-  const inside = report.fuelSales != null;
-  if (report.cardSales != null) sales.push(`${inside ? 'Inside card' : 'Card'} ${formatMoney(report.cardSales)}`);
-  if (report.cashSales != null) sales.push(`${inside ? 'Inside cash' : 'Cash'} ${formatMoney(report.cashSales)}`);
-  if (report.storeSalesTotal != null) sales.push(`${inside ? 'Inside total' : 'Store total'} ${formatMoney(report.storeSalesTotal)}`);
-  if (sales.length > 0) lines.push(sales.join(' · '));
+  if (view.fromText) {
+    if (report.cardSales != null) lines.push(`Store credit: ${formatMoney(report.cardSales)}`);
+    if (report.cashSales != null) lines.push(`Store cash: ${formatMoney(report.cashSales)}`);
+    if (report.fuelSales != null) lines.push(`Gas cash: ${formatMoney(report.fuelSales)}`);
+    const pos: string[] = [];
+    if (report.fuelGallons != null) pos.push(`Gallons ${report.fuelGallons.toLocaleString('en-US', { maximumFractionDigits: 3 })}`);
+    if (view.posFuelSales != null) pos.push(`fuel sales ${formatMoney(view.posFuelSales)}`);
+    if (pos.length > 0) lines.push(`POS: ${pos.join(' · ')}`);
+    if (report.payouts.length > 0) {
+      lines.push(`Paid out: ${report.payouts.map((p) => `${p.label} ${formatMoney(p.amount)}`).join(', ')}`);
+    }
+    if (extraTill.length > 0) {
+      lines.push(`Till cash already out: ${extraTill.map((p) => `${p.label} ${formatMoney(p.amount)}`).join(', ')}`);
+    }
+    if (report.reportedDeposit != null) lines.push(`Deposit: ${formatMoney(report.reportedDeposit)}`);
+    for (const check of checks) {
+      const line = checkLine(check);
+      if (line) lines.push(line);
+    }
+    return lines;
+  }
 
-  const fuel: string[] = [];
-  if (report.fuelSales != null) fuel.push(`Gas ${formatMoney(report.fuelSales)}`);
-  if (report.fuelGallons != null) fuel.push(`${report.fuelGallons} gal`);
-  if (report.fuelDiscounts != null) fuel.push(`discounts ${formatMoney(Math.abs(report.fuelDiscounts))}`);
-  if (fuel.length > 0) lines.push(fuel.join(' · '));
+  const gas = (report.fuelSales ?? 0) > 0 || report.fuelGallons != null;
+  if (report.fuelGallons != null) {
+    lines.push(`Gallons: ${report.fuelGallons.toLocaleString('en-US', { maximumFractionDigits: 3 })}`);
+  }
+  if (gas && report.fuelSales != null) lines.push(`Gas sales: ${formatMoney(report.fuelSales)}`);
+  if (report.cashSales != null) lines.push(`Cash: ${formatMoney(report.cashSales)}`);
+  if (gas) {
+    const nonFuel = report.cardSales ?? report.storeSalesTotal;
+    if (nonFuel != null) lines.push(`Non-fuel (card/credit): ${formatMoney(nonFuel)}`);
+  } else {
+    if (report.cardSales != null) lines.push(`Card: ${formatMoney(report.cardSales)}`);
+    if (report.storeSalesTotal != null) lines.push(`Total: ${formatMoney(report.storeSalesTotal)}`);
+  }
 
   if (report.payouts.length > 0) {
     lines.push(`Paid out: ${report.payouts.map((p) => `${p.label} ${formatMoney(p.amount)}`).join(', ')}`);
@@ -345,8 +414,7 @@ function dailyCloseLines(
   if (extraTill.length > 0) {
     lines.push(`Till cash already out: ${extraTill.map((p) => `${p.label} ${formatMoney(p.amount)}`).join(', ')}`);
   }
-  if (report.reportedDayTotal != null) lines.push(`Day total ${formatMoney(report.reportedDayTotal)}`);
-  if (report.reportedDeposit != null) lines.push(`Deposit ${formatMoney(report.reportedDeposit)}`);
+  if (report.reportedDeposit != null) lines.push(`Deposit: ${formatMoney(report.reportedDeposit)}`);
 
   for (const check of checks) {
     const line = checkLine(check);
@@ -531,8 +599,24 @@ function resolveStore(hint: string | null | undefined, ctx: PlanContext): Resolv
   };
 }
 
+const REVIEW_LABEL: Record<string, string> = {
+  cardSales: 'card/credit',
+  cashSales: 'cash',
+  storeSalesTotal: 'non-fuel total',
+  fuelSales: 'gas sales',
+  fuelGallons: 'gallons',
+  fuelDiscounts: 'fuel discounts',
+  reportedDeposit: 'deposit',
+  reportedDayTotal: 'day total',
+  reportDate: 'date',
+  storeHint: 'store name',
+  payouts: 'paid outs',
+};
+
 function reviewLine(needsReview: string[]): string[] {
-  return needsReview.length > 0 ? [`❓ Please check: ${needsReview.join(', ')}`] : [];
+  if (needsReview.length === 0) return [];
+  const words = [...new Set(needsReview.map((key) => REVIEW_LABEL[key.replace(/^reports?\.\d*\.?/, '')] ?? key))];
+  return [`❓ Please check: ${words.join(', ')}`];
 }
 
 /** Drop payment-amount review when "paid cash" already means the full total was taken. */
@@ -557,8 +641,15 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
   switch (understanding.kind) {
     case 'daily_close': {
       const entries = understanding.reports.map((report): PlannedEntry => {
-        const store = resolveStore(report.storeHint, ctx);
         const credited = applyStoreCredit(report);
+        const source: CloseSource = ctx.source ?? (looksLikePosScreen(credited) ? 'photo' : 'text');
+        let store = resolveStore(report.storeHint, ctx);
+        if (store.warning?.id === 'store_not_named' && source === 'photo') {
+          const day = credited.reportDate ?? localDateString(ctx.now, store.profile?.timezone || 'America/New_York');
+          const owner = storeForSheet(credited, day, ctx.openCloses, ctx.profiles.map((p) => p.storeId));
+          const profile = owner ? ctx.profiles.find((p) => p.storeId === owner) : undefined;
+          if (profile) store = { storeId: profile.storeId, storeName: profile.storeName, profile, warning: null };
+        }
         const tz = store.profile?.timezone || 'America/New_York';
         const today = localDateString(ctx.now, tz);
         const existing =
@@ -568,32 +659,59 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
                 today,
                 addDaysLocal(today, -1),
               ]);
-        const mergedClose = existing ? mergeCloseReports(existing.report, credited) : { report: credited, mismatches: [] };
-        const merged = mergedClose.report;
+        const prior = existing ? splitSources(existing) : { text: null, photo: null };
+        let textReport = prior.text;
+        let photoReport = prior.photo;
+        let insideFromSheet = existing?.insideFromSheet ?? false;
+        const mismatches: Check[] = [];
+        if (source === 'photo') {
+          if (photoReport) {
+            const m = mergeCloseReports(photoReport, credited, { insideFromSheet });
+            photoReport = m.report;
+            insideFromSheet = m.insideFromSheet;
+            mismatches.push(...m.mismatches);
+          } else {
+            photoReport = credited;
+          }
+        } else {
+          textReport = textReport ? mergeTexts(textReport, credited) : credited;
+        }
+        const merged = textReport ? textOverPhoto(textReport, photoReport) : (photoReport as DailyCloseReport);
+        const proof = textReport && photoReport ? proofChecks(textReport, photoReport, insideFromSheet) : [];
         const extraTill = extraTillForDay(
           ctx.tillCash,
           store.storeId,
           merged.reportDate ?? today
         );
         const dateCheck = checkReportDate(merged.reportDate, ctx.now);
+        const carriedCredit =
+          textReport || mismatches.some((c) => c.id === 'written_credit')
+            ? []
+            : (existing?.checks ?? []).filter((c) => c.id === 'written_credit');
         const checks = [
           ...(store.warning ? [store.warning] : []),
           ...(dateCheck ? [dateCheck] : []),
-          ...mergedClose.mismatches,
+          ...(textReport ? proof : mismatches),
+          ...carriedCredit,
           ...checkDailyClose(merged, store.profile, extraTill),
         ];
-        const suggestedRule = suggestDepositRule(merged, store.profile, checks, ctx.canTeachRules);
-        const lines = dailyCloseLines(merged, store.storeName, checks, extraTill);
-        if (existing) {
-          lines[0] = `🧾 ${store.storeName} · ${dateLabel(merged.reportDate)} · adding to this close`;
-        }
+        const awaitingText = source === 'photo' && !textReport && (ctx.textStores ?? []).includes(store.storeId);
+        const suggestedRule = awaitingText ? null : suggestDepositRule(merged, store.profile, checks, ctx.canTeachRules);
+        const lines = awaitingText
+          ? awaitingTextLines(merged, store.storeName, store.warning)
+          : dailyCloseLines(merged, store.storeName, checks, extraTill, closeView(textReport, photoReport));
         return {
           kind: 'daily_close',
+          awaitingText,
           storeId: store.storeId,
           storeName: store.storeName,
           actionType: 'STORE_SALES',
           payload: dailyClosePayload(merged, checks, understanding.needsReview, suggestedRule, {
             updatesActionId: existing?.actionId,
+            insideFromSheet,
+            textReport,
+            photoReport,
+            awaitingText,
           }),
           confidence: understanding.confidence,
           lines: [
@@ -818,8 +936,10 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
 export function describeEntryPayload(payload: Record<string, unknown>, storeName: string): string[] | null {
   const checks = (Array.isArray(payload.checks) ? payload.checks : []) as Check[];
   switch (payload._kind) {
-    case 'daily_close':
-      return dailyCloseLines(payload.report as DailyCloseReport, storeName, checks);
+    case 'daily_close': {
+      const open = openCloseFromAction({ actionId: '', storeId: '', status: 'PENDING', payloadJson: payload });
+      return dailyCloseLines(payload.report as DailyCloseReport, storeName, checks, [], closeView(open?.textReport, open?.photoReport));
+    }
     case 'invoice':
       return invoiceLines(payload.invoice as Invoice, storeName, checks, new Date().toISOString().slice(0, 10));
     case 'deposit_receipt':
@@ -855,8 +975,10 @@ function orderReplyFooter(entry: PlannedEntry): string {
   return `Reply OK if this is right, FIX vendor ${example}, or CANCEL.`;
 }
 
-export function formatEntriesReply(entries: PlannedEntry[]): string {
-  const body = entries.map((e) => e.lines.join('\n')).join('\n\n');
+export function formatEntriesReply(all: PlannedEntry[]): string {
+  const body = all.map((e) => e.lines.join('\n')).join('\n\n');
+  const entries = all.filter((e) => !e.awaitingText);
+  if (entries.length === 0) return body;
   const footer =
     entries.length === 1 && entries[0].kind === 'work_schedule'
       ? "Reply OK to save and post the hours from this sheet, FIX <name> <hours> to correct someone's total (like FIX maria 30), or CANCEL."
@@ -935,6 +1057,9 @@ export function applyFixToPayload(
       ok: true,
       payload: dailyClosePayload(report, checks, review, inferred.length === 1 ? inferred[0] : null, {
         updatesActionId: typeof payload.updates_action_id === 'string' ? payload.updates_action_id : undefined,
+        insideFromSheet: payload.inside_from_sheet === true,
+        ...(payload.text_report ? { textReport: report } : {}),
+        ...(payload.photo_report ? { photoReport: payload.photo_report as DailyCloseReport } : {}),
       }),
     };
   }

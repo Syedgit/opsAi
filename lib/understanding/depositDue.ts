@@ -197,9 +197,23 @@ export function formatDepositDue(storeName: string, bag: DepositBag): string | n
   return lines.join('\n');
 }
 
-export function formatBagLine(bag: DepositBag): string | null {
+/** End-of-day: today's deposit and any earlier days still not taken to the bank, by date. */
+export function formatBagLine(bag: DepositBag, today?: string): string | null {
   if (bag.remaining <= 0.009 || bag.days.length === 0) return null;
-  return `To deposit: ${formatMoney(bag.remaining)} covering ${coverLabel(bag.days)} (no bank slip yet)`;
+  const todayAmount = today ? round2(bag.days.filter((d) => d.day === today).reduce((sum, d) => sum + d.amount, 0)) : 0;
+  const earlier = bag.days.filter((d) => d.day !== today);
+  if (!today || earlier.length === bag.days.length) {
+    return `To deposit: ${formatMoney(bag.remaining)} covering ${coverLabel(bag.days)} (no bank slip yet)`;
+  }
+  const lines = [`🏦 Deposit today: ${formatMoney(todayAmount)}`];
+  if (earlier.length > 0) {
+    lines.push('Still not deposited:');
+    const shown = earlier.slice(-6);
+    for (const d of shown) lines.push(`• ${dayLabel(d.day)}: ${formatMoney(d.amount)}`);
+    if (earlier.length > shown.length) lines.push(`• and ${earlier.length - shown.length} more days`);
+    lines.push(`Total to the bank: ${formatMoney(bag.remaining)} (no bank slip yet)`);
+  }
+  return lines.join('\n');
 }
 
 export function formatSlipResult(bag: DepositBag): string {

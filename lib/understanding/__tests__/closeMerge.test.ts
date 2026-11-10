@@ -81,6 +81,56 @@ describe('mergeDailyCloseReports', () => {
   });
 });
 
+describe('handwritten credit against the POS', () => {
+  const sheet: DailyCloseReport = {
+    storeHint: 'Denville',
+    reportDate: '2026-11-09',
+    cardSales: 253,
+    cashSales: 105,
+    storeSalesTotal: 358,
+    fuelSales: 0,
+    fuelGallons: null,
+    fuelDiscounts: null,
+    payouts: [],
+    reportedDeposit: null,
+    reportedDayTotal: null,
+    periodClosed: null,
+  };
+
+  it('keeps the POS non-fuel and cash, and says when the sheet credit matches', () => {
+    const { report, mismatches } = mergeCloseReports(sheet, { ...fuelPage, storeSalesTotal: 253, cardSales: null, cashSales: 700.05 });
+    expect(report.cardSales).toBe(253);
+    expect(report.cashSales).toBe(700.05);
+    expect(mismatches.find((c) => c.id === 'written_credit')?.status).toBe('pass');
+  });
+
+  it('flags a sheet credit that differs from the POS non-fuel', () => {
+    const { mismatches } = mergeCloseReports(sheet, { ...fuelPage, storeSalesTotal: 300, cardSales: null });
+    expect(mismatches.find((c) => c.id === 'written_credit')?.message).toContain('vs handwritten credit $253.00');
+  });
+
+  it('keeps the sheet inside sales when the fuel POS shows $0 non-fuel, through later pages', () => {
+    const gasOnly = { ...fuelPage, reportDate: '2026-11-09', storeSalesTotal: 0, reportedDayTotal: 5186.96 };
+    const first = mergeCloseReports(sheet, gasOnly);
+    expect(first.report.cardSales).toBe(253);
+    expect(first.report.storeSalesTotal).toBe(358);
+    expect(first.report.reportedDayTotal).toBeNull();
+    expect(first.insideFromSheet).toBe(true);
+    expect(first.mismatches.some((c) => c.id === 'written_credit')).toBe(false);
+    const tender = { ...cashPage, reportDate: '2026-11-09', cashSales: 700.05, cardSales: 80, reportedDayTotal: 5186.96, periodClosed: false };
+    const second = mergeCloseReports(first.report, tender, { insideFromSheet: true });
+    expect(second.report.cardSales).toBe(253);
+    expect(second.report.cashSales).toBe(700.05);
+    expect(second.report.reportedDayTotal).toBeNull();
+  });
+
+  it('does not let a sheet sent after the screen overwrite the POS cash', () => {
+    const screen = { ...fuelPage, storeSalesTotal: 253, cardSales: null, cashSales: 700.05 };
+    const { report } = mergeCloseReports(screen, sheet);
+    expect(report.cashSales).toBe(700.05);
+  });
+});
+
 describe('loadOpenCloses date fallback', () => {
   it('keeps a typed close with no report date so a later POS screen can merge', () => {
     const close = openCloseFromAction({

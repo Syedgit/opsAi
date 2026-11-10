@@ -37,6 +37,33 @@ const twoStoreText: Understanding = {
   ],
 };
 
+describe('photos for a store that sends a daily text', () => {
+  const pos: Understanding = {
+    kind: 'daily_close',
+    confidence: 0.9,
+    needsReview: [],
+    reports: [
+      { storeHint: 'Denville', reportDate: '2026-10-12', cashSales: 700.05, fuelSales: 5188.19, fuelGallons: 1243.54, storeSalesTotal: 0, periodClosed: false, payouts: [] },
+    ],
+  };
+
+  it('waits for the text: a receipt, no OK to give', () => {
+    const plan = planUnderstanding(pos, { ...ctx, source: 'photo', textStores: ['S002'] });
+    expect(plan.entries[0].awaitingText).toBe(true);
+    expect(plan.entries[0].payload.awaiting_text).toBe(true);
+    const reply = formatEntriesReply(plan.entries);
+    expect(reply).toContain('📷 Denville');
+    expect(reply).toContain('Nothing to confirm yet');
+    expect(reply).not.toContain('Reply OK');
+  });
+
+  it('asks for OK as usual for a store with no daily text', () => {
+    const plan = planUnderstanding(pos, { ...ctx, source: 'photo', textStores: [] });
+    expect(plan.entries[0].awaitingText).toBe(false);
+    expect(formatEntriesReply(plan.entries)).toContain('Reply OK');
+  });
+});
+
 describe('planUnderstanding: daily close', () => {
   it('splits one message into one entry per store, matching the misspelled name', () => {
     const plan = planUnderstanding(twoStoreText, ctx);
@@ -66,10 +93,11 @@ describe('planUnderstanding: daily close', () => {
   it('shows the report in a readable summary', () => {
     const [rockaway] = planUnderstanding(twoStoreText, ctx).entries;
     expect(rockaway.lines[0]).toBe('🧾 Rockaway · Mon, Oct 12');
-    expect(rockaway.lines).toContain('Inside card $334 · Inside cash $106');
-    expect(rockaway.lines).toContain('Gas $1,355');
+    expect(rockaway.lines).toContain('Store cash: $106');
+    expect(rockaway.lines).toContain('Store credit: $334');
+    expect(rockaway.lines).toContain('Gas cash: $1,355');
     expect(rockaway.lines).toContain('Paid out: Lays $142');
-    expect(rockaway.lines).toContain('Deposit $1,653');
+    expect(rockaway.lines).toContain('Deposit: $1,653');
   });
 
   it('subtracts same-day invoice cash from leftover cash, not from another store', () => {
@@ -116,10 +144,10 @@ describe('planUnderstanding: daily close', () => {
     const plan = planUnderstanding(nov6, { ...ctx, now: new Date('2026-11-06T22:00:00-05:00') });
     expect(plan.entries.map((e) => e.storeId)).toEqual(['S001', 'S002']);
     expect(plan.entries[0].lines).toContain('Paid out: Ahsan $21');
-    expect(plan.entries[0].lines).toContain('Deposit $1,566');
+    expect(plan.entries[0].lines).toContain('Deposit: $1,566');
     expect(plan.entries[0].lines.join('\n')).toContain('⚠️ Deposit does not match');
     expect(plan.entries[1].lines).toContain('Paid out: Umar $220');
-    expect(plan.entries[1].lines).toContain('Deposit $6,611');
+    expect(plan.entries[1].lines).toContain('Deposit: $6,611');
     expect(plan.entries.map((e) => e.lines.join('\n')).join('\n')).not.toMatch(/salary|wage|hourly|hours/i);
   });
 
@@ -286,7 +314,7 @@ describe('planUnderstanding: daily close', () => {
   it('lists fields the AI was unsure about', () => {
     const understanding = { ...twoStoreText, needsReview: ['fuelSales'] } as Understanding;
     const [entry] = planUnderstanding(understanding, ctx).entries;
-    expect(entry.lines.join('\n')).toContain('❓ Please check: fuelSales');
+    expect(entry.lines.join('\n')).toContain('❓ Please check: gas sales');
   });
 
   it('adds a later cash page onto the same store and day', () => {
@@ -327,6 +355,7 @@ describe('planUnderstanding: daily close', () => {
     };
     const [second] = planUnderstanding(cashPage, {
       ...ctx,
+      source: 'photo',
       openCloses: [
         {
           actionId: 'close-1',
@@ -344,10 +373,10 @@ describe('planUnderstanding: daily close', () => {
       card: 0,
       total_inside: 765.14,
     });
-    expect(second.lines[0]).toContain('adding to this close');
+    expect(second.payload.updates_action_id).toBeDefined();
   });
 
-  it('replies when typed gas does not match the screenshot already on file', () => {
+  it('lets the typed post stand over a screenshot already on file, and keeps the POS fuel apart', () => {
     const typed: Understanding = {
       kind: 'daily_close',
       confidence: 0.9,
@@ -387,12 +416,12 @@ describe('planUnderstanding: daily close', () => {
       ],
     }).entries;
     const text = entry.lines.join('\n');
-    expect(entry.payload.fuel_sales).toBe(6086.32);
-    expect(text).toContain('adding to this close');
-    expect(text).toContain('Gas on the screenshot does not match');
-    expect(text).toContain('FIX gas 6086.32');
-    expect(text).toContain('FIX gas 6100');
-    expect(text).toContain('Deposit $6,800');
+    expect(entry.payload.fuel_sales).toBe(6100);
+    expect(entry.payload.updates_action_id).toBe('close-1');
+    expect(text).toContain('Gas cash: $6,100');
+    expect(text).toContain('POS: Gallons 1,455.226 · fuel sales $6,086.32');
+    expect(text).not.toContain('Gas on the screenshot does not match');
+    expect(text).toContain('Deposit: $6,800');
   });
 });
 

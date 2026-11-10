@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
-import type { DailyCloseReport } from './schema';
+import { DailyCloseReportSchema, type DailyCloseReport } from './schema';
 import { reportFromClosePayload } from './depositDue';
 import { sameAmount, type Check } from './checks';
 import { localDateString } from '../tasks/time';
@@ -9,11 +9,19 @@ export type OpenClose = {
   storeId: string;
   status: 'PENDING' | 'CONFIRMED';
   report: DailyCloseReport;
+  /** Checks saved with the close, so a later page keeps an earlier handwritten-credit comparison. */
+  checks?: Check[];
+  insideFromSheet?: boolean;
+  /** What the typed post said, and what the photos showed, kept apart so either can arrive later. */
+  textReport?: DailyCloseReport | null;
+  photoReport?: DailyCloseReport | null;
 };
 
 export type CloseMerge = {
   report: DailyCloseReport;
   mismatches: Check[];
+  /** Inside sales came from a handwritten sheet; later POS pages must not replace them. */
+  insideFromSheet: boolean;
 };
 
 function keep<T>(incoming: T | null | undefined, existing: T | null | undefined): T | null {
@@ -84,21 +92,46 @@ function mergeScreenAmount(
   return screen;
 }
 
+/** A sheet that carries the inside sales (credit or a store total). */
+function hasInsideSales(report: DailyCloseReport): boolean {
+  return (report.cardSales ?? 0) > 0 || (report.storeSalesTotal ?? 0) > 0;
+}
+
 /**
  * Later pages fill empty fields. Gas and deposit from a POS screenshot are kept when the
  * typed close disagrees — the reply asks the sender to FIX.
+ *
+ * With a handwritten sheet in the mix: POS cash always stands. When the POS rings inside sales
+ * (non-fuel above $0) its non-fuel is the credit and the sheet's credit is checked against it.
+ * When it shows $0 non-fuel, inside sales come from the sheet only, and the POS grand total
+ * (gas only) is not the day total — `insideFromSheet` carries that to later pages.
  */
-export function mergeCloseReports(existing: DailyCloseReport, incoming: DailyCloseReport): CloseMerge {
+export function mergeCloseReports(
+  existing: DailyCloseReport,
+  incoming: DailyCloseReport,
+  options: { insideFromSheet?: boolean } = {},
+): CloseMerge {
   const next = applyStoreCredit(incoming);
   const base = applyStoreCredit(existing);
-  const keepIncomingScreen = looksLikePosScreen(next) && !looksLikePosScreen(base);
+  const nextPos = looksLikePosScreen(next);
+  const basePos = looksLikePosScreen(base);
+  const keepIncomingScreen = nextPos && !basePos;
+  const sheet = keepIncomingScreen ? base : basePos && !nextPos ? next : null;
+  const pos = keepIncomingScreen ? next : basePos && !nextPos ? base : nextPos && basePos ? next : null;
+  const sheetHasInside = sheet != null && hasInsideSales(sheet);
+  const posRingsInside = pos != null && (pos.storeSalesTotal ?? 0) > 0;
+  const insideFromSheet = !posRingsInside && (sheetHasInside || options.insideFromSheet === true);
   const mismatches: Check[] = [];
+  if (sheet && pos && sheetHasInside && posRingsInside && sheet.cardSales != null) {
+    mismatches.push(writtenCreditCheck(pos.storeSalesTotal as number, sheet.cardSales));
+  }
+  const inside = insideFromSheet ? sheet ?? base : posRingsInside ? pos : null;
   const report: DailyCloseReport = {
     storeHint: keep(next.storeHint, base.storeHint),
     reportDate: keep(next.reportDate, base.reportDate),
-    cardSales: keep(next.cardSales, base.cardSales),
-    cashSales: keep(next.cashSales, base.cashSales),
-    storeSalesTotal: keep(next.storeSalesTotal, base.storeSalesTotal),
+    cardSales: inside ? inside.cardSales ?? null : keep(next.cardSales, base.cardSales),
+    cashSales: pos?.cashSales ?? keep(next.cashSales, base.cashSales),
+    storeSalesTotal: inside ? inside.storeSalesTotal ?? null : keep(next.storeSalesTotal, base.storeSalesTotal),
     fuelSales: mergeScreenAmount(base.fuelSales, next.fuelSales, keepIncomingScreen, SCREEN_FIELDS[0], mismatches),
     fuelGallons: keep(next.fuelGallons, base.fuelGallons),
     fuelDiscounts: keep(next.fuelDiscounts, base.fuelDiscounts),
@@ -110,10 +143,35 @@ export function mergeCloseReports(existing: DailyCloseReport, incoming: DailyClo
       SCREEN_FIELDS[1],
       mismatches,
     ),
-    reportedDayTotal: keep(next.reportedDayTotal, base.reportedDayTotal),
+    reportedDayTotal: insideFromSheet
+      ? (sheet ? sheet.reportedDayTotal : base.reportedDayTotal) ?? null
+      : keep(next.reportedDayTotal, base.reportedDayTotal),
     periodClosed: keep(next.periodClosed, base.periodClosed),
   };
-  return { report, mismatches };
+  return { report, mismatches, insideFromSheet };
+}
+
+function money(n: number): string {
+  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/** POS non-fuel (store credit) against the credit written on the handwritten sheet. */
+export function writtenCreditCheck(posCredit: number, writtenCredit: number): Check {
+  if (sameAmount(posCredit, writtenCredit, 100)) {
+    return {
+      id: 'written_credit',
+      status: 'pass',
+      message: `Matches handwritten credit ${money(writtenCredit)}.`,
+      expected: posCredit,
+      actual: writtenCredit,
+      difference: 0,
+    };
+  }
+  return {
+    id: 'written_credit',
+    status: 'fail',
+    message: `POS non-fuel ${money(posCredit)} vs handwritten credit ${money(writtenCredit)} — please check.`,
+  };
 }
 
 export function mergeDailyCloseReports(existing: DailyCloseReport, incoming: DailyCloseReport): DailyCloseReport {
@@ -178,5 +236,21 @@ export function openCloseFromAction(row: {
   if (payload._kind && payload._kind !== 'daily_close') return null;
   const report = reportFromClosePayload(payload);
   if (!report) return null;
-  return { actionId: row.actionId, storeId: row.storeId, status: row.status, report };
+  const checks = Array.isArray(payload.checks) ? (payload.checks as Check[]) : [];
+  return {
+    actionId: row.actionId,
+    storeId: row.storeId,
+    status: row.status,
+    report,
+    checks,
+    insideFromSheet: payload.inside_from_sheet === true,
+    textReport: parseReport(payload.text_report),
+    photoReport: parseReport(payload.photo_report),
+  };
+}
+
+function parseReport(value: unknown): DailyCloseReport | null {
+  if (!value || typeof value !== 'object') return null;
+  const parsed = DailyCloseReportSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
 }

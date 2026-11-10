@@ -163,6 +163,16 @@ describe('formatBagLine / slip result', () => {
       'To deposit: $1,653 covering Tue, Oct 13'
     );
   });
+
+  it('shows today on its own and lists earlier days still not deposited', () => {
+    const text = formatBagLine(
+      { remaining: 6444.32, days: [{ day: '2026-11-07', amount: 6086.32 }, { day: '2026-11-09', amount: 358 }] },
+      '2026-11-09'
+    );
+    expect(text).toContain('🏦 Deposit today: $358');
+    expect(text).toContain('• Sat, Nov 7: $6,086.32');
+    expect(text).toContain('Total to the bank: $6,444.32');
+  });
 });
 
 describe('store type and morning hour', () => {

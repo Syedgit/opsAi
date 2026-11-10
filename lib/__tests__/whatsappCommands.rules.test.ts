@@ -121,10 +121,24 @@ describe('OK posts an end-of-day wrap-up', () => {
     const result = await handleWhatsAppCommand(prisma, PHONE, 'OK');
     expect(result.message).toContain('Sales: inside cash $106 · inside card $334 · gas $1,355');
     expect(result.message).toContain('Paid out: Lays $142');
-    expect(result.message).toContain('To deposit:');
+    expect(result.message).toContain('🏦 Deposit today:');
     expect(result.message).toContain('Posted to the group');
     expect(postToStoreGroups).toHaveBeenCalled();
     expect((postToStoreGroups as jest.Mock).mock.calls[0][2]).toContain('Sales:');
+  });
+
+  it('a staff closer gets a short confirmation; the money summary is for owners and managers', async () => {
+    const { prisma } = makePrisma({ pending: [pendingRow(closePayload)], role: 'STAFF' });
+    (prisma.storeConfig.findUnique as jest.Mock).mockResolvedValue({
+      storeId: 'S001',
+      storeName: 'Rockaway',
+      timezone: 'America/New_York',
+      profileJson: null,
+      setupJson: defaultSetup('convenience'),
+    });
+    const result = await handleWhatsAppCommand(prisma, PHONE, 'OK');
+    expect(result.message).toContain('📤 The end-of-day summary went to the owner and managers.');
+    expect(result.message).not.toContain('Sales:');
   });
 
   it('for a 7-Eleven, only lists till paid-outs as written', async () => {

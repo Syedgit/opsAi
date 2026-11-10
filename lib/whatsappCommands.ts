@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { PendingStatus } from '@prisma/client';
 import { format, startOfDay, endOfDay } from 'date-fns';
-import { deliverStoreMessage, postToStoreGroups, sendWhatsAppMessage } from './whatsappMessaging';
+import { deliverStoreMessage, managerPhonesForStore, postToStoreGroups, sendWhatsAppMessage } from './whatsappMessaging';
 import { computerDashboardHint, groupDashboardHint, isPublicAppUrl, sendPrivateDashboardLinks } from './whatsappLogin';
 import {
   cancelPendingAction,
@@ -274,8 +274,16 @@ async function handleOK(prisma: PrismaClient, phoneE164: string, inboundGroupId?
   }
   if (invoiceReminders.length > 0) message += `\n${invoiceReminders.join('\n')}`;
 
-  const wrapUp = await maybePostDaySummary(prisma, batch);
-  if (wrapUp) message += `\n\n${wrapUp}`;
+  // Staff confirm the day; the money summary goes to owners and managers only.
+  let isStaff = false;
+  try {
+    const sender = await prisma.userDirectory.findUnique({ where: { phoneE164 }, select: { role: true } });
+    isStaff = sender?.role === 'STAFF';
+  } catch {
+    isStaff = false;
+  }
+  const wrapUp = await maybePostDaySummary(prisma, batch, isStaff ? undefined : phoneE164);
+  if (wrapUp) message += isStaff ? '\n📤 The end-of-day summary went to the owner and managers.' : `\n\n${wrapUp}`;
 
   const bagNote = await maybeDepositBagNote(prisma, batch);
   if (bagNote) message += `\n${bagNote}`;
@@ -283,9 +291,26 @@ async function handleOK(prisma: PrismaClient, phoneE164: string, inboundGroupId?
   return { success: true, message, storeId: batch[0].storeId };
 }
 
+/** End of day: every owner and manager gets the summary 1:1 (not the person who just confirmed it). */
+async function sendSummaryToManagers(prisma: PrismaClient, storeId: string, text: string, senderPhone?: string): Promise<number> {
+  try {
+    const phones = await managerPhonesForStore(prisma, storeId);
+    if (!Array.isArray(phones)) return 0;
+    let sent = 0;
+    for (const phone of phones.filter((p) => p !== senderPhone)) {
+      if (await sendWhatsAppMessage(prisma, phone, text, storeId)) sent += 1;
+    }
+    return sent;
+  } catch (e) {
+    console.warn('Could not send the day summary to managers', e instanceof Error ? e.message : e);
+    return 0;
+  }
+}
+
 async function maybePostDaySummary(
   prisma: PrismaClient,
-  batch: Array<{ storeId: string; type: string; payloadJson: unknown }>
+  batch: Array<{ storeId: string; type: string; payloadJson: unknown }>,
+  senderPhone?: string
 ): Promise<string | null> {
   const storeId = batch[0]?.storeId;
   if (!storeId) return null;
@@ -305,14 +330,18 @@ async function maybePostDaySummary(
     const day = businessDayOf(rows, now, timeZone);
     const activity = await loadDayActivity(prisma, storeId, day, kind, now);
     if (!activity) return null;
-    let text = formatDaySummary(activity);
+    let text = formatDaySummary(activity, { withDepositBag: kind === 'store_day' });
     if (!text) return null;
     if (kind === 'store_day') {
       const bag = await loadDepositBag(prisma, store ?? { storeId }, now, { includeTodayCloses: true });
-      const bagLine = formatBagLine(bag);
+      const bagLine = formatBagLine(bag, day);
       if (bagLine) text += `\n${bagLine}`;
     }
     const hasClose = rows.some((r) => r.type === 'STORE_SALES' || r.payload._kind === 'daily_close');
+    if (hasClose) {
+      const sent = await sendSummaryToManagers(prisma, storeId, text, senderPhone);
+      if (sent > 0) text += `\n📤 Sent to ${sent} owner${sent === 1 ? '' : 's'}/manager${sent === 1 ? '' : 's'}.`;
+    }
     try {
       const privateLinks = await sendPrivateDashboardLinks(prisma, storeId, store?.storeName || 'Store');
       if (privateLinks > 0) text += `\n${groupDashboardHint()}`;
