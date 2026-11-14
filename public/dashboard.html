@@ -1281,7 +1281,7 @@
                             <div>
                                 <h3>Today's Sales</h3>
                                 <div class="value" id="todaySales">-</div>
-                                <div class="change">+12% from yesterday</div>
+                                <div class="change" id="todaySalesNote">Confirmed closes today</div>
                             </div>
                             <div class="stat-card-icon sales">💰</div>
                         </div>
@@ -1292,7 +1292,7 @@
                             <div>
                                 <h3>Today's Invoices</h3>
                                 <div class="value" id="todayInvoices">-</div>
-                                <div class="change">3 pending review</div>
+                                <div class="change" id="needsReviewNote">Review flags from WhatsApp reads</div>
                             </div>
                             <div class="stat-card-icon invoices">🧾</div>
                         </div>
@@ -1303,7 +1303,7 @@
                             <div>
                                 <h3>Today's Orders</h3>
                                 <div class="value" id="todayOrders">-</div>
-                                <div class="change">2 in transit</div>
+                                <div class="change" id="todayOrdersNote">Confirmed orders today</div>
                             </div>
                             <div class="stat-card-icon orders">📦</div>
                         </div>
@@ -1584,6 +1584,47 @@
         function checkIssues(d) {
             const checks = Array.isArray(d.checks) ? d.checks : [];
             return checks.filter(c => c.status === 'warn' || c.status === 'fail');
+        }
+        const REVIEW_FIELD_LABEL = {
+            cardSales: 'card/credit', cashSales: 'cash', storeSalesTotal: 'non-fuel total',
+            fuelSales: 'gas sales', fuelGallons: 'gallons', fuelDiscounts: 'fuel discounts',
+            reportedDeposit: 'deposit', reportedDayTotal: 'day total', reportDate: 'date',
+            storeHint: 'store name', payouts: 'paid outs', invoiceNumber: 'invoice #',
+            invoiceDate: 'invoice date', dueDate: 'due date', vendor: 'vendor', vendorName: 'vendor',
+            total: 'total', tax: 'tax', remaining: 'remaining', amount: 'amount', payments: 'payments',
+            'payments.amount': 'payment amount', accountLast4: 'account last 4', depositDate: 'deposit date',
+        };
+        /** Matches server entryReview: checks + unclear fields + low confidence. */
+        function entryReviewOf(d, confidence) {
+            const checkMsgs = checkIssues(d).map(function (c) { return c.message || 'Check failed'; });
+            const fields = Array.isArray(d && d.needs_review) ? d.needs_review.filter(Boolean) : [];
+            const labels = [];
+            fields.forEach(function (raw) {
+                const key = String(raw).replace(/^reports?\.\d*\.?/, '');
+                const label = REVIEW_FIELD_LABEL[key] || key;
+                if (label && labels.indexOf(label) < 0) labels.push(label);
+            });
+            const messages = checkMsgs.slice();
+            if (labels.length) messages.push('Unclear: ' + labels.join(', '));
+            const low = typeof confidence === 'number' && confidence >= 0 && confidence <= 0.75;
+            if (low) messages.push('Low confidence read (' + Math.round(confidence * 100) + '%)');
+            return { messages: messages, hasIssues: messages.length > 0, lowConfidence: low };
+        }
+        function reviewBadgeHtml(d, confidence) {
+            const review = entryReviewOf(d, confidence);
+            const hasChecks = Array.isArray(d.checks) && d.checks.length > 0;
+            if (review.hasIssues) {
+                return '<span class="badge badge-pending" title="' + esc(review.messages.join(' · ')) + '">\u26a0 ' + review.messages.length + ' to review</span>';
+            }
+            if (hasChecks) return '<span class="badge badge-success">\u2713 Looks good</span>';
+            return '<span style="color:#999">\u2014</span>';
+        }
+        function reviewPanelHtml(d, confidence) {
+            const review = entryReviewOf(d, confidence);
+            if (!review.hasIssues) return '';
+            return '<div style="padding:16px;background:#fff3cd;border-radius:8px;margin-bottom:16px;"><strong>Worth a look</strong><ul style="margin:8px 0 0 18px;">' +
+                review.messages.map(function (m) { return '<li style="margin-bottom:6px;">\u26a0\ufe0f ' + esc(m) + '</li>'; }).join('') +
+                '</ul><p style="margin:10px 0 0;font-size:13px;color:#92400e;">Saved from WhatsApp. Open the original chat and FIX if a number is wrong, or leave it if it looks right.</p></div>';
         }
         function statCell(label, valueHtml, size, color) {
             return '<div><div style="font-size: 12px; color: var(--text-light); margin-bottom: 4px;">' + label +
@@ -1892,6 +1933,15 @@
                 const aiNote = document.getElementById('aiReadingsNote');
                 if (aiEl) aiEl.textContent = String(used);
                 if (aiNote) aiNote.textContent = 'This store · no cap';
+                const reviewNote = document.getElementById('needsReviewNote');
+                if (reviewNote) {
+                    const n = typeof data.needsReview === 'number' ? data.needsReview : 0;
+                    reviewNote.textContent = n === 0
+                        ? 'No review flags this month'
+                        : n === 1
+                          ? '1 confirmed entry still flagged'
+                          : n + ' confirmed entries still flagged';
+                }
                 
                 logActivity('Dashboard loaded', `Loaded dashboard for store ${storeId}`);
                 await loadWhatsAppProvision(storeId);
@@ -2360,11 +2410,7 @@
                     try {
                         const d = item.data || {};
                         const day = d.report_date ? fmtDay(d.report_date) : fmtDay(item.date);
-                        const issues = checkIssues(d);
-                        const hasChecks = Array.isArray(d.checks) && d.checks.length > 0;
-                        const checkBadge = issues.length > 0
-                            ? `<span class="badge badge-pending" title="${esc(issues.map(c => c.message).join(' '))}">\u26a0 ${issues.length} to review</span>`
-                            : hasChecks ? '<span class="badge badge-success">\u2713 Adds up</span>' : '<span style="color:#999">\u2014</span>';
+                        const checkBadge = reviewBadgeHtml(d, item.confidence);
                         tableHTML += `
                             <tr onclick="viewDetail('sales', '${esc(item.id)}')" style="cursor: pointer;">
                                 <td>${esc(day)}</td>
@@ -2382,7 +2428,7 @@
                     }
                 });
             } else if (type === 'invoices') {
-                tableHTML += '<th>Date</th><th>Vendor</th><th>Invoice #</th><th>Amount</th><th>How paid</th><th>Remaining</th><th>Due</th><th>Actions</th></tr></thead><tbody>';
+                tableHTML += '<th>Date</th><th>Vendor</th><th>Invoice #</th><th>Amount</th><th>How paid</th><th>Remaining</th><th>Due</th><th>Read</th><th>Actions</th></tr></thead><tbody>';
                 items.forEach((item, index) => {
                     try {
                         const d = item.data || {};
@@ -2401,6 +2447,7 @@
                                 <td><span class="badge ${paid ? 'badge-success' : 'badge-pending'}">${esc(how)}</span></td>
                                 <td>${money(left)}</td>
                                 <td>${due ? esc(fmtDay(due)) : '\u2014'}</td>
+                                <td>${reviewBadgeHtml(d, item.confidence)}</td>
                                 <td><button onclick="event.stopPropagation(); viewDetail('invoices', '${item.id}')" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">View</button></td>
                             </tr>
                         `;
@@ -2561,7 +2608,6 @@
             
             if (type === 'sales') {
                 const payouts = (d.report && Array.isArray(d.report.payouts)) ? d.report.payouts : [];
-                const issues = checkIssues(d);
                 const passes = (Array.isArray(d.checks) ? d.checks : []).filter(c => c.status === 'pass');
                 const checkLine = (c) => `<li style="margin-bottom:6px;">${c.status === 'pass' ? '\u2705' : c.status === 'fail' ? '\u274c' : '\u26a0\ufe0f'} ${esc(c.message)}</li>`;
                 const depositText = d.deposit !== null && d.deposit !== undefined ? money(d.deposit) : '\u2014';
@@ -2578,7 +2624,7 @@
                     </div>
                     ${d.fuel_sales ? `<div style="margin-bottom:20px;"><div style="font-size:12px;color:var(--text-light);margin-bottom:4px;">Gas</div><div style="font-size:20px;font-weight:600;">${money(d.fuel_sales)}${d.gallons ? ` \u00b7 ${esc(Number(d.gallons).toFixed(0))} gal` : ''}</div></div>` : ''}
                     ${payouts.length ? `<div style="margin-bottom:20px;"><div style="font-size:12px;color:var(--text-light);margin-bottom:6px;">Paid out of the till</div>${payouts.map(p => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);"><span>${esc(p.label)}</span><strong>${money(p.amount)}</strong></div>`).join('')}</div>` : ''}
-                    ${issues.length ? `<div style="padding:16px;background:#fff3cd;border-radius:8px;margin-bottom:16px;"><strong>Worth a look</strong><ul style="margin:8px 0 0 18px;">${issues.map(checkLine).join('')}</ul></div>` : ''}
+                    ${reviewPanelHtml(d, item.confidence)}
                     ${passes.length ? `<div style="padding:16px;background:var(--bg);border-radius:8px;"><strong>Checked</strong><ul style="margin:8px 0 0 18px;list-style:none;padding:0;">${passes.map(checkLine).join('')}</ul></div>` : ''}
                     ${d.notes ? `<div style="padding: 16px; background: var(--bg); border-radius: 8px; margin-top: 20px;"><strong>Notes:</strong> ${esc(d.notes)}</div>` : ''}
                 `;
@@ -2635,6 +2681,7 @@
                         <div style="font-size: 12px; color: var(--text-light); margin-bottom: 6px;">Payments</div>
                         ${payLines}
                     </div>
+                    ${reviewPanelHtml(d, item.confidence)}
                     ${d.notes ? `<div style="padding: 16px; background: var(--bg); border-radius: 8px; margin-top: 20px;"><strong>Notes:</strong> ${esc(d.notes)}</div>` : ''}
                 `;
             } else if (type === 'expenses') {

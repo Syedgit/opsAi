@@ -13,6 +13,7 @@ import { utcMonthRange } from '../../lib/billing/plans';
 import { summarizeUsage } from '../../lib/understanding/usage';
 import { readWhatsAppOpsMode, withWhatsAppOpsMode, type WhatsAppOpsMode } from '../../lib/whatsappOpsMode';
 import { startWhatsAppGroupProvision } from '../../lib/whatsappGroupProvision';
+import { countEntriesNeedingReview } from '../../lib/entryReview';
 
 const prisma = new PrismaClient();
 
@@ -104,26 +105,40 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       const monthEnd = endOfMonth(today);
 
       const monthWindow = utcMonthRange();
-      const [todaySales, todayInvoices, todayOrders, monthSales, monthInvoices, pendingCount, monthLogs] = await Promise.all([
-        prisma.pendingActions.count({ where: { storeId, type: 'STORE_SALES', status: 'CONFIRMED', createdAt: { gte: todayStart, lte: todayEnd } } }),
-        prisma.pendingActions.count({ where: { storeId, type: 'INVOICE_EXPENSE', status: 'CONFIRMED', createdAt: { gte: todayStart, lte: todayEnd } } }),
-        prisma.pendingActions.count({ where: { storeId, type: 'ORDER_REQUEST', status: 'CONFIRMED', createdAt: { gte: todayStart, lte: todayEnd } } }),
-        prisma.pendingActions.count({ where: { storeId, type: 'STORE_SALES', status: 'CONFIRMED', createdAt: { gte: monthStart, lte: monthEnd } } }),
-        prisma.pendingActions.count({ where: { storeId, type: 'INVOICE_EXPENSE', status: 'CONFIRMED', createdAt: { gte: monthStart, lte: monthEnd } } }),
-        prisma.pendingActions.count({ where: { storeId, status: 'PENDING' } }),
-        prisma.messageLog.findMany({
-          where: { storeId, createdAt: { gte: monthWindow.from, lt: monthWindow.to } },
-          select: { storeId: true, createdAt: true, extractedData: true },
-          take: 20000,
-        }),
-      ]);
+      const [todaySales, todayInvoices, todayOrders, monthSales, monthInvoices, pendingCount, monthLogs, recentConfirmed] =
+        await Promise.all([
+          prisma.pendingActions.count({ where: { storeId, type: 'STORE_SALES', status: 'CONFIRMED', createdAt: { gte: todayStart, lte: todayEnd } } }),
+          prisma.pendingActions.count({ where: { storeId, type: 'INVOICE_EXPENSE', status: 'CONFIRMED', createdAt: { gte: todayStart, lte: todayEnd } } }),
+          prisma.pendingActions.count({ where: { storeId, type: 'ORDER_REQUEST', status: 'CONFIRMED', createdAt: { gte: todayStart, lte: todayEnd } } }),
+          prisma.pendingActions.count({ where: { storeId, type: 'STORE_SALES', status: 'CONFIRMED', createdAt: { gte: monthStart, lte: monthEnd } } }),
+          prisma.pendingActions.count({ where: { storeId, type: 'INVOICE_EXPENSE', status: 'CONFIRMED', createdAt: { gte: monthStart, lte: monthEnd } } }),
+          prisma.pendingActions.count({ where: { storeId, status: 'PENDING' } }),
+          prisma.messageLog.findMany({
+            where: { storeId, createdAt: { gte: monthWindow.from, lt: monthWindow.to } },
+            select: { storeId: true, createdAt: true, extractedData: true },
+            take: 20000,
+          }),
+          prisma.pendingActions.findMany({
+            where: {
+              storeId,
+              status: 'CONFIRMED',
+              type: { in: ['STORE_SALES', 'INVOICE_EXPENSE', 'ORDER_REQUEST', 'FUEL_SALES', 'PAID_OUT', 'UNKNOWN'] },
+              createdAt: { gte: monthStart, lte: monthEnd },
+            },
+            select: { payloadJson: true, confidence: true },
+            orderBy: { createdAt: 'desc' },
+            take: 100,
+          }),
+        ]);
       const used = summarizeUsage(monthLogs).total;
+      const needsReview = countEntriesNeedingReview(recentConfirmed);
 
       res.json({
         storeId,
         today: { sales: todaySales, invoices: todayInvoices, orders: todayOrders },
         month: { sales: monthSales, invoices: monthInvoices },
         pending: pendingCount,
+        needsReview,
         usage: {
           month: monthWindow.month,
           aiReadings: used.aiCalls,
