@@ -16,6 +16,7 @@ import { createOpenAiUnderstander } from './understanding/extractor';
 import { understandAndRespond } from './understanding/service';
 import { routeIntent } from './understanding/intent';
 import { tryTaskEvidence } from './tasks/evidence';
+import { tryWhatsAppAiChat } from './aiChatAsk';
 import { checkAiBudget } from './understanding/budget';
 import { logApp, logAppError, maskPhone, serializeError } from './requestLog';
 
@@ -232,6 +233,27 @@ async function handleInboundWhatsApp(
   } catch (error) {
     // Tasks must never stop normal reporting (for example while the tables are not created yet).
     logAppError('wa.task_evidence', { messageId, ...serializeError(error) });
+  }
+
+  // Enrolled admin AI chat: 1:1 only (not the store group). Same grounded answers as the web card.
+  if (text && !mediaId && !input.groupId) {
+    try {
+      const chat = await tryWhatsAppAiChat(prisma, {
+        phoneE164,
+        storeId,
+        text,
+        groupId: null,
+        hasMedia: false,
+      });
+      if (chat.handled) {
+        logApp('wa.path', { messageId, from, storeId, path: 'ai_chat' });
+        await sendWhatsAppMessage(prisma, phoneE164, chat.answer, storeId);
+        await updateMessageLog(prisma, messageId, { classification: 'AI_CHAT', processed: true, storeId });
+        return;
+      }
+    } catch (error) {
+      logAppError('wa.ai_chat', { messageId, ...serializeError(error) });
+    }
   }
 
   // Intent (code) → reason (one AI read, only if needed) → execute (always code).

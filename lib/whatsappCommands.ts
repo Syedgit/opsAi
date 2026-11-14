@@ -747,6 +747,7 @@ async function handleHelp(): Promise<CommandResult> {
       'DUE — vendor bills still owed',
       'HELP — this message',
       '',
+      '💬 Enrolled AI chat (owners/managers, 1:1 only): ask about standing, DMR, or open vendor bills in plain words.',
       '📸 Send a photo or text for sales, invoices, orders, fuel, or paid-outs.',
       '💵 Partial pay: Pepsi paid cash 500 remaining 400 send check Friday.',
       '✅ Answer a task by sending its number with a photo or a few words, for example: 2 190F',

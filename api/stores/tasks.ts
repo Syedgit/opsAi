@@ -51,6 +51,12 @@ import {
   sheetsCredentialsConfigured,
   sheetsServiceAccountEmail,
 } from '../../lib/googleSheetsRows';
+import {
+  AI_CHAT_USD_PER_STORE_PER_MONTH,
+  aiChatSelfEnrollAllowed,
+  readAiChatState,
+  withAiChatEnrollment,
+} from '../../lib/aiChatAccess';
 
 const prisma = new PrismaClient();
 
@@ -135,6 +141,7 @@ const BodySchema = z.discriminatedUnion('action', [
     sheet: z.string().min(20).max(500),
   }),
   z.object({ action: z.literal('clear_google_sheet') }),
+  z.object({ action: z.literal('set_ai_chat'), enrolled: z.boolean() }),
 ]);
 
 /** An "every N days" task counts from a start date: the owner's, or today (store time) when they left it out. */
@@ -227,6 +234,12 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       credentialsReady: sheetsCredentialsConfigured(),
       shareWith: sheetsServiceAccountEmail(),
     };
+    const aiChat = {
+      ...readAiChatState(store.profileJson),
+      selfEnroll: aiChatSelfEnrollAllowed(),
+      monthlyUsd: AI_CHAT_USD_PER_STORE_PER_MONTH,
+      adminOnly: true,
+    };
     const timeZone = isValidTimeZone(store.timezone) ? store.timezone : 'America/New_York';
 
     if (req.method === 'GET') {
@@ -246,6 +259,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         ...vendorCatalog(store.profileJson),
         ...pictureMaps(store.profileJson),
         googleSheets,
+        aiChat,
         buckets: TASK_BUCKETS,
       });
       return;
@@ -318,6 +332,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         ...vendorCatalog(store.profileJson),
         ...pictureMaps(store.profileJson),
         googleSheets,
+        aiChat,
         buckets: TASK_BUCKETS,
       });
       return;
@@ -554,6 +569,33 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
           sheetId: null,
           credentialsReady: sheetsCredentialsConfigured(),
           shareWith: sheetsServiceAccountEmail(),
+        },
+      });
+      return;
+    }
+
+    if (body.action === 'set_ai_chat') {
+      if (access.role !== 'OWNER') {
+        res.status(403).json({ error: 'Only the store owner can change AI chat enrollment' });
+        return;
+      }
+      if (body.enrolled && !aiChatSelfEnrollAllowed() && !readAiChatState(store.profileJson).enrolled) {
+        res.status(402).json({
+          error: `AI chat is an add-on ($${AI_CHAT_USD_PER_STORE_PER_MONTH}/store/mo). Self-enroll is off — turn on AI_CHAT_SELF_ENROLL for beta, or enable from billing later.`,
+        });
+        return;
+      }
+      await prisma.storeConfig.update({
+        where: { storeId },
+        data: { profileJson: withAiChatEnrollment(store.profileJson, body.enrolled) as object },
+      });
+      res.status(200).json({
+        success: true,
+        aiChat: {
+          ...readAiChatState(withAiChatEnrollment(store.profileJson, body.enrolled)),
+          selfEnroll: aiChatSelfEnrollAllowed(),
+          monthlyUsd: AI_CHAT_USD_PER_STORE_PER_MONTH,
+          adminOnly: true,
         },
       });
       return;

@@ -7,6 +7,8 @@
 
 export const TRIAL_DAYS = 14;
 export const USD_PER_STORE_PER_MONTH = 25;
+/** Admin AI chat add-on — grounded questions over confirmed closes/invoices/bills. */
+export const ASK_DATA_USD_PER_STORE_PER_MONTH = 20;
 
 export type PlanId = 'store';
 export type PlanStatus = 'trial' | 'active' | 'expired' | 'canceled';

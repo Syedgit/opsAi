@@ -831,6 +831,36 @@
         return html + '</div>';
     }
 
+    function aiChatCard() {
+        const chat = board.aiChat || {};
+        const isOwner = board.canManageOwners;
+        if (!chat.enrolled && !isOwner && !board.canEdit) return '';
+        const price = chat.monthlyUsd != null ? chat.monthlyUsd : 20;
+        let html = '<div class="card"><h2>AI chat</h2>';
+        html += '<p class="muted card-help">Owners and managers ask here or in the opsAi WhatsApp <strong>1:1</strong> (not the group). AI classifies the question, code loads confirmed numbers from your store (AI never fetches the DB), then AI writes a short professional summary. Vague asks get a clearer follow-up. Add-on <strong>$' + esc(String(price)) + '/store/mo</strong>.</p>';
+        if (chat.enrolled) {
+            html += '<p><strong>Enrolled</strong>' + (chat.enrolledAt ? ' · since ' + esc(String(chat.enrolledAt).slice(0, 10)) : '') + '</p>';
+            html += '<form id="aiChatQuestionForm" style="margin-top: 8px;">' +
+                '<label>Question</label>' +
+                '<textarea name="question" rows="2" maxlength="500" required placeholder="How is standing this month? What’s still owed to Pepsi?" style="width:100%;margin:6px 0 8px;"></textarea>' +
+                '<button type="submit" class="primary">Ask</button></form>' +
+                '<pre id="aiChatAnswer" class="muted" style="white-space:pre-wrap;margin-top:12px;display:none;"></pre>';
+            if (isOwner) {
+                html += '<p style="margin-top:12px;"><button type="button" class="small danger" id="unenrollAiChat">Unenroll AI chat</button></p>';
+            }
+        } else if (isOwner) {
+            if (chat.selfEnroll) {
+                html += '<p class="muted">Self-enroll is open for this environment (beta).</p>' +
+                    '<button type="button" class="primary" id="enrollAiChat">Enroll AI chat · $' + esc(String(price)) + '/mo</button>';
+            } else {
+                html += '<div class="notice">Enrollment is closed until billing for this add-on is live. Ask ops to set <code>AI_CHAT_SELF_ENROLL</code> for a beta store.</div>';
+            }
+        } else {
+            html += '<p class="muted">Not enrolled. The store owner can enroll when the add-on is available.</p>';
+        }
+        return html + '</div>';
+    }
+
     function adminNav(items) {
         return '<nav class="admin-nav" aria-label="Jump to a section">' + items.filter(Boolean).map(function (x) {
             return '<a href="#' + esc(x.id) + '">' + esc(x.label) + (x.count ? ' <span>' + esc(x.count) + '</span>' : '') + '</a>';
@@ -892,7 +922,7 @@
             html += '<section class="admin-section" id="admin-people"><div class="admin-kicker">People</div>' + peopleGrid + '</section>';
         }
 
-        html += '<section class="admin-section" id="admin-store"><div class="admin-kicker">Store</div><div class="admin-grid">' + setupCard() + googleSheetsCard() + addStoreCard() + removeStoreCard() + '</div></section>';
+        html += '<section class="admin-section" id="admin-store"><div class="admin-kicker">Store</div><div class="admin-grid">' + setupCard() + googleSheetsCard() + aiChatCard() + addStoreCard() + removeStoreCard() + '</div></section>';
 
         if (ordersGrid) {
             html += '<section class="admin-section" id="admin-orders"><div class="admin-kicker">Orders and reports</div>' + ordersGrid + '</section>';
@@ -1090,6 +1120,16 @@
             if (await act({ action: 'clear_google_sheet' }, 'Google Sheet disconnected.')) load();
             return;
         }
+        if (el.id === 'enrollAiChat') {
+            if (!confirm('Enroll this store in AI chat? Add-on is about $' + ((board.aiChat && board.aiChat.monthlyUsd) || 20) + '/store/mo when billing is live.')) return;
+            if (await act({ action: 'set_ai_chat', enrolled: true }, 'AI chat enrolled for this store.')) load();
+            return;
+        }
+        if (el.id === 'unenrollAiChat') {
+            if (!confirm('Unenroll AI chat for this store?')) return;
+            if (await act({ action: 'set_ai_chat', enrolled: false }, 'AI chat unenrolled.')) load();
+            return;
+        }
         if (el.dataset.removeDash) {
             if (!confirm('Remove this person’s dashboard access to this store?')) return;
             if (await act({ action: 'remove_dashboard_member', userId: el.dataset.removeDash }, 'Dashboard access removed.')) load();
@@ -1254,6 +1294,29 @@
             e.preventDefault();
             const f = new FormData(e.target);
             if (await act({ action: 'set_google_sheet', sheet: f.get('sheet') }, 'Google Sheet connected.')) load();
+            return;
+        }
+        if (e.target.id === 'aiChatQuestionForm') {
+            e.preventDefault();
+            const f = new FormData(e.target);
+            const question = String(f.get('question') || '').trim();
+            const out = document.getElementById('aiChatAnswer');
+            if (!question || !out) return;
+            out.style.display = 'block';
+            out.textContent = 'Thinking…';
+            try {
+                const res = await fetch('/api/stores/ask', {
+                    method: 'POST',
+                    headers: authHeaders(),
+                    body: JSON.stringify({ storeId: storeId, question: question }),
+                });
+                if (res.status === 401) { location.href = '/login'; return; }
+                const data = await res.json().catch(function () { return {}; });
+                if (!res.ok) throw new Error(data.error || ('Server answered ' + res.status));
+                out.textContent = data.answer || 'No answer.';
+            } catch (err) {
+                out.textContent = err.message || 'Could not ask.';
+            }
             return;
         }
         if (e.target.id === 'whatsappPersonForm') {

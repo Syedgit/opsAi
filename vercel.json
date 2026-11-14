@@ -106,6 +106,10 @@
       "destination": "/api/stores/tasks.ts"
     },
     {
+      "source": "/api/stores/ask",
+      "destination": "/api/stores/ask.ts"
+    },
+    {
       "source": "/api/cron/tasks",
       "destination": "/api/cron/tasks.ts"
     },
