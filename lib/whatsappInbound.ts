@@ -8,8 +8,14 @@ export function whatsappInboundParts(message: {
   image?: { id?: string; caption?: string; mime_type?: string };
   document?: { id?: string; caption?: string; mime_type?: string };
   audio?: { id?: string };
+  /** Tap on a template's quick-reply button. */
+  button?: { text?: string; payload?: string };
+  /** Tap on a reply button opsAi sent. */
+  interactive?: { button_reply?: { id?: string; title?: string } };
 }): { messageText: string; mediaId?: string; mediaType?: string } {
-  const typed = message.text?.body?.trim() || '';
+  const tapped =
+    message.button?.payload || message.button?.text || message.interactive?.button_reply?.id || message.interactive?.button_reply?.title || '';
+  const typed = message.text?.body?.trim() || tapped.trim();
   const image = message.image;
   const document = message.document;
   const audio = message.audio;

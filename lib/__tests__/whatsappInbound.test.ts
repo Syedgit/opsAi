@@ -28,3 +28,12 @@ describe('whatsappInboundParts', () => {
     ).toEqual({ messageText: '' });
   });
 });
+
+describe('button taps', () => {
+  it('reads a template quick-reply payload and a reply-button id as text', () => {
+    expect(whatsappInboundParts({ type: 'button', button: { text: 'Show summary', payload: 'SUMMARY S002 2026-11-09' } }).messageText).toBe(
+      'SUMMARY S002 2026-11-09'
+    );
+    expect(whatsappInboundParts({ type: 'interactive', interactive: { button_reply: { id: 'GOTIT', title: '👍 Got it' } } }).messageText).toBe('GOTIT');
+  });
+});

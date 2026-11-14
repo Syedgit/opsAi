@@ -141,7 +141,7 @@ async function handleInboundWhatsApp(
 
     const result = await handleWhatsAppCommand(prisma, phoneE164, text, { groupId: input.groupId ?? null });
     logApp('wa.path', { messageId, from, storeId, path: 'command' });
-    await sendWhatsAppMessage(prisma, phoneE164, result.message, result.storeId ?? storeId ?? undefined);
+    if (result.message) await sendWhatsAppMessage(prisma, phoneE164, result.message, result.storeId ?? storeId ?? undefined);
     await updateMessageLog(prisma, messageId, { processed: true, storeId: storeId ?? undefined });
     return;
   }

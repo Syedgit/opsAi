@@ -43,6 +43,8 @@ import {
   updateWhatsAppPerson,
 } from '../../lib/tasks/people';
 import { logApp, logAppError, loggedHandler, serializeError } from '../../lib/requestLog';
+import { sendWelcomeTemplate } from '../../lib/whatsappMessaging';
+import { normalizeOwnerPhoneE164 } from '../../lib/storeOwnerOnboarding';
 
 const prisma = new PrismaClient();
 
@@ -435,7 +437,17 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         res.status(result.status).json({ error: result.error });
         return;
       }
-      res.status(200).json({ success: true });
+      let welcomed = false;
+      const phone = normalizeOwnerPhoneE164(String(body.phoneE164 ?? ''));
+      if (phone) {
+        try {
+          const store = await prisma.storeConfig.findUnique({ where: { storeId }, select: { storeName: true } });
+          welcomed = await sendWelcomeTemplate(prisma, phone, { storeId, storeName: store?.storeName || storeId });
+        } catch (error) {
+          logAppError('stores.tasks.welcome', { storeId, ...serializeError(error) });
+        }
+      }
+      res.status(200).json({ success: true, welcomed });
       return;
     }
     if (body.action === 'update_whatsapp_person') {

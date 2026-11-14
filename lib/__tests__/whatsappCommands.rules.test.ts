@@ -435,3 +435,26 @@ describe('invoice remaining', () => {
     expect(prisma.pendingActions.updateMany).not.toHaveBeenCalled();
   });
 });
+
+describe('replies to the welcome and summary buttons', () => {
+  it('treats OK with nothing pending as the answer to the welcome', async () => {
+    const { prisma } = makePrisma({ pending: [] });
+    const result = await handleWhatsAppCommand(prisma, PHONE, 'OK');
+    expect(result.message).toContain("You're all set");
+  });
+
+  it('says nothing back to Got it', async () => {
+    const { prisma } = makePrisma();
+    expect(isWhatsAppCommand('👍 Got it')).toBe(true);
+    expect((await handleWhatsAppCommand(prisma, PHONE, 'GOTIT')).message).toBe('');
+  });
+
+  it('stops messages to a number that replies STOP', async () => {
+    const { prisma } = makePrisma();
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    (prisma.userDirectory as unknown as { updateMany: jest.Mock }).updateMany = updateMany;
+    const result = await handleWhatsAppCommand(prisma, PHONE, 'STOP');
+    expect(updateMany).toHaveBeenCalledWith({ where: { phoneE164: PHONE, isActive: true }, data: { isActive: false } });
+    expect(result.message).toContain("won't get opsAi messages");
+  });
+});

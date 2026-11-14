@@ -22,22 +22,27 @@ async function resolvePhoneNumberId(prisma: PrismaClient, storeId?: string): Pro
   return phoneNumberId || envId;
 }
 
-async function postText(
+export type SendResult = { ok: boolean; windowClosed: boolean };
+
+/** Meta refuses free-form messages 24 hours after the person last wrote; only a template gets through. */
+const WINDOW_CLOSED_CODES = new Set([131047]);
+
+async function postPayload(
   prisma: PrismaClient,
   target: { to: string; group: boolean },
-  message: string,
+  body: Record<string, unknown>,
   storeId?: string
-): Promise<boolean> {
+): Promise<SendResult> {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   if (!accessToken) {
     console.error('WHATSAPP_ACCESS_TOKEN not configured');
-    return false;
+    return { ok: false, windowClosed: false };
   }
 
   const phoneNumberId = await resolvePhoneNumberId(prisma, storeId);
   if (!phoneNumberId) {
     console.error('No WhatsApp phone number ID available', { storeId });
-    return false;
+    return { ok: false, windowClosed: false };
   }
 
   try {
@@ -47,8 +52,7 @@ async function postText(
         messaging_product: 'whatsapp',
         // Groups are addressed by group id with recipient_type "group"; people by phone number.
         ...(target.group ? { recipient_type: 'group', to: target.to } : { to: target.to.replace(/^\+/, '') }),
-        type: 'text',
-        text: { body: message },
+        ...body,
       },
       {
         headers: {
@@ -59,21 +63,103 @@ async function postText(
     );
     logApp('wa.send', {
       ok: true,
+      kind: body.type,
       group: target.group,
       storeId,
       to: target.group ? `group:${target.to.slice(0, 8)}` : maskPhone(target.to),
     });
-    return true;
+    return { ok: true, windowClosed: false };
   } catch (error: unknown) {
+    const code = (error as { response?: { data?: { error?: { code?: number } } } }).response?.data?.error?.code;
     logAppError('wa.send', {
       ok: false,
+      kind: body.type,
       group: target.group,
       storeId,
       to: target.group ? `group:${target.to.slice(0, 8)}` : maskPhone(target.to),
       ...serializeError(error),
     });
-    return false;
+    return { ok: false, windowClosed: typeof code === 'number' && WINDOW_CLOSED_CODES.has(code) };
   }
+}
+
+async function postText(
+  prisma: PrismaClient,
+  target: { to: string; group: boolean },
+  message: string,
+  storeId?: string
+): Promise<boolean> {
+  return (await postPayload(prisma, target, { type: 'text', text: { body: message } }, storeId)).ok;
+}
+
+/** A message with up to three reply buttons. Each tap comes back as the button's id. */
+export async function sendWhatsAppButtons(
+  prisma: PrismaClient,
+  to: string,
+  message: string,
+  buttons: Array<{ id: string; title: string }>,
+  storeId?: string
+): Promise<SendResult> {
+  if (message.length > 1024) {
+    return { ok: await sendWhatsAppMessage(prisma, to, message, storeId), windowClosed: false };
+  }
+  return postPayload(
+    prisma,
+    { to, group: false },
+    {
+      type: 'interactive',
+      interactive: {
+        type: 'button',
+        body: { text: message },
+        action: { buttons: buttons.slice(0, 3).map((b) => ({ type: 'reply', reply: { id: b.id, title: b.title.slice(0, 20) } })) },
+      },
+    },
+    storeId
+  );
+}
+
+/**
+ * An approved template (the only thing Meta delivers outside the 24-hour window).
+ * `buttonPayloads` fill the template's quick-reply buttons in order; a tap comes back as that payload.
+ */
+export async function sendWhatsAppTemplate(
+  prisma: PrismaClient,
+  to: string,
+  name: string,
+  bodyParams: string[],
+  storeId?: string,
+  options: { language?: string; buttonPayloads?: string[] } = {}
+): Promise<SendResult> {
+  const components: Array<Record<string, unknown>> = [];
+  if (bodyParams.length > 0) {
+    components.push({ type: 'body', parameters: bodyParams.map((text) => ({ type: 'text', text })) });
+  }
+  (options.buttonPayloads ?? []).forEach((payload, index) => {
+    components.push({ type: 'button', sub_type: 'quick_reply', index: String(index), parameters: [{ type: 'payload', payload }] });
+  });
+  return postPayload(
+    prisma,
+    { to, group: false },
+    {
+      type: 'template',
+      template: { name, language: { code: options.language ?? 'en' }, ...(components.length > 0 ? { components } : {}) },
+    },
+    storeId
+  );
+}
+
+/**
+ * First message to someone just added on Store admin. They have never written to opsAi, so only a
+ * template can reach them; their reply (OK) opens the 24-hour window.
+ */
+export async function sendWelcomeTemplate(
+  prisma: PrismaClient,
+  phoneE164: string,
+  store: { storeId: string; storeName: string }
+): Promise<boolean> {
+  const welcome = await sendWhatsAppTemplate(prisma, phoneE164, 'team_welcome', [store.storeName], store.storeId);
+  if (welcome.ok) return true;
+  return (await sendWhatsAppTemplate(prisma, phoneE164, 'store_connected', [], store.storeId)).ok;
 }
 
 export async function sendWhatsAppMessage(

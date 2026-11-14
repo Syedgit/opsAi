@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { PendingStatus } from '@prisma/client';
 import { format, startOfDay, endOfDay } from 'date-fns';
-import { deliverStoreMessage, managerPhonesForStore, postToStoreGroups, sendWhatsAppMessage } from './whatsappMessaging';
+import { deliverStoreMessage, managerPhonesForStore, postToStoreGroups, sendWhatsAppButtons, sendWhatsAppMessage, sendWhatsAppTemplate } from './whatsappMessaging';
 import { computerDashboardHint, groupDashboardHint, isPublicAppUrl, sendPrivateDashboardLinks } from './whatsappLogin';
 import {
   cancelPendingAction,
@@ -35,13 +35,15 @@ export interface CommandResult {
   storeId?: string;
 }
 
-const COMMAND_RE = /^(OK|CANCEL|FIX|STATUS|TODAY|TASKS|WEEK|MONTH|HELP|SEND|RULE|DUE)(\s|$)/i;
+const COMMAND_RE = /^(OK|CANCEL|FIX|STATUS|TODAY|TASKS|WEEK|MONTH|HELP|SEND|RULE|DUE|STOP|GOTIT|SUMMARY)(\s|$)/i;
+/** Taps on opsAi's buttons arrive as their title when Meta drops the payload. */
+const TAP_RE = /^(show summary|👍 got it|got it)$/i;
 /** Old link command only — not "store sales" / "store cash" captions on a close photo. */
 const STORE_LINK_RE = /^STORE(\s+S\d+)?$/i;
 
 export function isWhatsAppCommand(text: string): boolean {
   const trimmed = text.trim();
-  return COMMAND_RE.test(trimmed) || STORE_LINK_RE.test(trimmed);
+  return COMMAND_RE.test(trimmed) || STORE_LINK_RE.test(trimmed) || TAP_RE.test(trimmed);
 }
 
 export async function handleWhatsAppCommand(
@@ -50,10 +52,20 @@ export async function handleWhatsAppCommand(
   commandText: string,
   extra: { groupId?: string | null } = {}
 ): Promise<CommandResult> {
-  const parts = commandText.trim().split(/\s+/);
+  const trimmed = commandText.trim();
+  if (/^show summary$/i.test(trimmed)) return handleShowSummary(prisma, phoneE164, []);
+  if (/^(👍 )?got it$/i.test(trimmed)) return { success: true, message: '' };
+  const parts = trimmed.split(/\s+/);
   const command = parts[0].toUpperCase();
 
   switch (command) {
+    case 'GOTIT':
+      // Only there so the person writes back and tomorrow's summary still gets through.
+      return { success: true, message: '' };
+    case 'SUMMARY':
+      return handleShowSummary(prisma, phoneE164, parts.slice(1));
+    case 'STOP':
+      return handleStop(prisma, phoneE164);
     case 'OK':
       return handleOK(prisma, phoneE164, extra.groupId ?? null);
     case 'CANCEL':
@@ -95,7 +107,11 @@ function sourceGroupId(payload: Record<string, unknown> | null, inboundGroupId?:
 async function handleOK(prisma: PrismaClient, phoneE164: string, inboundGroupId?: string | null): Promise<CommandResult> {
   const batch = await getLatestPendingBatch(prisma, phoneE164);
   if (batch.length === 0) {
-    return { success: false, message: 'No pending action found.' };
+    // Also the answer to the welcome template ("Reply OK to confirm").
+    return {
+      success: true,
+      message: "✅ You're all set. Send today's close, an invoice, or a photo here. Reply HELP for commands.",
+    };
   }
 
   let sheetsWritten = 0;
@@ -292,19 +308,93 @@ async function handleOK(prisma: PrismaClient, phoneE164: string, inboundGroupId?
 }
 
 /** End of day: every owner and manager gets the summary 1:1 (not the person who just confirmed it). */
-async function sendSummaryToManagers(prisma: PrismaClient, storeId: string, text: string, senderPhone?: string): Promise<number> {
+async function sendSummaryToManagers(
+  prisma: PrismaClient,
+  store: { storeId: string; storeName: string; day: string },
+  text: string,
+  senderPhone?: string
+): Promise<number> {
   try {
-    const phones = await managerPhonesForStore(prisma, storeId);
+    const phones = await managerPhonesForStore(prisma, store.storeId);
     if (!Array.isArray(phones)) return 0;
     let sent = 0;
     for (const phone of phones.filter((p) => p !== senderPhone)) {
-      if (await sendWhatsAppMessage(prisma, phone, text, storeId)) sent += 1;
+      // The tap keeps the 24-hour window open for tomorrow's summary.
+      const direct = await sendWhatsAppButtons(prisma, phone, text, [{ id: 'GOTIT', title: '👍 Got it' }], store.storeId);
+      if (direct.ok) {
+        sent += 1;
+        continue;
+      }
+      if (!direct.windowClosed) continue;
+      const nudge = await sendWhatsAppTemplate(prisma, phone, 'daily_summary_ready', [store.storeName], store.storeId, {
+        buttonPayloads: [`SUMMARY ${store.storeId} ${store.day}`],
+      });
+      if (nudge.ok) sent += 1;
     }
     return sent;
   } catch (e) {
     console.warn('Could not send the day summary to managers', e instanceof Error ? e.message : e);
     return 0;
   }
+}
+
+/** The end-of-day text: sales, invoices, paid outs, tasks, and what goes to the bank. */
+async function buildDaySummary(
+  prisma: PrismaClient,
+  store: { storeId: string; timezone?: string | null; profileJson?: unknown },
+  kind: NonNullable<ReturnType<typeof summaryKindForStore>>,
+  day: string,
+  now: Date
+): Promise<string | null> {
+  const activity = await loadDayActivity(prisma, store.storeId, day, kind, now);
+  if (!activity) return null;
+  let text = formatDaySummary(activity, { withDepositBag: kind === 'store_day' });
+  if (!text) return null;
+  if (kind === 'store_day') {
+    const bag = await loadDepositBag(prisma, store, now, { includeTodayCloses: true });
+    const bagLine = formatBagLine(bag, day);
+    if (bagLine) text += `\n${bagLine}`;
+  }
+  return text;
+}
+
+/** "Show summary" from the template: owners and managers of that store only. */
+async function handleShowSummary(prisma: PrismaClient, phoneE164: string, args: string[]): Promise<CommandResult> {
+  const sender = await prisma.userDirectory.findUnique({ where: { phoneE164 }, select: { storeId: true, role: true } });
+  const storeId = (args[0] || sender?.storeId || '').toUpperCase();
+  if (!storeId) return { success: false, message: 'I could not tell which store. Reply HELP for commands.' };
+  const managers = await managerPhonesForStore(prisma, storeId);
+  if (!managers.includes(phoneE164)) {
+    return { success: false, message: 'The end-of-day summary is for owners and managers.' };
+  }
+  const store = await prisma.storeConfig.findUnique({
+    where: { storeId },
+    select: { storeId: true, storeName: true, timezone: true, setupJson: true, profileJson: true },
+  });
+  if (!store) return { success: false, message: 'Store not found.' };
+  const now = new Date();
+  let day = /^\d{4}-\d{2}-\d{2}$/.test(args[1] ?? '') ? args[1] : '';
+  if (!day) {
+    const last = await prisma.pendingActions.findFirst({
+      where: { storeId, status: 'CONFIRMED', type: 'STORE_SALES' },
+      orderBy: { createdAt: 'desc' },
+      select: { type: true, payloadJson: true },
+    });
+    const rows = last ? [{ type: last.type, payload: (last.payloadJson ?? {}) as Record<string, unknown> }] : [];
+    day = businessDayOf(rows, now, store.timezone?.trim() || 'America/New_York');
+  }
+  const kind = summaryKindForStore(storeTypeOf(store.setupJson), [{ type: 'STORE_SALES', payload: { _kind: 'daily_close' } }]);
+  const text = kind ? await buildDaySummary(prisma, store, kind, day, now) : null;
+  return { success: Boolean(text), message: text ?? `No end-of-day summary for ${store.storeName} yet.`, storeId };
+}
+
+/** STOP from the welcome template: no more messages to this number until the owner adds it again. */
+async function handleStop(prisma: PrismaClient, phoneE164: string): Promise<CommandResult> {
+  await prisma.userDirectory.updateMany({ where: { phoneE164, isActive: true }, data: { isActive: false } });
+  return {
+    success: true,
+    message: "You won't get opsAi messages on this number. If this was a mistake, ask your store owner to add you again.",
+  };
 }
 
 async function maybePostDaySummary(
@@ -330,16 +420,11 @@ async function maybePostDaySummary(
     const day = businessDayOf(rows, now, timeZone);
     const activity = await loadDayActivity(prisma, storeId, day, kind, now);
     if (!activity) return null;
-    let text = formatDaySummary(activity, { withDepositBag: kind === 'store_day' });
+    let text = await buildDaySummary(prisma, store ?? { storeId }, kind, day, now);
     if (!text) return null;
-    if (kind === 'store_day') {
-      const bag = await loadDepositBag(prisma, store ?? { storeId }, now, { includeTodayCloses: true });
-      const bagLine = formatBagLine(bag, day);
-      if (bagLine) text += `\n${bagLine}`;
-    }
     const hasClose = rows.some((r) => r.type === 'STORE_SALES' || r.payload._kind === 'daily_close');
     if (hasClose) {
-      const sent = await sendSummaryToManagers(prisma, storeId, text, senderPhone);
+      const sent = await sendSummaryToManagers(prisma, { storeId, storeName: store?.storeName || 'your', day }, text, senderPhone);
       if (sent > 0) text += `\n📤 Sent to ${sent} owner${sent === 1 ? '' : 's'}/manager${sent === 1 ? '' : 's'}.`;
     }
     try {
