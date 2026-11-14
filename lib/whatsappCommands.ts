@@ -288,7 +288,13 @@ async function handleOK(prisma: PrismaClient, phoneE164: string, inboundGroupId?
 
     try {
       const { writeConfirmedActionToSheets } = await import('./googleSheetsWrite');
-      const result = await writeConfirmedActionToSheets(prisma, pending.storeId, pending.type, payload);
+      const result = await writeConfirmedActionToSheets(
+        prisma,
+        pending.storeId,
+        pending.type,
+        payload,
+        pending.confidence
+      );
       if (result === 'written') sheetsWritten += 1;
     } catch (e) {
       sheetsFailed += 1;

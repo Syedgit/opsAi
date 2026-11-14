@@ -45,6 +45,12 @@ import {
 import { logApp, logAppError, loggedHandler, serializeError } from '../../lib/requestLog';
 import { sendWelcomeTemplate } from '../../lib/whatsappMessaging';
 import { normalizeOwnerPhoneE164 } from '../../lib/storeOwnerOnboarding';
+import {
+  isSheetConnected,
+  parseGoogleSheetId,
+  sheetsCredentialsConfigured,
+  sheetsServiceAccountEmail,
+} from '../../lib/googleSheetsRows';
 
 const prisma = new PrismaClient();
 
@@ -124,6 +130,11 @@ const BodySchema = z.discriminatedUnion('action', [
   }),
   z.object({ action: z.literal('remove_dashboard_member'), userId: z.string().min(1) }),
   z.object({ action: z.literal('deactivate_store') }),
+  z.object({
+    action: z.literal('set_google_sheet'),
+    sheet: z.string().min(20).max(500),
+  }),
+  z.object({ action: z.literal('clear_google_sheet') }),
 ]);
 
 /** An "every N days" task counts from a start date: the owner's, or today (store time) when they left it out. */
@@ -202,11 +213,20 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
     const canManageOwners = access.role === 'OWNER';
     const actor = { userId: access.user.userId, role: access.role };
 
-    const store = await prisma.storeConfig.findUnique({ where: { storeId }, select: { storeName: true, timezone: true, setupJson: true, profileJson: true } });
+    const store = await prisma.storeConfig.findUnique({
+      where: { storeId },
+      select: { storeName: true, timezone: true, setupJson: true, profileJson: true, sheetId: true },
+    });
     if (!store) {
       res.status(404).json({ error: 'Store not found' });
       return;
     }
+    const googleSheets = {
+      connected: isSheetConnected(store.sheetId),
+      sheetId: isSheetConnected(store.sheetId) ? store.sheetId : null,
+      credentialsReady: sheetsCredentialsConfigured(),
+      shareWith: sheetsServiceAccountEmail(),
+    };
     const timeZone = isValidTimeZone(store.timezone) ? store.timezone : 'America/New_York';
 
     if (req.method === 'GET') {
@@ -223,13 +243,14 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
           storeTypes: storeTypeOptions().map((t) => ({ ...t, modules: dashboardModules(t.id, t.defaults.fuel) })),
           storeFeatures: Object.entries(STORE_FEATURE_LABEL).map(([id, label]) => ({ id, label })),
           messageSamples: parseStoredProfile(store.profileJson).messageSamples,
-          ...vendorCatalog(store.profileJson),
-          ...pictureMaps(store.profileJson),
-          buckets: TASK_BUCKETS,
-        });
-        return;
-      }
-      const setup = readStoredSetup(store.setupJson);
+        ...vendorCatalog(store.profileJson),
+        ...pictureMaps(store.profileJson),
+        googleSheets,
+        buckets: TASK_BUCKETS,
+      });
+      return;
+    }
+    const setup = readStoredSetup(store.setupJson);
       if (one(req.query.view) === 'inspection') {
         if (!inspectionApplies(setup?.storeType ?? null)) {
           res.status(400).json({ error: 'The inspection score is for 7-Eleven stores.' });
@@ -296,6 +317,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         messageSamples: parseStoredProfile(store.profileJson).messageSamples,
         ...vendorCatalog(store.profileJson),
         ...pictureMaps(store.profileJson),
+        googleSheets,
         buckets: TASK_BUCKETS,
       });
       return;
@@ -493,6 +515,47 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         return;
       }
       res.status(200).json({ success: true });
+      return;
+    }
+
+    if (body.action === 'set_google_sheet') {
+      if (!canEdit) {
+        res.status(403).json({ error: 'Only owners or managers can connect Google Sheets' });
+        return;
+      }
+      const sheetId = parseGoogleSheetId(body.sheet);
+      if (!sheetId) {
+        res.status(400).json({ error: 'Paste a Google Sheets link or spreadsheet id' });
+        return;
+      }
+      await prisma.storeConfig.update({ where: { storeId }, data: { sheetId } });
+      res.status(200).json({
+        success: true,
+        googleSheets: {
+          connected: true,
+          sheetId,
+          credentialsReady: sheetsCredentialsConfigured(),
+          shareWith: sheetsServiceAccountEmail(),
+        },
+      });
+      return;
+    }
+
+    if (body.action === 'clear_google_sheet') {
+      if (!canEdit) {
+        res.status(403).json({ error: 'Only owners or managers can disconnect Google Sheets' });
+        return;
+      }
+      await prisma.storeConfig.update({ where: { storeId }, data: { sheetId: 'pending_google_sheet' } });
+      res.status(200).json({
+        success: true,
+        googleSheets: {
+          connected: false,
+          sheetId: null,
+          credentialsReady: sheetsCredentialsConfigured(),
+          shareWith: sheetsServiceAccountEmail(),
+        },
+      });
       return;
     }
 

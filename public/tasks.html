@@ -803,6 +803,34 @@
             (board.canEdit ? '<a href="' + esc(link) + '"><button class="small">Change store setup</button></a>' : '') + '</div></div>';
     }
 
+    function googleSheetsCard() {
+        const gs = board.googleSheets || {};
+        if (!board.canEdit && !gs.connected) return '';
+        let html = '<div class="card"><h2>Google Sheets</h2>';
+        html += '<p class="muted card-help">Each store keeps one Google Sheet for the year. The <strong>Summary</strong> tab always shows this month’s current totals (sales, invoices, paid outs, standing) and refreshes every time someone replies OK. Daily closes also append on month tabs like <strong>2026-11</strong>. Create a blank Sheet, share it with the opsAi email as Editor, then paste the link here.</p>';
+        if (!gs.credentialsReady) {
+            html += '<div class="notice err">opsAi Sheets credentials are not on this server yet. Connecting a link still saves; rows will write once the server has Google set up.</div>';
+        }
+        if (gs.shareWith) {
+            html += '<p class="muted">Share your sheet with: <code id="sheetsShareEmail">' + esc(gs.shareWith) + '</code> ' +
+                (board.canEdit ? '<button type="button" class="small" id="copySheetsEmail">Copy email</button>' : '') + '</p>';
+        }
+        if (gs.connected) {
+            html += '<p><strong>Connected</strong> · id <code>' + esc(gs.sheetId || '') + '</code></p>';
+            if (board.canEdit) {
+                html += '<button type="button" class="small danger" id="clearGoogleSheet">Disconnect sheet</button>';
+            }
+        } else if (board.canEdit) {
+            html += '<form id="googleSheetForm" class="grid" style="margin-top: 8px; align-items: end;">' +
+                '<div style="grid-column: 1 / -1;"><label>Sheet link or id</label>' +
+                '<input type="text" name="sheet" required placeholder="https://docs.google.com/spreadsheets/d/…" maxlength="500"></div>' +
+                '<div><button type="submit" class="primary">Connect sheet</button></div></form>';
+        } else {
+            html += '<p class="muted">No sheet connected for this store yet.</p>';
+        }
+        return html + '</div>';
+    }
+
     function adminNav(items) {
         return '<nav class="admin-nav" aria-label="Jump to a section">' + items.filter(Boolean).map(function (x) {
             return '<a href="#' + esc(x.id) + '">' + esc(x.label) + (x.count ? ' <span>' + esc(x.count) + '</span>' : '') + '</a>';
@@ -864,7 +892,7 @@
             html += '<section class="admin-section" id="admin-people"><div class="admin-kicker">People</div>' + peopleGrid + '</section>';
         }
 
-        html += '<section class="admin-section" id="admin-store"><div class="admin-kicker">Store</div><div class="admin-grid">' + setupCard() + addStoreCard() + removeStoreCard() + '</div></section>';
+        html += '<section class="admin-section" id="admin-store"><div class="admin-kicker">Store</div><div class="admin-grid">' + setupCard() + googleSheetsCard() + addStoreCard() + removeStoreCard() + '</div></section>';
 
         if (ordersGrid) {
             html += '<section class="admin-section" id="admin-orders"><div class="admin-kicker">Orders and reports</div>' + ordersGrid + '</section>';
@@ -1052,6 +1080,16 @@
             if (await act({ action: 'remove_whatsapp_person', id: el.dataset.removeWa }, 'WhatsApp person removed.')) load();
             return;
         }
+        if (el.id === 'copySheetsEmail') {
+            const emailEl = document.getElementById('sheetsShareEmail');
+            if (emailEl && navigator.clipboard) navigator.clipboard.writeText(emailEl.textContent || '');
+            return;
+        }
+        if (el.id === 'clearGoogleSheet') {
+            if (!confirm('Stop writing confirmed WhatsApp entries to this Google Sheet?')) return;
+            if (await act({ action: 'clear_google_sheet' }, 'Google Sheet disconnected.')) load();
+            return;
+        }
         if (el.dataset.removeDash) {
             if (!confirm('Remove this person’s dashboard access to this store?')) return;
             if (await act({ action: 'remove_dashboard_member', userId: el.dataset.removeDash }, 'Dashboard access removed.')) load();
@@ -1212,6 +1250,12 @@
     }
 
     document.addEventListener('submit', async function (e) {
+        if (e.target.id === 'googleSheetForm') {
+            e.preventDefault();
+            const f = new FormData(e.target);
+            if (await act({ action: 'set_google_sheet', sheet: f.get('sheet') }, 'Google Sheet connected.')) load();
+            return;
+        }
         if (e.target.id === 'whatsappPersonForm') {
             e.preventDefault();
             const f = new FormData(e.target);
