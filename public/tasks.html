@@ -726,7 +726,7 @@
         const canOwners = board.canManageOwners;
         if (!board.canEdit && team.whatsapp.length === 0) return '';
         let html = '<div class="card"><div class="row" style="justify-content: space-between; align-items: baseline; margin-bottom: 8px;"><h2 style="margin:0;">WhatsApp team</h2>' + (team.whatsapp.length ? '<span class="count">' + team.whatsapp.length + '</span>' : '') + '</div>';
-        html += '<p class="muted card-help">Numbers can be changed later. Everyone listed here can message the opsAi number directly on WhatsApp. A partner can be a second owner.</p>';
+        html += '<p class="muted card-help">Numbers can be changed later. For 1:1, everyone listed here messages opsAi directly. Prefer a store group instead? Pick <strong>Store group (invite link)</strong> on the dashboard WhatsApp card. A partner can be a second owner.</p>';
         if (team.whatsapp.length === 0) html += '<div class="muted" style="margin-bottom: 8px;">No WhatsApp numbers yet.</div>';
         else {
             html += '<table><thead><tr><th>Name</th><th>Number</th><th>Role</th>' + (board.canEdit ? '<th></th>' : '') + '</tr></thead><tbody>';

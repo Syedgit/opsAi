@@ -208,6 +208,24 @@
             border-radius: 8px;
             font-size: 13px;
         }
+        .whatsapp-mode-picker {
+            display: flex;
+        }
+        .btn-mode {
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: #fff;
+            color: var(--text);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn-mode.active {
+            border-color: var(--primary);
+            background: #ecfdf5;
+            color: #065f46;
+        }
         .btn-copy {
             padding: 10px 16px;
             background: var(--primary);
@@ -1316,7 +1334,11 @@
 
                 <div class="whatsapp-setup-card" id="whatsappSetupCard">
                     <h3>WhatsApp</h3>
-                    <p>One opsAi number for all your businesses. You and your staff message it directly — no group needed.</p>
+                    <p>Choose how this store talks to opsAi. You can switch anytime.</p>
+                    <div id="whatsappOpsModePicker" class="whatsapp-mode-picker" style="display:none; margin: 12px 0; gap: 8px; flex-wrap: wrap;">
+                        <button type="button" class="btn-mode" data-ops-mode="direct" id="opsModeDirect">Direct chat (1:1)</button>
+                        <button type="button" class="btn-mode" data-ops-mode="group" id="opsModeGroup">Store group (invite link)</button>
+                    </div>
                     <div id="whatsappProvisionStatus" class="whatsapp-status none">Checking…</div>
                     <div id="whatsappProvisionBody">
                         <p id="whatsappProvisionMessage">Loading WhatsApp status…</p>
@@ -1693,17 +1715,50 @@
             }
         }
 
+        function showWhatsAppInviteLink(bodyEl, inviteLink) {
+            if (!bodyEl || !inviteLink) return;
+            const row = document.createElement('div');
+            row.id = 'whatsappInviteRow';
+            row.className = 'invite-link-row';
+            row.innerHTML = '<input type="text" readonly id="whatsappInviteLink" /><button type="button" class="btn-copy" id="copyInviteBtn">Copy invite link</button>';
+            bodyEl.appendChild(row);
+            document.getElementById('whatsappInviteLink').value = inviteLink;
+            document.getElementById('copyInviteBtn').addEventListener('click', () => {
+                navigator.clipboard.writeText(inviteLink);
+            });
+        }
+
+        async function setWhatsAppOpsMode(storeId, opsMode) {
+            const r = await fetch(`/api/stores/${encodeURIComponent(storeId)}/whatsapp-group-provision`, {
+                method: 'POST',
+                headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    opsMode,
+                    createGroup: opsMode === 'group',
+                }),
+            });
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(data.error || 'Could not save WhatsApp setup');
+            await loadWhatsAppProvision(storeId);
+            if (data.error && data.started === false) {
+                const messageEl = document.getElementById('whatsappProvisionMessage');
+                if (messageEl) messageEl.textContent = (messageEl.textContent || '') + ' ' + data.error;
+            }
+        }
+
         async function loadWhatsAppProvision(storeId) {
             const statusEl = document.getElementById('whatsappProvisionStatus');
             const messageEl = document.getElementById('whatsappProvisionMessage');
             const stepsEl = document.getElementById('whatsappManualSteps');
             const bodyEl = document.getElementById('whatsappProvisionBody');
+            const picker = document.getElementById('whatsappOpsModePicker');
             if (!storeId || !statusEl || !messageEl) return;
 
             const oldLink = document.getElementById('whatsappInviteRow');
             if (oldLink) oldLink.remove();
+            const oldCreate = document.getElementById('createGroupBtn');
+            if (oldCreate) oldCreate.remove();
             if (stepsEl) stepsEl.style.display = 'none';
-
 
             try {
                 const r = await fetch(`/api/stores/${encodeURIComponent(storeId)}/whatsapp-group-provision`, {
@@ -1714,42 +1769,69 @@
                     statusEl.textContent = 'Unavailable';
                     statusEl.className = 'whatsapp-status none';
                     messageEl.textContent = data.error || 'Could not load WhatsApp status.';
+                    if (picker) picker.style.display = 'none';
                     return;
                 }
 
+                const opsMode = data.opsMode === 'group' ? 'group' : 'direct';
                 const linked = data.activeGroups && data.activeGroups.length > 0;
                 const isAuto = data.autoProvisionEnabled === true;
+                const canManage = data.canManage === true;
 
-                if (linked) {
-                    statusEl.textContent = 'Connected';
-                    statusEl.className = 'whatsapp-status linked';
-                    messageEl.textContent = currentModules.money
-                        ? 'Your WhatsApp ops group is linked to this store. Send sales, invoices, or photos in the group and reply OK to confirm.'
-                        : 'Your WhatsApp ops group is linked to this location. Staff reply to reminders in the group. Publish the week schedule from the dashboard when it is ready.';
-                    return;
+                if (picker) {
+                    picker.style.display = canManage ? 'flex' : 'none';
+                    picker.querySelectorAll('.btn-mode').forEach((btn) => {
+                        btn.classList.toggle('active', btn.getAttribute('data-ops-mode') === opsMode);
+                        btn.onclick = () => {
+                            const next = btn.getAttribute('data-ops-mode');
+                            if (!next || next === opsMode) return;
+                            setWhatsAppOpsMode(storeId, next).catch((err) => {
+                                messageEl.textContent = err.message || 'Could not save WhatsApp setup.';
+                            });
+                        };
+                    });
                 }
 
-                if (isAuto && data.provision) {
-                    const prov = data.provision;
-                    const statusMap = {
-                        PENDING_WEBHOOK: { label: 'Creating group…', cls: 'pending', msg: 'Your ops group is being created. This usually takes under a minute.' },
-                        LINKED: { label: 'Ready', cls: 'linked', msg: 'Your group is ready. Share the invite link with your team.' },
-                        FAILED: { label: 'Failed', cls: 'failed', msg: prov.lastError || 'Group creation failed.' },
-                    };
-                    const info = statusMap[prov.status] || { label: prov.status, cls: 'none', msg: '' };
-                    statusEl.textContent = info.label;
-                    statusEl.className = 'whatsapp-status ' + info.cls;
-                    messageEl.textContent = info.msg;
-                    if (prov.status === 'LINKED' && prov.inviteLink) {
-                        const row = document.createElement('div');
-                        row.id = 'whatsappInviteRow';
-                        row.className = 'invite-link-row';
-                        row.innerHTML = '<input type="text" readonly id="whatsappInviteLink" /><button type="button" class="btn-copy" id="copyInviteBtn">Copy invite link</button>';
-                        bodyEl.appendChild(row);
-                        document.getElementById('whatsappInviteLink').value = prov.inviteLink;
-                        document.getElementById('copyInviteBtn').addEventListener('click', () => {
-                            navigator.clipboard.writeText(prov.inviteLink);
-                        });
+                if (opsMode === 'group') {
+                    if (linked || (data.provision && data.provision.status === 'LINKED' && data.provision.inviteLink)) {
+                        statusEl.textContent = 'Group ready';
+                        statusEl.className = 'whatsapp-status linked';
+                        messageEl.textContent = currentModules.money
+                            ? 'Share the invite link with staff. They send sales, invoices, or photos in the group; reply OK to confirm.'
+                            : 'Share the invite link with staff. They reply to reminders in the group.';
+                        showWhatsAppInviteLink(bodyEl, data.provision && data.provision.inviteLink);
+                        return;
+                    }
+                    if (data.provision && data.provision.status === 'PENDING_WEBHOOK') {
+                        statusEl.textContent = 'Creating group…';
+                        statusEl.className = 'whatsapp-status pending';
+                        messageEl.textContent = 'Your ops group is being created. This usually takes under a minute.';
+                        return;
+                    }
+                    if (data.provision && data.provision.status === 'FAILED') {
+                        statusEl.textContent = 'Group failed';
+                        statusEl.className = 'whatsapp-status failed';
+                        messageEl.textContent = data.provision.lastError || 'Group creation failed. Stay on 1:1 for now, or try again after Official Business Account.';
+                        return;
+                    }
+                    statusEl.textContent = 'Group preferred';
+                    statusEl.className = 'whatsapp-status pending';
+                    if (isAuto) {
+                        messageEl.textContent = 'Create an opsAi group for this store, then share the invite link (max 8 people).';
+                        if (canManage && !document.getElementById('createGroupBtn')) {
+                            const btn = document.createElement('button');
+                            btn.type = 'button';
+                            btn.id = 'createGroupBtn';
+                            btn.className = 'btn-copy';
+                            btn.textContent = 'Create invite link';
+                            btn.style.marginTop = '8px';
+                            btn.onclick = () => setWhatsAppOpsMode(storeId, 'group').catch((err) => {
+                                messageEl.textContent = err.message || 'Could not create group.';
+                            });
+                            bodyEl.appendChild(btn);
+                        }
+                    } else {
+                        messageEl.textContent = 'Invite-link groups need Meta Official Business Account (blue tick). Until then, use Direct chat (1:1) — same number, staff message opsAi one-to-one.';
                     }
                     return;
                 }

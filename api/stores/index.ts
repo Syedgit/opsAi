@@ -11,6 +11,8 @@ import { dashboardModules } from '../../lib/businessProfile';
 import { flattenTillExpenses, flattenTillPaidOuts, sourceActionId } from '../../lib/understanding/tillPaidOuts';
 import { utcMonthRange } from '../../lib/billing/plans';
 import { summarizeUsage } from '../../lib/understanding/usage';
+import { readWhatsAppOpsMode, withWhatsAppOpsMode, type WhatsAppOpsMode } from '../../lib/whatsappOpsMode';
+import { startWhatsAppGroupProvision } from '../../lib/whatsappGroupProvision';
 
 const prisma = new PrismaClient();
 
@@ -227,10 +229,6 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
 export default loggedHandler('stores', handler);
 
 async function sendWhatsAppGroupStatus(req: VercelRequest, res: VercelResponse, path: string): Promise<void> {
-  if (req.method !== 'GET') {
-    res.status(405).json({ error: 'Method not allowed' });
-    return;
-  }
   const fromPath = path.match(/\/stores\/([^/]+)\/whatsapp-group-provision/i);
   const storeId = String(req.query.storeId || fromPath?.[1] || '').toUpperCase();
   if (!storeId) {
@@ -249,9 +247,76 @@ async function sendWhatsAppGroupStatus(req: VercelRequest, res: VercelResponse, 
     res.status(403).json({ error: 'Not a member of this store' });
     return;
   }
+  const canManage = member.role === 'OWNER' || member.role === 'MANAGER';
 
+  if (req.method === 'POST') {
+    if (!canManage) {
+      res.status(403).json({ error: 'Only owners or managers can change WhatsApp setup' });
+      return;
+    }
+    const body = (req.body || {}) as { opsMode?: string; createGroup?: boolean; subject?: string };
+    if (body.opsMode !== 'direct' && body.opsMode !== 'group') {
+      res.status(400).json({ error: 'opsMode must be direct or group' });
+      return;
+    }
+    const opsMode: WhatsAppOpsMode = body.opsMode;
+    const store = await prisma.storeConfig.findUnique({
+      where: { storeId },
+      select: { storeName: true, profileJson: true },
+    });
+    if (!store) {
+      res.status(404).json({ error: 'Store not found' });
+      return;
+    }
+    await prisma.storeConfig.update({
+      where: { storeId },
+      data: { profileJson: withWhatsAppOpsMode(store.profileJson, opsMode) as object },
+    });
+
+    let provisionResult: { started?: boolean; error?: string } = {};
+    if (opsMode === 'group' && body.createGroup === true && isGroupAutoProvisionEnabled()) {
+      const existing = await prisma.storeWhatsAppGroup.findFirst({ where: { storeId, active: true } });
+      if (!existing) {
+        const subject =
+          (typeof body.subject === 'string' && body.subject.trim()) ||
+          `${store.storeName} ops`.slice(0, 128);
+        const started = await startWhatsAppGroupProvision(prisma, {
+          storeId,
+          userId: authUser.userId,
+          subject,
+        });
+        if (started.ok) provisionResult = { started: true };
+        else provisionResult = { started: false, error: started.error };
+      }
+    }
+
+    const status = await loadWhatsAppOpsStatus(storeId);
+    res.json({ success: true, canManage, ...status, ...provisionResult });
+    return;
+  }
+
+  if (req.method !== 'GET') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  const status = await loadWhatsAppOpsStatus(storeId);
+  res.json({ success: true, canManage, ...status });
+}
+
+async function loadWhatsAppOpsStatus(storeId: string) {
   let provision = null;
   let activeGroups: Array<{ id: string; whatsappGroupId: string; createdAt: Date }> = [];
+  let opsMode: WhatsAppOpsMode = 'direct';
+  try {
+    const store = await prisma.storeConfig.findUnique({
+      where: { storeId },
+      select: { profileJson: true },
+    });
+    opsMode = readWhatsAppOpsMode(store?.profileJson);
+  } catch (error) {
+    if (!isMissingTable(error)) logAppError('stores.whatsapp_group.profile', serializeError(error));
+  }
   try {
     provision = await prisma.whatsAppGroupProvision.findFirst({
       where: { storeId },
@@ -269,8 +334,8 @@ async function sendWhatsAppGroupStatus(req: VercelRequest, res: VercelResponse, 
     if (!isMissingTable(error)) logAppError('stores.whatsapp_group.groups', serializeError(error));
   }
 
-  res.json({
-    success: true,
+  return {
+    opsMode,
     groupSetupMode: getGroupSetupMode(),
     autoProvisionEnabled: isGroupAutoProvisionEnabled(),
     provision: provision
@@ -287,5 +352,5 @@ async function sendWhatsAppGroupStatus(req: VercelRequest, res: VercelResponse, 
         }
       : null,
     activeGroups,
-  });
+  };
 }
