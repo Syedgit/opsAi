@@ -32,19 +32,26 @@ export async function createPendingAction(
   return actionId;
 }
 
-/** Photos waiting for the store's daily text are not confirmed (or cancelled) by a plain OK. */
-const NOT_AWAITING_TEXT = { NOT: { payloadJson: { path: ['awaiting_text'], equals: true } } };
+/**
+ * Photos waiting for the store's daily text are not confirmed (or cancelled) by a plain OK.
+ * Filter in JS — a Prisma `NOT { path equals true }` drops every row where the key is missing
+ * (SQL NULL), which is every normal night report.
+ */
+export function isAwaitingText(payload: unknown): boolean {
+  return Boolean(payload && typeof payload === 'object' && (payload as Record<string, unknown>).awaiting_text === true);
+}
 
 export async function getLatestPendingAction(prisma: PrismaClient, phoneE164: string) {
-  return prisma.pendingActions.findFirst({
+  const rows = await prisma.pendingActions.findMany({
     where: {
       phoneE164,
       status: PendingStatus.PENDING,
       expiresAt: { gt: new Date() },
-      ...NOT_AWAITING_TEXT,
     },
     orderBy: { createdAt: 'desc' },
+    take: 40,
   });
+  return rows.find((row) => !isAwaitingText(row.payloadJson)) ?? null;
 }
 
 /**
@@ -54,16 +61,16 @@ export async function getLatestPendingAction(prisma: PrismaClient, phoneE164: st
 export async function getLatestPendingBatch(prisma: PrismaClient, phoneE164: string) {
   const latest = await getLatestPendingAction(prisma, phoneE164);
   if (!latest) return [];
-  return prisma.pendingActions.findMany({
+  const rows = await prisma.pendingActions.findMany({
     where: {
       phoneE164,
       status: PendingStatus.PENDING,
       expiresAt: { gt: new Date() },
       messageIdInbound: latest.messageIdInbound,
-      ...NOT_AWAITING_TEXT,
     },
     orderBy: { createdAt: 'asc' },
   });
+  return rows.filter((row) => !isAwaitingText(row.payloadJson));
 }
 
 export async function confirmPendingAction(prisma: PrismaClient, actionId: string): Promise<boolean> {
