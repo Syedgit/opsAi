@@ -581,7 +581,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       }
       if (body.enrolled && !aiChatSelfEnrollAllowed() && !readAiChatState(store.profileJson).enrolled) {
         res.status(402).json({
-          error: `AI chat is an add-on ($${AI_CHAT_USD_PER_STORE_PER_MONTH}/store/mo). Self-enroll is off — turn on AI_CHAT_SELF_ENROLL for beta, or enable from billing later.`,
+          error: `AI chat enrollment is temporarily closed ($${AI_CHAT_USD_PER_STORE_PER_MONTH}/store/mo add-on). Try again later or contact support.`,
         });
         return;
       }

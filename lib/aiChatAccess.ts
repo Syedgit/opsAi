@@ -59,12 +59,16 @@ export function withAiChatEnrollment(
   };
 }
 
-/** Owners may self-enroll only when this is on (trial / beta). Paid checkout can replace it later. */
+/**
+ * Owners enroll from Store admin in the normal product flow.
+ * Optional kill switch: set AI_CHAT_SELF_ENROLL=false to close new enrollments globally.
+ */
 export function aiChatSelfEnrollAllowed(): boolean {
   const v = (process.env.AI_CHAT_SELF_ENROLL || process.env.ASK_DATA_SELF_ENROLL || '')
     .toLowerCase()
     .trim();
-  return v === 'true' || v === '1' || v === 'yes';
+  if (!v) return true;
+  return !(v === 'false' || v === '0' || v === 'no' || v === 'off');
 }
 
 export function isAiChatEnrolled(profileJson: unknown): boolean {

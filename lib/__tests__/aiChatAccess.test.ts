@@ -36,9 +36,11 @@ describe('aiChatAccess', () => {
     ).toEqual({ enrolled: true, enrolledAt: '2026-11-01T00:00:00.000Z' });
   });
 
-  it('gates self-enroll behind AI_CHAT_SELF_ENROLL', () => {
+  it('allows owner self-enroll by default; AI_CHAT_SELF_ENROLL=false is a kill switch', () => {
     delete process.env.AI_CHAT_SELF_ENROLL;
     delete process.env.ASK_DATA_SELF_ENROLL;
+    expect(aiChatSelfEnrollAllowed()).toBe(true);
+    process.env.AI_CHAT_SELF_ENROLL = 'false';
     expect(aiChatSelfEnrollAllowed()).toBe(false);
     process.env.AI_CHAT_SELF_ENROLL = 'true';
     expect(aiChatSelfEnrollAllowed()).toBe(true);

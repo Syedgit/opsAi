@@ -850,10 +850,9 @@
             }
         } else if (isOwner) {
             if (chat.selfEnroll) {
-                html += '<p class="muted">Self-enroll is open for this environment (beta).</p>' +
-                    '<button type="button" class="primary" id="enrollAiChat">Enroll AI chat · $' + esc(String(price)) + '/mo</button>';
+                html += '<button type="button" class="primary" id="enrollAiChat">Enroll AI chat · $' + esc(String(price)) + '/mo</button>';
             } else {
-                html += '<div class="notice">Enrollment is closed until billing for this add-on is live. Ask ops to set <code>AI_CHAT_SELF_ENROLL</code> for a beta store.</div>';
+                html += '<div class="notice">New AI chat enrollments are temporarily closed. Stores already enrolled keep access.</div>';
             }
         } else {
             html += '<p class="muted">Not enrolled. The store owner can enroll when the add-on is available.</p>';
