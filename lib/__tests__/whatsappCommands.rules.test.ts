@@ -4,9 +4,12 @@ import { postToStoreGroups, sendWhatsAppMessage } from '../whatsappMessaging';
 import { defaultSetup } from '../tasks/storeSetup';
 
 jest.mock('../whatsappMessaging', () => ({
-  sendWhatsAppMessage: jest.fn(),
+  sendWhatsAppMessage: jest.fn().mockResolvedValue(true),
   postToStoreGroups: jest.fn().mockResolvedValue(0),
   deliverStoreMessage: jest.fn().mockResolvedValue({ posted: 0, via: 'none' }),
+  managerPhonesForStore: jest.fn().mockResolvedValue([]),
+  sendWhatsAppButtons: jest.fn().mockResolvedValue({ ok: true, windowClosed: false }),
+  sendWhatsAppTemplate: jest.fn().mockResolvedValue({ ok: true, windowClosed: false }),
 }));
 jest.mock('../googleSheetsWrite', () => ({ writeConfirmedActionToSheets: jest.fn().mockResolvedValue('skipped') }));
 
@@ -433,6 +436,43 @@ describe('invoice remaining', () => {
     expect(updates[1][0].where).toEqual({ actionId: 'close-2' });
     expect(updates[1][0].data.status).toBe('CANCELLED');
     expect(prisma.pendingActions.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('OK keeps hard review flags in WhatsApp', () => {
+  it('refuses OK when a check failed', async () => {
+    const { prisma } = makePrisma({
+      pending: [
+        pendingRow({
+          _kind: 'daily_close',
+          checks: [{ status: 'fail', message: 'Deposit does not add up' }],
+        }),
+      ],
+    });
+    const result = await handleWhatsAppCommand(prisma, PHONE, 'OK');
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('Not saved yet');
+    expect(result.message).toContain('Deposit does not add up');
+    expect(result.message).toContain('FIX');
+    expect(prisma.pendingActions.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('saves soft flags and repeats them in the OK reply', async () => {
+    const { prisma } = makePrisma({
+      pending: [
+        pendingRow({
+          _kind: 'daily_close',
+          needs_review: ['cashSales'],
+          checks: [{ status: 'warn', message: 'Deposit looks high' }],
+        }),
+      ],
+    });
+    const result = await handleWhatsAppCommand(prisma, PHONE, 'OK');
+    expect(result.success).toBe(true);
+    expect(result.message).toContain('Saved');
+    expect(result.message).toContain('Saved with flags');
+    expect(result.message).toContain('Deposit looks high');
+    expect(prisma.pendingActions.updateMany).toHaveBeenCalled();
   });
 });
 

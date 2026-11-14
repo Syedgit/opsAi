@@ -73,6 +73,45 @@ export function checkIssueMessages(payload: unknown): string[] {
     .filter(Boolean);
 }
 
+/** Hard problems — do not confirm with OK until FIX (or CANCEL). */
+export function failCheckMessages(payload: unknown): string[] {
+  if (!payload || typeof payload !== 'object') return [];
+  const checks = (payload as { checks?: unknown }).checks;
+  if (!Array.isArray(checks)) return [];
+  return checks
+    .filter((c): c is EntryCheck => Boolean(c) && typeof c === 'object')
+    .filter((c) => c.status === 'fail')
+    .map((c) => (typeof c.message === 'string' && c.message.trim() ? c.message.trim() : 'Check failed'))
+    .filter(Boolean);
+}
+
+/** Soft flags to repeat in the OK reply so the person finishes in WhatsApp, not on the dashboard. */
+export function whatsAppReviewFollowUp(payload: unknown, confidence?: number | null): string | null {
+  const fails = failCheckMessages(payload);
+  if (fails.length > 0) return null;
+  const review = entryReview(payload, confidence);
+  if (!review.hasIssues) return null;
+  return `⚠️ Saved with flags:\n${review.messages.map((m) => `• ${m}`).join('\n')}\nReply FIX <field> <value> if something is wrong.`;
+}
+
+/** One short line for lists / admin pings (first two messages). */
+export function shortReviewBlurb(payload: unknown, confidence?: number | null): string | null {
+  const review = entryReview(payload, confidence);
+  if (!review.hasIssues) return null;
+  return review.messages.slice(0, 2).join(' · ');
+}
+
+/** WhatsApp note for owners/managers right after a flagged report was saved. */
+export function adminFlagNotice(storeName: string, blurbs: string[]): string | null {
+  const lines = blurbs.map((b) => b.trim()).filter(Boolean);
+  if (lines.length === 0) return null;
+  return [
+    `⚠️ ${storeName} — report saved with flags:`,
+    ...lines.map((b) => `• ${b}`),
+    'Ask the closer to FIX on WhatsApp if a number is wrong, or check Daily sales / Invoices on the dashboard.',
+  ].join('\n');
+}
+
 export function entryReview(payload: unknown, confidence?: number | null): EntryReview {
   const checkMsgs = checkIssueMessages(payload);
   const fields = needsReviewFields(payload);

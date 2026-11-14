@@ -9,6 +9,7 @@ import {
   getLatestPendingAction,
   getLatestPendingBatch,
 } from './pendingActionService';
+import { adminFlagNotice, failCheckMessages, shortReviewBlurb, whatsAppReviewFollowUp } from './entryReview';
 import { describeDepositRule, matchStore, type Check } from './understanding/checks';
 import { applyFixToPayload, dailyClosePayload, describeEntryPayload, invoicePayload, scheduleHoursMessage, scheduleSheetMessage } from './understanding/plan';
 import { mergeDailyCloseReports } from './understanding/closeMerge';
@@ -114,6 +115,28 @@ async function handleOK(prisma: PrismaClient, phoneE164: string, inboundGroupId?
     };
   }
 
+  // Hard fails stay in WhatsApp: FIX before OK. Soft flags can save, then we repeat them in the reply.
+  const blocked: string[] = [];
+  for (const pending of batch) {
+    const fails = failCheckMessages(pending.payloadJson);
+    if (fails.length === 0) continue;
+    for (const msg of fails) {
+      if (!blocked.includes(msg)) blocked.push(msg);
+    }
+  }
+  if (blocked.length > 0) {
+    return {
+      success: false,
+      message: [
+        '❌ Not saved yet — fix these first:',
+        ...blocked.map((m) => `• ${m}`),
+        '',
+        'Reply FIX <field> <value> (example: FIX cash 1260), then OK. Or CANCEL.',
+      ].join('\n'),
+      storeId: batch[0].storeId,
+    };
+  }
+
   let sheetsWritten = 0;
   let sheetsFailed = 0;
   const learned: string[] = [];
@@ -121,6 +144,7 @@ async function handleOK(prisma: PrismaClient, phoneE164: string, inboundGroupId?
   const hoursPostedDirect: string[] = [];
   const hoursNotPosted: string[] = [];
   const invoiceReminders: string[] = [];
+  const softFlags: string[] = [];
 
   for (const pending of batch) {
     let payload = pending.payloadJson as Record<string, unknown> | null;
@@ -161,6 +185,9 @@ async function handleOK(prisma: PrismaClient, phoneE164: string, inboundGroupId?
     if (!mergedAway) {
       await confirmPendingAction(prisma, pending.actionId);
     }
+
+    const followUp = whatsAppReviewFollowUp(payload, pending.confidence);
+    if (followUp && !softFlags.includes(followUp)) softFlags.push(followUp);
 
     // The owner saw "OK also teaches me this store's deposit rule" and confirmed, so remember it.
     const proposed = payload?.suggested_deposit_rule;
@@ -280,6 +307,7 @@ async function handleOK(prisma: PrismaClient, phoneE164: string, inboundGroupId?
     message = `✅ Saved ${count} to your dashboard.`;
   }
 
+  if (softFlags.length > 0) message += `\n\n${softFlags.join('\n\n')}`;
   if (learned.length > 0) message += `\n${learned.join('\n')}`;
   if (hoursPosted.length > 0) message += `\n📣 Posted this week's shifts to the ${hoursPosted.join(' and ')} group.`;
   if (hoursPostedDirect.length > 0) {
@@ -298,8 +326,18 @@ async function handleOK(prisma: PrismaClient, phoneE164: string, inboundGroupId?
   } catch {
     isStaff = false;
   }
-  const wrapUp = await maybePostDaySummary(prisma, batch, isStaff ? undefined : phoneE164);
+
+  const flagBlurbs = batch
+    .map((p) => shortReviewBlurb(p.payloadJson, p.confidence))
+    .filter((b): b is string => Boolean(b));
+  const wrapUp = await maybePostDaySummary(prisma, batch, isStaff ? undefined : phoneE164, flagBlurbs);
   if (wrapUp) message += isStaff ? '\n📤 The end-of-day summary went to the owner and managers.' : `\n\n${wrapUp}`;
+
+  // If there was no day summary (e.g. invoice only), still ping owners/managers about flags.
+  if (flagBlurbs.length > 0 && !wrapUp) {
+    const flagged = await notifyManagersOfFlags(prisma, batch[0].storeId, flagBlurbs, isStaff ? undefined : phoneE164);
+    if (flagged > 0) message += `\n📤 Flagged details went to ${flagged} owner${flagged === 1 ? '' : 's'}/manager${flagged === 1 ? '' : 's'}.`;
+  }
 
   const bagNote = await maybeDepositBagNote(prisma, batch);
   if (bagNote) message += `\n${bagNote}`;
@@ -397,10 +435,34 @@ async function handleStop(prisma: PrismaClient, phoneE164: string): Promise<Comm
   };
 }
 
+async function notifyManagersOfFlags(
+  prisma: PrismaClient,
+  storeId: string,
+  blurbs: string[],
+  senderPhone?: string
+): Promise<number> {
+  try {
+    const store = await prisma.storeConfig.findUnique({ where: { storeId }, select: { storeName: true } });
+    const notice = adminFlagNotice(store?.storeName || storeId, blurbs);
+    if (!notice) return 0;
+    const phones = await managerPhonesForStore(prisma, storeId);
+    if (!Array.isArray(phones)) return 0;
+    let sent = 0;
+    for (const phone of phones.filter((p) => p !== senderPhone)) {
+      if (await sendWhatsAppMessage(prisma, phone, notice, storeId)) sent += 1;
+    }
+    return sent;
+  } catch (e) {
+    console.warn('Could not send flag notice to managers', e instanceof Error ? e.message : e);
+    return 0;
+  }
+}
+
 async function maybePostDaySummary(
   prisma: PrismaClient,
   batch: Array<{ storeId: string; type: string; payloadJson: unknown }>,
-  senderPhone?: string
+  senderPhone?: string,
+  flagBlurbs: string[] = []
 ): Promise<string | null> {
   const storeId = batch[0]?.storeId;
   if (!storeId) return null;
@@ -422,6 +484,8 @@ async function maybePostDaySummary(
     if (!activity) return null;
     let text = await buildDaySummary(prisma, store ?? { storeId }, kind, day, now);
     if (!text) return null;
+    const flagNote = adminFlagNotice(store?.storeName || storeId, flagBlurbs);
+    if (flagNote) text += `\n\n${flagNote}`;
     const hasClose = rows.some((r) => r.type === 'STORE_SALES' || r.payload._kind === 'daily_close');
     if (hasClose) {
       const sent = await sendSummaryToManagers(prisma, { storeId, storeName: store?.storeName || 'your', day }, text, senderPhone);

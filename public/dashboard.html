@@ -1619,6 +1619,12 @@
             if (hasChecks) return '<span class="badge badge-success">\u2713 Looks good</span>';
             return '<span style="color:#999">\u2014</span>';
         }
+        function reviewBlurbHtml(d, confidence) {
+            const review = entryReviewOf(d, confidence);
+            if (!review.hasIssues) return '';
+            const blurb = review.messages.slice(0, 2).join(' · ');
+            return '<div class="review-blurb" style="margin-top:4px;font-size:12px;line-height:1.35;color:#b45309;max-width:280px;">\u26a0 ' + esc(blurb) + '</div>';
+        }
         function reviewPanelHtml(d, confidence) {
             const review = entryReviewOf(d, confidence);
             if (!review.hasIssues) return '';
@@ -2411,9 +2417,10 @@
                         const d = item.data || {};
                         const day = d.report_date ? fmtDay(d.report_date) : fmtDay(item.date);
                         const checkBadge = reviewBadgeHtml(d, item.confidence);
+                        const blurb = reviewBlurbHtml(d, item.confidence);
                         tableHTML += `
                             <tr onclick="viewDetail('sales', '${esc(item.id)}')" style="cursor: pointer;">
-                                <td>${esc(day)}</td>
+                                <td>${esc(day)}${blurb}</td>
                                 <td>${money(d.cash)}</td>
                                 <td>${money(d.card)}</td>
                                 <td><strong>${money(d.total_inside)}</strong></td>
@@ -2438,10 +2445,11 @@
                         const paid = invoiceIsPaid(d);
                         const left = invoiceRemaining(d);
                         const how = invoiceHowPaid(d);
+                        const invBlurb = reviewBlurbHtml(d, item.confidence);
                         tableHTML += `
                             <tr onclick="viewDetail('invoices', '${item.id}')" style="cursor: pointer;">
                                 <td>${esc(displayDate)}</td>
-                                <td><strong>${esc(d.vendor || 'N/A')}</strong></td>
+                                <td><strong>${esc(d.vendor || 'N/A')}</strong>${invBlurb}</td>
                                 <td>${esc(d.invoice_number || 'N/A')}</td>
                                 <td>${money(d.amount)}</td>
                                 <td><span class="badge ${paid ? 'badge-success' : 'badge-pending'}">${esc(how)}</span></td>
