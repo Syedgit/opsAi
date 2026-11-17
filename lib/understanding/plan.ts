@@ -37,6 +37,7 @@ import {
   fuelPricesPayload,
   resolveFuelSource,
 } from './fuelPrices';
+import { sanitizeNeedsReviewFields } from '../entryReview';
 
 /**
  * Turns a reading (Understanding) into saved-after-confirmation entries and a WhatsApp reply.
@@ -613,9 +614,14 @@ const REVIEW_LABEL: Record<string, string> = {
   payouts: 'paid outs',
 };
 
+function cleanReview(needsReview: string[]): string[] {
+  return sanitizeNeedsReviewFields(needsReview);
+}
+
 function reviewLine(needsReview: string[]): string[] {
-  if (needsReview.length === 0) return [];
-  const words = [...new Set(needsReview.map((key) => REVIEW_LABEL[key.replace(/^reports?\.\d*\.?/, '')] ?? key))];
+  const cleaned = cleanReview(needsReview);
+  if (cleaned.length === 0) return [];
+  const words = [...new Set(cleaned.map((key) => REVIEW_LABEL[key.replace(/^reports?\.\d*\.?/, '')] ?? key))];
   return [`❓ Please check: ${words.join(', ')}`];
 }
 
@@ -706,7 +712,7 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
           storeId: store.storeId,
           storeName: store.storeName,
           actionType: 'STORE_SALES',
-          payload: dailyClosePayload(merged, checks, understanding.needsReview, suggestedRule, {
+          payload: dailyClosePayload(merged, checks, cleanReview(understanding.needsReview), suggestedRule, {
             updatesActionId: existing?.actionId,
             insideFromSheet,
             textReport,
@@ -716,7 +722,7 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
           confidence: understanding.confidence,
           lines: [
             ...lines,
-            ...reviewLine(understanding.needsReview),
+            ...reviewLine(cleanReview(understanding.needsReview)),
             ...(suggestedRule
               ? [
                   `💡 OK also teaches me ${store.storeName}'s deposit rule (${describeDepositRule(suggestedRule)}). I'll warn you if a deposit ever differs.`,
@@ -753,7 +759,7 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
         : `🧾 Invoice · ${invoice.vendorName ?? 'Unknown vendor'} · ${store.storeName}`;
       const lines = invoiceLines(invoice, store.storeName, checks, today);
       if (updatesActionId) lines[0] = header;
-      const review = invoiceReviewFields(understanding.needsReview, invoice);
+      const review = invoiceReviewFields(cleanReview(understanding.needsReview), invoice);
       return {
         entries: [
           {
@@ -782,9 +788,9 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
           storeId: store.storeId,
           storeName: store.storeName,
           actionType: 'UNKNOWN',
-          payload: depositPayload(receipt, checks, understanding.needsReview),
+          payload: depositPayload(receipt, checks, cleanReview(understanding.needsReview)),
           confidence: understanding.confidence,
-          lines: [...depositLines(receipt, store.storeName, checks), ...reviewLine(understanding.needsReview)],
+          lines: [...depositLines(receipt, store.storeName, checks), ...reviewLine(cleanReview(understanding.needsReview))],
           checks,
         };
       });
@@ -823,9 +829,9 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
             storeId: store.storeId,
             storeName: store.storeName,
             actionType: 'UNKNOWN',
-            payload: schedulePayload(understanding.schedule, withStoreCheck, understanding.needsReview),
+            payload: schedulePayload(understanding.schedule, withStoreCheck, cleanReview(understanding.needsReview)),
             confidence: understanding.confidence,
-            lines: [...scheduleLines(withStoreCheck, store.storeName), ...reviewLine(understanding.needsReview)],
+            lines: [...scheduleLines(withStoreCheck, store.storeName), ...reviewLine(cleanReview(understanding.needsReview))],
             checks,
           },
         ],
@@ -859,11 +865,11 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
             storeId: store.storeId,
             storeName: store.storeName,
             actionType: 'ORDER_REQUEST',
-            payload: orderPayload(understanding.order, vendor, catalog, understanding.needsReview, checks),
+            payload: orderPayload(understanding.order, vendor, catalog, cleanReview(understanding.needsReview), checks),
             confidence: understanding.confidence,
             lines: [
               ...orderLines(understanding.order, store.storeName, vendor, catalog),
-              ...reviewLine(understanding.needsReview),
+              ...reviewLine(cleanReview(understanding.needsReview)),
             ],
             checks,
           },
@@ -884,7 +890,7 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
       if (decided.reason.startsWith('could not tell')) {
         checks.push({ id: 'fuel_source_unclear', status: 'warn', message: decided.reason });
       }
-      const payload = fuelPricesPayload(reading, decided.source, station, observed, checks, understanding.needsReview);
+      const payload = fuelPricesPayload(reading, decided.source, station, observed, checks, cleanReview(understanding.needsReview));
       return {
         entries: [
           {
@@ -896,7 +902,7 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
             confidence: understanding.confidence,
             lines: [
               ...fuelPriceLines(reading, decided.source, store.storeName, station, checks),
-              ...reviewLine(understanding.needsReview),
+              ...reviewLine(cleanReview(understanding.needsReview)),
             ],
             checks,
           },

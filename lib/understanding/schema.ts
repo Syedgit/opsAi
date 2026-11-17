@@ -44,7 +44,7 @@ export const DailyCloseReportSchema = z.object({
   reportedDeposit: optionalAmount,
   /** Day total the sender or POS wrote ("Net cash", POS "Total Sales"). */
   reportedDayTotal: optionalAmount,
-  /** False when the POS period is still open (partial day). */
+  /** POS period state when printed. Far-future PERIOD TO often means false even on a finished day — do not treat as an owner warning by itself. */
   periodClosed: z.boolean().nullable().optional(),
 });
 export type DailyCloseReport = z.infer<typeof DailyCloseReportSchema>;

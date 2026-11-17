@@ -60,4 +60,24 @@ describe('entryReview', () => {
     expect(notice).toContain('Deposit looks high');
     expect(notice).toContain('dashboard');
   });
+
+  it('ignores partial-day / period_open noise and AI prose in needs_review', () => {
+    const review = entryReview(
+      {
+        checks: [
+          { id: 'period_open', status: 'warn', message: 'This looks like a partial day (the register period is still open).' },
+          { status: 'warn', message: 'Deposit looks high' },
+        ],
+        needs_review: [
+          'fuelSales not shown',
+          'Net Sales of 1660.75 is not mapped to a total field',
+          'Report is for an unfinished day',
+          'cashSales',
+        ],
+      },
+      0.9
+    );
+    expect(review.messages).toEqual(['Deposit looks high', 'Unclear: cash']);
+    expect(review.messages.join(' ')).not.toMatch(/partial day|unfinished|Net Sales|fuelSales not shown/i);
+  });
 });

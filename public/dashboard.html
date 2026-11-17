@@ -819,6 +819,34 @@
         #summaryPage .page-subtitle { color: #737373; }
         #summaryPage .data-table th { color: #737373; font-weight: 600; }
         #summaryPage .data-table td { color: #525252; }
+        .data-toolbar {
+            display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+            margin: 0 0 14px; padding: 10px 12px; background: var(--bg); border-radius: 10px;
+            border: 1px solid var(--border);
+        }
+        .data-toolbar input[type="search"] {
+            flex: 1 1 180px; min-width: 140px; padding: 8px 12px; border: 1px solid var(--border);
+            border-radius: 8px; font-size: 14px;
+        }
+        .data-toolbar label { font-size: 13px; color: var(--text-light); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+        .entry-edit {
+            margin-top: 20px; padding: 16px; background: var(--bg); border-radius: 10px; border: 1px solid var(--border);
+        }
+        .entry-edit h3 { margin: 0 0 8px; font-size: 16px; }
+        .entry-edit .muted { font-size: 13px; color: var(--text-light); margin: 0 0 12px; }
+        .entry-edit .edit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+        .entry-edit label { display: block; font-size: 12px; color: var(--text-light); margin-bottom: 4px; }
+        .entry-edit input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; box-sizing: border-box; }
+        .entry-edit .edit-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; align-items: center; }
+        .entry-edit .edit-actions button {
+            padding: 8px 14px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; font-size: 13px;
+        }
+        .entry-edit .btn-save { background: var(--primary); color: #fff; }
+        .entry-edit .btn-clear { background: #fff; color: var(--text); border: 1px solid var(--border) !important; }
+        .entry-edit #entryEditStatus { font-size: 13px; color: var(--text-light); }
+        @media (max-width: 640px) {
+            .entry-edit .edit-grid { grid-template-columns: 1fr; }
+        }
         .rpt-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 16px; }
         .rpt-toolbar button, .rpt-toolbar .rpt-apply {
             padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border);
@@ -1169,6 +1197,10 @@
                 <a href="/tasks" class="menu-item" id="tasksMenuItem">
                     <span class="menu-item-icon">✅</span>
                     <span>Tasks &amp; alerts</span>
+                </a>
+                <a href="/crew" class="menu-item" id="crewMenuItem">
+                    <span class="menu-item-icon">💬</span>
+                    <span>Crew chat</span>
                 </a>
             </div>
             
@@ -1583,7 +1615,13 @@
         }
         function checkIssues(d) {
             const checks = Array.isArray(d.checks) ? d.checks : [];
-            return checks.filter(c => c.status === 'warn' || c.status === 'fail');
+            const ignoreMsg = /partial day|register (period )?still open|period is still open|unfinished day/i;
+            return checks.filter(function (c) {
+                if (!(c.status === 'warn' || c.status === 'fail')) return false;
+                if (c.id === 'period_open') return false;
+                if (c.message && ignoreMsg.test(String(c.message))) return false;
+                return true;
+            });
         }
         const REVIEW_FIELD_LABEL = {
             cardSales: 'card/credit', cashSales: 'cash', storeSalesTotal: 'non-fuel total',
@@ -1600,8 +1638,11 @@
             const fields = Array.isArray(d && d.needs_review) ? d.needs_review.filter(Boolean) : [];
             const labels = [];
             fields.forEach(function (raw) {
-                const key = String(raw).replace(/^reports?\.\d*\.?/, '');
-                const label = REVIEW_FIELD_LABEL[key] || key;
+                const text = String(raw || '').trim();
+                if (!text || text.length > 48 || /\s/.test(text)) return; // drop AI prose
+                const key = text.replace(/^reports?\.\d+\./, '').replace(/^invoice\./, '').trim();
+                if (!REVIEW_FIELD_LABEL[key]) return;
+                const label = REVIEW_FIELD_LABEL[key];
                 if (label && labels.indexOf(label) < 0) labels.push(label);
             });
             const messages = checkMsgs.slice();
@@ -2400,19 +2441,82 @@
                 '<p style="font-size: 12px; color: var(--text-light);">Scheduled hours from the posted sheet, adjusted where the manager corrected them. No pay is calculated or stored.</p>';
         }
 
+        let dataListState = { items: [], type: '', query: '', flaggedOnly: false };
+
+        function itemSearchBlob(item, type) {
+            const d = item.data || {};
+            const bits = [
+                item.id, type, d.vendor, d.invoice_number, d.notes, d.reason, d.category, d.description,
+                d.report_date, d.invoice_date, d.order_batch_id,
+            ];
+            if (Array.isArray(d.needs_review)) bits.push(d.needs_review.join(' '));
+            const review = entryReviewOf(d, item.confidence);
+            if (review.messages.length) bits.push(review.messages.join(' '));
+            return bits.filter(Boolean).join(' ').toLowerCase();
+        }
+
+        function filterDataItems(items, type, query, flaggedOnly) {
+            const q = String(query || '').trim().toLowerCase();
+            return (items || []).filter(function (item) {
+                const d = item.data || {};
+                if (flaggedOnly && !entryReviewOf(d, item.confidence).hasIssues) return false;
+                if (!q) return true;
+                return itemSearchBlob(item, type).indexOf(q) !== -1;
+            });
+        }
+
+        function dataToolbarHtml(type, total, shown) {
+            return '<div class="data-toolbar">' +
+                '<input type="search" id="dataSearchInput" placeholder="Search ' + esc(type) + ' (vendor, day, invoice #, flags…)" value="' + esc(dataListState.query) + '" autocomplete="off">' +
+                '<label><input type="checkbox" id="dataFlaggedOnly"' + (dataListState.flaggedOnly ? ' checked' : '') + '> Flagged only</label>' +
+                '<span class="muted" style="font-size:12px;color:var(--text-light);">' + shown + ' of ' + total + '</span>' +
+                '</div>';
+        }
+
+        function bindDataToolbar(container) {
+            const search = document.getElementById('dataSearchInput');
+            const flagged = document.getElementById('dataFlaggedOnly');
+            if (search) {
+                search.oninput = function () {
+                    dataListState.query = search.value || '';
+                    paintDataTable(container);
+                };
+            }
+            if (flagged) {
+                flagged.onchange = function () {
+                    dataListState.flaggedOnly = Boolean(flagged.checked);
+                    paintDataTable(container);
+                };
+            }
+        }
+
         // Render table based on type
         function renderTable(container, items, type) {
+            dataListState = { items: items || [], type: type, query: '', flaggedOnly: false };
+            paintDataTable(container);
+        }
+
+        function paintDataTable(container) {
+            const type = dataListState.type;
+            const items = dataListState.items;
             console.log(`renderTable called with type: ${type}, items count: ${items.length}`);
             if (!items || items.length === 0) {
                 container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><h3>No data available</h3></div>';
                 return;
             }
+            const filtered = filterDataItems(items, type, dataListState.query, dataListState.flaggedOnly);
+            let tableHTML = dataToolbarHtml(type, items.length, filtered.length);
+            if (filtered.length === 0) {
+                container.innerHTML = tableHTML + '<div class="empty-state"><h3>No matches</h3><p>Try another search or clear Flagged only.</p></div>';
+                bindDataToolbar(container);
+                return;
+            }
             
-            let tableHTML = '<div class="table-wrap"><table class="data-table"><thead><tr>';
+            tableHTML += '<div class="table-wrap"><table class="data-table"><thead><tr>';
             
             if (type === 'sales') {
                 tableHTML += '<th>Day</th><th>Cash</th><th>Card</th><th>Inside total</th><th>Gas</th><th>Deposit</th><th>Checks</th><th>Actions</th></tr></thead><tbody>';
-                items.forEach((item, index) => {
+                filtered.forEach((item, index) => {
                     try {
                         const d = item.data || {};
                         const day = d.report_date ? fmtDay(d.report_date) : fmtDay(item.date);
@@ -2436,7 +2540,7 @@
                 });
             } else if (type === 'invoices') {
                 tableHTML += '<th>Date</th><th>Vendor</th><th>Invoice #</th><th>Amount</th><th>How paid</th><th>Remaining</th><th>Due</th><th>Read</th><th>Actions</th></tr></thead><tbody>';
-                items.forEach((item, index) => {
+                filtered.forEach((item, index) => {
                     try {
                         const d = item.data || {};
                         const dateStr = item.date ? (typeof item.date === 'string' ? item.date : item.date.toISOString()) : new Date().toISOString();
@@ -2465,7 +2569,7 @@
                 });
             } else if (type === 'expenses') {
                 tableHTML += '<th>Date</th><th>What</th><th>Amount</th><th>From</th><th>Actions</th></tr></thead><tbody>';
-                items.forEach((item, index) => {
+                filtered.forEach((item, index) => {
                     try {
                         const d = item.data || {};
                         const dateStr = item.date ? (typeof item.date === 'string' ? item.date : item.date.toISOString()) : new Date().toISOString();
@@ -2486,7 +2590,7 @@
                 });
             } else if (type === 'prices') {
                 tableHTML += '<th>Day</th><th>Whose</th><th>Station</th><th>Regular</th><th>Plus</th><th>Premium</th><th>Diesel</th></tr></thead><tbody>';
-                items.forEach((item, index) => {
+                filtered.forEach((item, index) => {
                     try {
                         const d = item.data || {};
                         const whose = d.source === 'own' ? 'Our board' : 'Competition';
@@ -2508,7 +2612,7 @@
                 });
             } else if (type === 'fuel') {
                 tableHTML += '<th>Day</th><th>Gallons</th><th>Sales</th><th>GP</th><th>Actions</th></tr></thead><tbody>';
-                items.forEach((item, index) => {
+                filtered.forEach((item, index) => {
                     try {
                         const d = item.data || {};
                         const day = d.report_date ? fmtDay(d.report_date) : fmtDay(item.date);
@@ -2529,7 +2633,7 @@
                 });
             } else if (type === 'paidouts') {
                 tableHTML += '<th>Date</th><th>Amount</th><th>Reason</th><th>Employee</th><th>Actions</th></tr></thead><tbody>';
-                items.forEach((item, index) => {
+                filtered.forEach((item, index) => {
                     try {
                         const d = item.data || {};
                         const dateStr = item.date ? (typeof item.date === 'string' ? item.date : item.date.toISOString()) : new Date().toISOString();
@@ -2549,7 +2653,7 @@
                 });
             } else if (type === 'orders') {
                 tableHTML += '<th>Date</th><th>Order ID</th><th>Vendors</th><th>Items</th><th>Actions</th></tr></thead><tbody>';
-                items.forEach((item, index) => {
+                filtered.forEach((item, index) => {
                     try {
                         const d = item.data || {};
                         const vendors = d.vendor_groups || [];
@@ -2573,6 +2677,94 @@
 
             tableHTML += '</tbody></table></div>';
             container.innerHTML = tableHTML;
+            bindDataToolbar(container);
+        }
+
+        function entryEditPanelHtml(type, item) {
+            const d = item.data || {};
+            const review = entryReviewOf(d, item.confidence);
+            if (type !== 'sales' && type !== 'invoices') return '';
+            const fields = type === 'sales'
+                ? [
+                    { field: 'cash', label: 'Cash', value: d.cash },
+                    { field: 'card', label: 'Card', value: d.card },
+                    { field: 'total', label: 'Inside total', value: d.total_inside },
+                    { field: 'gas', label: 'Gas sales', value: d.fuel_sales },
+                    { field: 'gallons', label: 'Gallons', value: d.gallons },
+                    { field: 'deposit', label: 'Deposit', value: d.deposit },
+                    { field: 'date', label: 'Day (YYYY-MM-DD or MM/DD)', value: d.report_date || '' },
+                ]
+                : [
+                    { field: 'vendor', label: 'Vendor', value: d.vendor || '' },
+                    { field: 'total', label: 'Amount', value: d.amount },
+                    { field: 'remaining', label: 'Remaining', value: invoiceRemaining(d) },
+                    { field: 'paid', label: 'Paid so far', value: invoicePaidSoFar(d) },
+                    { field: 'due', label: 'Due (YYYY-MM-DD or MM/DD)', value: invoiceDueDate(d) || '' },
+                    { field: 'date', label: 'Invoice date', value: d.invoice_date || '' },
+                    { field: 'method', label: 'Remaining method (cash/check/other)', value: d.remaining_method || '' },
+                ];
+            const inputs = fields.map(function (f) {
+                const val = f.value == null || f.value === '' ? '' : String(f.value);
+                return '<div><label>' + esc(f.label) + '</label><input data-edit-field="' + esc(f.field) + '" data-original="' + esc(val) + '" value="' + esc(val) + '"></div>';
+            }).join('');
+            return '<div class="entry-edit" id="entryEditPanel" data-action-id="' + esc(item.id) + '" data-entry-type="' + esc(type) + '">' +
+                '<h3>Edit confirmed data</h3>' +
+                '<p class="muted">Owners and managers can correct numbers here (same as WhatsApp FIX). Saving updates the store database' +
+                (review.hasIssues ? ' and clears flags for fields you change.' : '.') + '</p>' +
+                '<div class="edit-grid">' + inputs + '</div>' +
+                '<div class="edit-actions">' +
+                '<button type="button" class="btn-save" id="entrySaveBtn">Save corrections</button>' +
+                (review.hasIssues ? '<button type="button" class="btn-clear" id="entryClearFlagsBtn">Mark reviewed (clear flags)</button>' : '') +
+                '<span id="entryEditStatus"></span></div></div>';
+        }
+
+        async function saveEntryEdit(opts) {
+            const panel = document.getElementById('entryEditPanel');
+            const status = document.getElementById('entryEditStatus');
+            if (!panel || !currentStoreId) return;
+            const actionId = panel.getAttribute('data-action-id');
+            const type = panel.getAttribute('data-entry-type');
+            const clearFlags = Boolean(opts && opts.clearFlagsOnly);
+            const patches = [];
+            if (!clearFlags) {
+                panel.querySelectorAll('[data-edit-field]').forEach(function (input) {
+                    const field = input.getAttribute('data-edit-field');
+                    const value = String(input.value || '').trim();
+                    const original = String(input.getAttribute('data-original') || '').trim();
+                    if (!field || value === '' || value === original) return;
+                    patches.push({ field: field, value: value });
+                });
+                if (patches.length === 0) {
+                    if (status) status.textContent = 'Change at least one field, or mark reviewed.';
+                    return;
+                }
+            }
+            if (status) status.textContent = 'Saving…';
+            try {
+                const res = await fetch('/api/stores/entry', {
+                    method: 'POST',
+                    headers: Object.assign({ 'Content-Type': 'application/json' }, getAuthHeaders()),
+                    body: JSON.stringify({
+                        storeId: currentStoreId,
+                        actionId: actionId,
+                        patches: clearFlags ? [] : patches,
+                        clearFlags: clearFlags || undefined,
+                    }),
+                });
+                const data = await res.json().catch(function () { return {}; });
+                if (res.status === 401) { location.href = '/login'; return; }
+                if (!res.ok) throw new Error(data.error || ('Server answered ' + res.status));
+                if (status) status.textContent = 'Saved.';
+                showBanner(clearFlags ? 'Flags cleared for that entry.' : 'Entry updated in the store database.');
+                closeDetailModal();
+                const activeTab = document.querySelector('.nav-tab.active[data-tab]');
+                const tab = activeTab ? activeTab.getAttribute('data-tab') : type;
+                if (currentPage && currentPage !== 'dashboard') loadPageData(currentPage);
+                else if (tab) loadTabData(currentStoreId, tab);
+                loadDashboard(currentStoreId);
+            } catch (err) {
+                if (status) status.textContent = err.message || 'Could not save.';
+            }
         }
 
         // View detail page
@@ -2786,6 +2978,8 @@
             } else {
                 modalHTML += `<pre style="background: var(--bg); padding: 16px; border-radius: 8px; overflow-x: auto;">${esc(JSON.stringify(d, null, 2))}</pre>`;
             }
+
+            modalHTML += entryEditPanelHtml(type, item);
             
             modalHTML += `
                         </div>
@@ -2797,6 +2991,10 @@
             modal.innerHTML = modalHTML;
             modal.id = 'detailModal';
             document.body.appendChild(modal);
+            const saveBtn = document.getElementById('entrySaveBtn');
+            const clearBtn = document.getElementById('entryClearFlagsBtn');
+            if (saveBtn) saveBtn.onclick = function () { saveEntryEdit({}); };
+            if (clearBtn) clearBtn.onclick = function () { saveEntryEdit({ clearFlagsOnly: true }); };
         }
         
         function closeDetailModal() {
@@ -2881,7 +3079,7 @@
                 '</div>' +
                 '<div class="rpt-ai" id="reportAi">' +
                     '<button type="button" id="reportAskAi">Ask AI what this means</button>' +
-                    '<p class="rpt-note" style="margin:10px 0 0">Uses the numbers on this page. Does not invent sales or mention wages.</p>' +
+                    '<p class="rpt-note" style="margin:10px 0 0">Uses the numbers on this page. Does not invent sales or discuss pay.</p>' +
                     '<div id="reportAiBody"></div>' +
                 '</div>' +
                 (vendors.length

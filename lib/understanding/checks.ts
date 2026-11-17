@@ -230,13 +230,8 @@ export function checkDailyClose(
     }
   }
 
-  if (report.periodClosed === false) {
-    checks.push({
-      id: 'period_open',
-      status: 'warn',
-      message: 'Register still open — this may not be the full day.',
-    });
-  }
+  // Do not warn on periodClosed === false. Many Invenco/Gilbarco closes still print a
+  // far-future PERIOD TO (e.g. 2100) on a finished day — that is not a partial close.
 
   return checks;
 }

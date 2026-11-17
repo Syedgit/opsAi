@@ -4,6 +4,29 @@ import { isAiChatEnrolled } from './aiChatAccess';
 import { loadStoreReport } from './storeReport';
 import { loadOpenInvoices } from './tasks/invoiceReminder';
 import { paymentDueOn, remainingOf } from './understanding/invoiceBalance';
+import type { AgentId, StoreAgentId } from './agents/crew';
+import { AGENT_DISPLAY } from './agents/crew';
+import { runSupervisor, type ChatTurn, type SupervisorRouter } from './agents/supervisor';
+import { loadToolFacts } from './agents/tools/loaders';
+import { logApp, logAppError, serializeError } from './requestLog';
+
+/** Short-lived WhatsApp 1:1 thread memory (best-effort on serverless). */
+const waThreads = new Map<string, ChatTurn[]>();
+
+export function waThreadKey(storeId: string, phoneE164: string): string {
+  return `${storeId}:${phoneE164}`;
+}
+
+export function getWaThread(storeId: string, phoneE164: string): ChatTurn[] {
+  return waThreads.get(waThreadKey(storeId, phoneE164)) || [];
+}
+
+export function pushWaThread(storeId: string, phoneE164: string, turn: ChatTurn): void {
+  const key = waThreadKey(storeId, phoneE164);
+  const prev = waThreads.get(key) || [];
+  const next = [...prev, turn].slice(-10);
+  waThreads.set(key, next);
+}
 
 const QUESTION_HINT =
   /\b(how|what|when|where|why|who|which|standing|dmr|owe|owing|owed|pending|due|forecast|vendor|bill|invoice|sales|buying|selling|utility|utilities|paid|pay|status|looking|stand)\b|\?/i;
@@ -50,22 +73,22 @@ export type AiChatSummarizer = (input: {
 }) => Promise<string | null>;
 
 const CLARIFY_DEFAULT =
-  'I can help with store books from confirmed WhatsApp data. Try: “How is standing / DMR this month?” or “What vendor invoices are still open?” (optionally name a vendor).';
+  'Books can answer from confirmed WhatsApp data. Try: “How is standing / DMR this month?” or “What vendor invoices are still open?” (optionally name a vendor).';
 
 const INTENT_SYSTEM = [
-  'You classify ONE admin question about a convenience store’s confirmed books.',
+  'You classify ONE admin question for the Books agent about a convenience store’s confirmed books.',
   'Return JSON only matching: {"topic":"standing"|"open_invoices"|"clarify"|"unsupported"|"not_ai_chat","period":"week"|"month"|null,"vendor":string|null,"clarifyPrompt":string|null}.',
   'standing = DMR, standing, sales vs buying vs expenses, how the month/week looks.',
   'open_invoices = vendor bills still owed, pending invoices, who we still need to pay.',
   'unsupported = forecast, utility due dates, payroll, profit, wages, or anything we do not have tools for yet.',
-  'not_ai_chat = staff ops (posting a close, invoice photo, order, OK/FIX) — not a books question.',
+  'not_ai_chat = staff ops (posting a close, invoice photo, order, OK/FIX) — not a Books question.',
   'clarify = too vague to pick standing vs open_invoices; set clarifyPrompt to one short ask-better question.',
   'Never invent dollar amounts, dates, or vendor balances. You do not fetch data. You only classify.',
   'If a vendor name appears, put it in vendor (short). Default period to month when standing and unspecified.',
 ].join(' ');
 
 const SUMMARY_SYSTEM = [
-  'You summarize confirmed convenience-store bookkeeping for an owner or manager.',
+  'You are the Books agent summarizing confirmed convenience-store bookkeeping for an owner or manager.',
   'Use ONLY the JSON facts provided. Do not invent, estimate, or fetch more data.',
   'Never mention wages, payroll, hourly rates, or claim net profit.',
   'Write a clear, professional WhatsApp-ready reply in plain text (no markdown fences).',
@@ -143,7 +166,11 @@ async function defaultClassifyIntent(
   env: NodeJS.ProcessEnv
 ): Promise<AiChatIntent | null> {
   const apiKey = env.OPENAI_API_KEY?.trim();
-  const model = env.OPENAI_TEXT_MODEL?.trim() || env.OPENAI_MODEL?.trim();
+  // Prefer a cheap text model; fall back to dashboard / photo models already on Vercel.
+  const model =
+    env.OPENAI_TEXT_MODEL?.trim() ||
+    env.OPENAI_MODEL?.trim() ||
+    env.OPENAI_EXTRACTION_MODEL?.trim();
   if (!apiKey || !model) return null;
 
   try {
@@ -209,9 +236,10 @@ export async function loadAiChatFactsFromIntent(
       facts: {
         store: storeName,
         supportedTopics: ['standing / DMR / period sales', 'open vendor invoices / bills still owed'],
+        agent: 'Books',
       },
       fallback: [
-        `AI chat is on for ${storeName}, but that question is not supported from confirmed data yet.`,
+        `Books is on for ${storeName}, but that question is not supported from confirmed data yet.`,
         'Try: “How is the DMR / standing this month?” or “What vendor invoices are still open?”',
       ].join('\n'),
     };
@@ -322,8 +350,14 @@ export async function summarizeAiChatFacts(
   }
 
   const apiKey = env.OPENAI_API_KEY?.trim();
-  const model = env.OPENAI_TEXT_MODEL?.trim() || env.OPENAI_MODEL?.trim();
-  if (!apiKey || !model) return collected.fallback;
+  const model =
+    env.OPENAI_TEXT_MODEL?.trim() ||
+    env.OPENAI_MODEL?.trim() ||
+    env.OPENAI_EXTRACTION_MODEL?.trim();
+  if (!apiKey || !model) {
+    logApp('books.exit.skip', { reason: !apiKey ? 'no_api_key' : 'no_model' });
+    return collected.fallback;
+  }
 
   try {
     const OpenAI = (await import('openai')).default;
@@ -345,15 +379,30 @@ export async function summarizeAiChatFacts(
       ],
     });
     const text = response.choices[0]?.message?.content?.trim();
-    return text || collected.fallback;
-  } catch {
+    if (!text) {
+      logApp('books.exit.empty', { model });
+      return collected.fallback;
+    }
+    logApp('books.exit.ok', { model, chars: text.length });
+    return text;
+  } catch (error) {
+    logAppError('books.exit.fail', { model, ...serializeError(error) });
     return collected.fallback;
   }
 }
 
+export type CrewAnswer = {
+  answer: string;
+  skipped?: boolean;
+  agentId: AgentId;
+  agent: string;
+  toolId?: string;
+};
+
 /**
- * Full path: entry AI (intent) → code/DB facts → exit AI (summary).
- * Clarify / skip never hit the DB or the summarizer with invented numbers.
+ * Supervisor → tool loader → exit AI.
+ * Optional agentFilter pins a subagent (Books shortcut). history enables follow-ups.
+ * Legacy `classify` option still maps old topic intents when provided (tests).
  */
 export async function answerAiChatQuestion(
   prisma: PrismaClient,
@@ -364,19 +413,119 @@ export async function answerAiChatQuestion(
     env?: NodeJS.ProcessEnv;
     classify?: AiChatClassifier;
     summarize?: AiChatSummarizer;
+    history?: ChatTurn[];
+    agentFilter?: StoreAgentId | 'supervisor' | null;
+    booksEnrolled?: boolean;
+    route?: SupervisorRouter;
   } = {}
-): Promise<{ answer: string; skipped?: boolean }> {
-  const intent = await classifyAiChatIntent(question, {
-    env: options.env,
-    classify: options.classify,
-  });
-  const loaded = await loadAiChatFactsFromIntent(prisma, storeId, storeName, question, intent);
-  if ('kind' in loaded) {
-    if (loaded.kind === 'skip') return { answer: '', skipped: true };
-    return { answer: loaded.message };
+): Promise<CrewAnswer> {
+  // Legacy test hook: topic classifier → same loaders via tool id mapping.
+  if (options.classify) {
+    const intent = await classifyAiChatIntent(question, {
+      env: options.env,
+      classify: options.classify,
+    });
+    const toolId =
+      intent.topic === 'standing'
+        ? 'standing_report'
+        : intent.topic === 'open_invoices'
+          ? 'open_invoices'
+          : intent.topic === 'unsupported'
+            ? 'unsupported'
+            : intent.topic === 'not_ai_chat'
+              ? 'not_ai_chat'
+              : 'clarify';
+    const loaded = await loadToolFacts(
+      prisma,
+      storeId,
+      storeName,
+      question,
+      toolId,
+      { period: intent.period, vendor: intent.vendor, status: null },
+      intent.clarifyPrompt
+    );
+    if ('kind' in loaded) {
+      if (loaded.kind === 'skip') {
+        return { answer: '', skipped: true, agentId: 'books', agent: AGENT_DISPLAY.books, toolId };
+      }
+      return { answer: loaded.message, agentId: 'books', agent: AGENT_DISPLAY.books, toolId: 'clarify' };
+    }
+    const answer = await summarizeAiChatFacts(
+      {
+        topic: toolId === 'standing_report' ? 'standing' : toolId === 'open_invoices' ? 'open_invoices' : 'unsupported',
+        storeId,
+        storeName,
+        question,
+        facts: loaded.facts,
+        fallback: loaded.fallback,
+      },
+      options.env ?? process.env,
+      options.summarize
+    );
+    return { answer, agentId: 'books', agent: AGENT_DISPLAY.books, toolId };
   }
-  const answer = await summarizeAiChatFacts(loaded, options.env ?? process.env, options.summarize);
-  return { answer };
+
+  const booksEnrolled = options.booksEnrolled !== false;
+  const history = options.history ?? [];
+  const route = await runSupervisor(question, {
+    history,
+    booksEnrolled,
+    agentFilter: options.agentFilter ?? 'supervisor',
+    env: options.env,
+    route: options.route,
+  });
+
+  const loaded = await loadToolFacts(
+    prisma,
+    storeId,
+    storeName,
+    question,
+    route.toolId,
+    route.slots || {},
+    route.ask
+  );
+  if ('kind' in loaded) {
+    if (loaded.kind === 'skip') {
+      return {
+        answer: '',
+        skipped: true,
+        agentId: 'supervisor',
+        agent: AGENT_DISPLAY.supervisor,
+        toolId: route.toolId,
+      };
+    }
+    return {
+      answer: loaded.message,
+      agentId: 'books',
+      agent: AGENT_DISPLAY.books,
+      toolId: 'clarify',
+    };
+  }
+
+  const answer = await summarizeAiChatFacts(
+    {
+      topic:
+        route.toolId === 'standing_report' || route.toolId === 'missing_closes'
+          ? 'standing'
+          : route.toolId === 'open_invoices' || route.toolId === 'invoice_period_summary'
+            ? 'open_invoices'
+            : 'unsupported',
+      storeId,
+      storeName,
+      question,
+      facts: { ...loaded.facts, toolId: route.toolId, agentId: route.agentId },
+      fallback: loaded.fallback,
+    },
+    options.env ?? process.env,
+    options.summarize
+  );
+
+  return {
+    answer,
+    agentId: route.agentId === 'books' ? 'books' : 'supervisor',
+    agent: AGENT_DISPLAY[route.agentId] || AGENT_DISPLAY.books,
+    toolId: route.toolId,
+  };
 }
 
 /**
@@ -395,10 +544,15 @@ export async function tryWhatsAppAiChat(
     classify?: AiChatClassifier;
     summarize?: AiChatSummarizer;
   }
-): Promise<{ handled: true; answer: string } | { handled: false }> {
+): Promise<{ handled: true; answer: string; agentId: AgentId; toolId?: string } | { handled: false }> {
   if (input.groupId) return { handled: false };
   if (input.hasMedia) return { handled: false };
-  if (!looksLikeAiChatQuestion(input.text)) return { handled: false };
+
+  const text = input.text.trim();
+  // Allow short follow-ups when we already have a Books thread.
+  const history = getWaThread(input.storeId, input.phoneE164);
+  const followUp = history.length > 0 && text.length >= 2 && text.length <= 80 && !ENTRY_HINT.test(text);
+  if (!looksLikeAiChatQuestion(text) && !followUp) return { handled: false };
 
   const member = await prisma.userDirectory.findUnique({
     where: { phoneE164: input.phoneE164 },
@@ -416,11 +570,16 @@ export async function tryWhatsAppAiChat(
     return { handled: false };
   }
 
-  const result = await answerAiChatQuestion(prisma, input.storeId, store.storeName, input.text.trim(), {
+  const result = await answerAiChatQuestion(prisma, input.storeId, store.storeName, text, {
     env: input.env,
     classify: input.classify,
     summarize: input.summarize,
+    history,
+    agentFilter: 'supervisor',
+    booksEnrolled: true,
   });
   if (result.skipped) return { handled: false };
-  return { handled: true, answer: result.answer };
+  pushWaThread(input.storeId, input.phoneE164, { role: 'user', text });
+  pushWaThread(input.storeId, input.phoneE164, { role: 'assistant', text: result.answer });
+  return { handled: true, answer: result.answer, agentId: result.agentId, toolId: result.toolId };
 }

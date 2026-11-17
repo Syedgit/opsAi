@@ -19,6 +19,32 @@ import { tryTaskEvidence } from './tasks/evidence';
 import { tryWhatsAppAiChat } from './aiChatAsk';
 import { checkAiBudget } from './understanding/budget';
 import { logApp, logAppError, maskPhone, serializeError } from './requestLog';
+import {
+  AGENT_DISPLAY,
+  agentForWhatsAppPath,
+  isAgentEnabled,
+  type WaAgentPath,
+} from './agents/crew';
+
+function logWaPath(fields: {
+  messageId: string;
+  from: string;
+  storeId?: string | null;
+  path: WaAgentPath | string;
+  type?: ClassificationType | null;
+  [key: string]: unknown;
+}): void {
+  const path = String(fields.path) as WaAgentPath;
+  const agentId = agentForWhatsAppPath(
+    path,
+    fields.type ?? null
+  );
+  logApp('wa.path', {
+    ...fields,
+    agentId,
+    agent: AGENT_DISPLAY[agentId],
+  });
+}
 
 export interface ProcessWhatsAppMessageInput {
   messageId: string;
@@ -141,7 +167,7 @@ async function handleInboundWhatsApp(
     });
 
     const result = await handleWhatsAppCommand(prisma, phoneE164, text, { groupId: input.groupId ?? null });
-    logApp('wa.path', { messageId, from, storeId, path: 'command' });
+    logWaPath({ messageId, from, storeId, path: 'command' });
     if (result.message) await sendWhatsAppMessage(prisma, phoneE164, result.message, result.storeId ?? storeId ?? undefined);
     await updateMessageLog(prisma, messageId, { processed: true, storeId: storeId ?? undefined });
     return;
@@ -158,7 +184,7 @@ async function handleInboundWhatsApp(
 
   // Voice notes are ignored completely: no reply, no download, no AI.
   if (mediaId && mediaType?.toLowerCase().startsWith('audio')) {
-    logApp('wa.path', { messageId, from, storeId, path: 'audio_ignored' });
+    logWaPath({ messageId, from, storeId, path: 'audio_ignored' });
     await updateMessageLog(prisma, messageId, { classification: 'AUDIO_IGNORED', processed: true, storeId: storeId ?? undefined });
     return;
   }
@@ -173,7 +199,7 @@ async function handleInboundWhatsApp(
         undefined
       );
     }
-    logApp('wa.path', { messageId, from, path: 'not_linked' });
+    logWaPath({ messageId, from, path: 'not_linked' });
     await updateMessageLog(prisma, messageId, { classification: 'NOT_LINKED', processed: true });
     return;
   }
@@ -188,7 +214,7 @@ async function handleInboundWhatsApp(
         storeId
       );
     }
-    logApp('wa.path', { messageId, from, storeId, path: 'rate_limited' });
+    logWaPath({ messageId, from, storeId, path: 'rate_limited' });
     await updateMessageLog(prisma, messageId, { classification: 'RATE_LIMITED', processed: true, storeId });
     return;
   }
@@ -203,7 +229,7 @@ async function handleInboundWhatsApp(
   }
 
   if (!text && !mediaId) {
-    logApp('wa.path', { messageId, from, storeId, path: 'empty' });
+    logWaPath({ messageId, from, storeId, path: 'empty' });
     await sendWhatsAppMessage(
       prisma,
       phoneE164,
@@ -214,29 +240,36 @@ async function handleInboundWhatsApp(
     return;
   }
 
+  const storeProfile = await prisma.storeConfig.findUnique({
+    where: { storeId },
+    select: { profileJson: true },
+  });
+
   // Replies to shift tasks ("2 190F", a photo with caption 3) are proof for a task, not store data.
-  try {
-    const member = await prisma.userDirectory.findUnique({ where: { phoneE164 }, select: { role: true } });
-    const handled = await tryTaskEvidence(prisma, {
-      messageId,
-      phoneE164,
-      storeId,
-      text,
-      mediaId,
-      groupId: input.groupId ?? null,
-      role: member?.role ?? null,
-    });
-    if (handled) {
-      logApp('wa.path', { messageId, from, storeId, path: 'task_evidence' });
-      return;
+  if (isAgentEnabled(storeProfile?.profileJson, 'staff')) {
+    try {
+      const member = await prisma.userDirectory.findUnique({ where: { phoneE164 }, select: { role: true } });
+      const handled = await tryTaskEvidence(prisma, {
+        messageId,
+        phoneE164,
+        storeId,
+        text,
+        mediaId,
+        groupId: input.groupId ?? null,
+        role: member?.role ?? null,
+      });
+      if (handled) {
+        logWaPath({ messageId, from, storeId, path: 'task_evidence' });
+        return;
+      }
+    } catch (error) {
+      // Tasks must never stop normal reporting (for example while the tables are not created yet).
+      logAppError('wa.task_evidence', { messageId, ...serializeError(error) });
     }
-  } catch (error) {
-    // Tasks must never stop normal reporting (for example while the tables are not created yet).
-    logAppError('wa.task_evidence', { messageId, ...serializeError(error) });
   }
 
-  // Enrolled admin AI chat: 1:1 only (not the store group). Same grounded answers as the web card.
-  if (text && !mediaId && !input.groupId) {
+  // Books agent (enrolled AI chat): 1:1 only (not the store group). Same grounded answers as the web card.
+  if (text && !mediaId && !input.groupId && isAgentEnabled(storeProfile?.profileJson, 'books')) {
     try {
       const chat = await tryWhatsAppAiChat(prisma, {
         phoneE164,
@@ -246,7 +279,7 @@ async function handleInboundWhatsApp(
         hasMedia: false,
       });
       if (chat.handled) {
-        logApp('wa.path', { messageId, from, storeId, path: 'ai_chat' });
+        logWaPath({ messageId, from, storeId, path: 'ai_chat' });
         await sendWhatsAppMessage(prisma, phoneE164, chat.answer, storeId);
         await updateMessageLog(prisma, messageId, { classification: 'AI_CHAT', processed: true, storeId });
         return;
@@ -260,14 +293,14 @@ async function handleInboundWhatsApp(
   const intent = routeIntent({ text, hasMedia: Boolean(mediaId) });
 
   if (intent.layer === 'execute' && (intent.action === 'chatter' || intent.action === 'no_data')) {
-    logApp('wa.path', { messageId, from, storeId, path: intent.action });
+    logWaPath({ messageId, from, storeId, path: intent.action });
     if (intent.reply) await sendWhatsAppMessage(prisma, phoneE164, intent.reply, storeId);
     await updateMessageLog(prisma, messageId, { classification: intent.classification, processed: true, storeId });
     return;
   }
 
   if (intent.layer === 'execute' && intent.action === 'rules') {
-    logApp('wa.path', { messageId, from, storeId, path: 'rules', type: intent.type });
+    logWaPath({ messageId, from, storeId, path: 'rules', type: intent.type });
     await executeRuleExtraction(prisma, {
       messageId,
       phoneE164,
@@ -307,7 +340,7 @@ async function handleInboundWhatsApp(
           .catch((error: unknown) => logAppError('wa.ai_limit_log', serializeError(error)));
       }
       if (mediaId) {
-        logApp('wa.path', { messageId, from, storeId, path: 'ai_limit' });
+        logWaPath({ messageId, from, storeId, path: 'ai_limit' });
         await updateMessageLog(prisma, messageId, { classification: 'AI_LIMIT', processed: true, storeId });
         return;
       }
@@ -315,7 +348,7 @@ async function handleInboundWhatsApp(
   }
 
   if (understander && aiAllowed) {
-    logApp('wa.path', { messageId, from, storeId, path: 'ai' });
+    logWaPath({ messageId, from, storeId, path: 'ai' });
     const outcome = await understandAndRespond(prisma, {
       messageId,
       phoneE164,
@@ -331,7 +364,7 @@ async function handleInboundWhatsApp(
 
   // Number rules cannot see pixels. Never turn a photo into "Could not classify".
   if (mediaId) {
-    logApp('wa.path', { messageId, from, storeId, path: understander ? 'photo_unread' : 'ai_off' });
+    logWaPath({ messageId, from, storeId, path: understander ? 'photo_unread' : 'ai_off' });
     await sendWhatsAppMessage(
       prisma,
       phoneE164,
@@ -346,7 +379,7 @@ async function handleInboundWhatsApp(
     return;
   }
 
-  logApp('wa.path', { messageId, from, storeId, path: 'fallback_rules' });
+  logWaPath({ messageId, from, storeId, path: 'fallback_rules' });
   await executeRuleExtraction(prisma, { messageId, phoneE164, storeId, text });
 }
 

@@ -36,6 +36,33 @@ const FIELD_LABEL: Record<string, string> = {
   diesel: 'diesel price',
 };
 
+/** Known schema keys only — drop AI prose like "Net Sales is not mapped…". */
+const ALLOWED_REVIEW_KEYS = new Set(Object.keys(FIELD_LABEL));
+
+/** Old false-positive checks we no longer surface (Invenco PERIOD TO 2100, etc.). */
+const IGNORED_CHECK_IDS = new Set(['period_open']);
+const IGNORED_CHECK_MESSAGE =
+  /partial day|register (period )?still open|period is still open|unfinished day/i;
+
+/**
+ * Keep only short field-name tokens the owner can FIX.
+ * Rejects sentences the model sometimes dumps into needsReview.
+ */
+export function sanitizeNeedsReviewFields(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'string') continue;
+    const trimmed = item.trim();
+    // Field tokens only (cashSales, reports.0.fuelGallons). Reject sentences / explanations.
+    if (!trimmed || trimmed.length > 48 || /\s/.test(trimmed)) continue;
+    const key = trimmed.replace(/^reports?\.\d+\./, '').replace(/^invoice\./, '').trim();
+    if (!ALLOWED_REVIEW_KEYS.has(key)) continue;
+    if (!out.includes(key)) out.push(key);
+  }
+  return out;
+}
+
 /** Confidence at or below this means the read was shaky even if checks passed. */
 export const LOW_CONFIDENCE = 0.75;
 
@@ -57,9 +84,13 @@ function labelForField(raw: string): string {
 
 export function needsReviewFields(payload: unknown): string[] {
   if (!payload || typeof payload !== 'object') return [];
-  const list = (payload as { needs_review?: unknown }).needs_review;
-  if (!Array.isArray(list)) return [];
-  return [...new Set(list.filter((x): x is string => typeof x === 'string' && x.trim().length > 0).map((x) => x.trim()))];
+  return sanitizeNeedsReviewFields((payload as { needs_review?: unknown }).needs_review);
+}
+
+function isIgnorableCheck(c: EntryCheck): boolean {
+  if (c.id && IGNORED_CHECK_IDS.has(c.id)) return true;
+  if (typeof c.message === 'string' && IGNORED_CHECK_MESSAGE.test(c.message)) return true;
+  return false;
 }
 
 export function checkIssueMessages(payload: unknown): string[] {
@@ -69,6 +100,7 @@ export function checkIssueMessages(payload: unknown): string[] {
   return checks
     .filter((c): c is EntryCheck => Boolean(c) && typeof c === 'object')
     .filter((c) => c.status === 'warn' || c.status === 'fail')
+    .filter((c) => !isIgnorableCheck(c))
     .map((c) => (typeof c.message === 'string' && c.message.trim() ? c.message.trim() : 'Check failed'))
     .filter(Boolean);
 }

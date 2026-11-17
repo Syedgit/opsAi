@@ -467,7 +467,7 @@ const MIME: Record<string, string> = {
   '.ico': 'image/x-icon',
   '.webmanifest': 'application/manifest+json',
 };
-const PAGES: Record<string, string> = { '/dashboard': 'dashboard.html', '/tasks': 'tasks.html', '/login': 'login.html', '/signup': 'signup.html', '/onboarding': 'onboarding.html', '/pricing': 'pricing.html', '/billing': 'billing.html', '/': 'dashboard.html' };
+const PAGES: Record<string, string> = { '/dashboard': 'dashboard.html', '/tasks': 'tasks.html', '/crew': 'crew.html', '/login': 'login.html', '/signup': 'signup.html', '/onboarding': 'onboarding.html', '/pricing': 'pricing.html', '/billing': 'billing.html', '/': 'dashboard.html' };
 
 const PREVIEW_COOKIE = 'opsai_session=preview; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400';
 

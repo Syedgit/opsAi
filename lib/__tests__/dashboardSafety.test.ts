@@ -67,6 +67,21 @@ describe('dashboard.html', () => {
   });
 });
 
+describe('crew.html', () => {
+  const crew = fs.readFileSync(path.join(__dirname, '../../public/crew.html'), 'utf8');
+  const vercel = fs.readFileSync(path.join(__dirname, '../../vercel.json'), 'utf8');
+
+  it('defines esc() and asks Books via /api/stores/ask', () => {
+    expect(crew).toContain('function esc(value)');
+    expect(crew).toContain('/api/stores/ask');
+    expect(crew).toContain('data-agent');
+  });
+
+  it('is reachable at /crew', () => {
+    expect(vercel).toMatch(/"source":\s*"\/crew"/);
+  });
+});
+
 describe('tasks.html', () => {
   const tasks = fs.readFileSync(path.join(__dirname, '../../public/tasks.html'), 'utf8');
   const vercel = fs.readFileSync(path.join(__dirname, '../../vercel.json'), 'utf8');

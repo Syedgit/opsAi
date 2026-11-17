@@ -84,31 +84,46 @@
         .pic-map .row { justify-content: space-between; }
         @media (max-width: 720px) { .pic-field { grid-template-columns: 1fr; } }
         html { scroll-behavior: smooth; }
-        .admin-lead { font-size: 14px; color: var(--light); line-height: 1.45; margin-bottom: 14px; max-width: 740px; }
-        .admin-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; }
-        .admin-nav a { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); color: var(--text); text-decoration: none; font-size: 13px; font-weight: 600; }
-        .admin-nav a:hover { border-color: var(--primary); color: var(--primary-dark); }
-        .admin-nav a span { background: #eef2f7; color: var(--light); border-radius: 999px; padding: 1px 7px; font-size: 11px; font-weight: 700; }
-        .admin-section { scroll-margin-top: 12px; margin-bottom: 28px; }
-        .admin-kicker { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--light); font-weight: 700; margin-bottom: 10px; }
-        .admin-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
-        .admin-head .admin-kicker { margin-bottom: 0; }
-        .admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+        .admin-lead { font-size: 15px; color: var(--light); line-height: 1.5; margin-bottom: 20px; max-width: 36rem; }
+        .admin-nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 20px; padding-bottom: 4px; }
+        .admin-nav button {
+            display: inline-flex; align-items: center; gap: 6px; padding: 10px 14px; border-radius: 10px;
+            border: 1px solid transparent; background: transparent; color: var(--light); font-size: 14px; font-weight: 600;
+        }
+        .admin-nav button:hover { color: var(--text); background: #fff; border-color: var(--border); }
+        .admin-nav button.active { background: #fff; color: var(--text); border-color: var(--border); }
+        .admin-nav button span { background: #eef2f7; color: var(--light); border-radius: 999px; padding: 1px 7px; font-size: 11px; font-weight: 700; }
+        .admin-panel { display: none; }
+        .admin-panel.is-open { display: block; }
+        .admin-kicker { font-size: 12px; letter-spacing: .04em; color: var(--light); font-weight: 600; margin-bottom: 8px; }
+        .admin-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+        .admin-head h2 { font-size: 22px; font-weight: 650; margin: 0; letter-spacing: -0.02em; }
+        .admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
         .admin-grid:has(> :only-child) { grid-template-columns: 1fr; }
         .admin-grid .card { margin-bottom: 0; }
-        .card .card-help { margin-bottom: 12px; }
+        .card .card-help { margin-bottom: 14px; line-height: 1.45; max-width: 40rem; }
         .count { font-weight: 600; color: var(--light); font-size: 13px; }
         .preset-group { background: #f8fafc; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
         .danger-card { border-color: #fecaca; }
-        body.admin-page main { max-width: 1080px; }
-        .admin-view .card {
-            padding: 20px 24px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-        }
-        .admin-view .card h2 { font-size: 18px; font-weight: 700; color: var(--secondary); }
+        body.admin-page main { max-width: 880px; }
+        .admin-view .card { padding: 22px 24px; box-shadow: none; border-color: #e8eaed; }
+        .admin-view .card h2 { font-size: 16px; font-weight: 650; color: var(--text); margin-bottom: 6px; }
         .admin-view .count { background: var(--bg); border-radius: 999px; padding: 2px 9px; font-size: 12px; }
-        details.more { margin: 14px 0 0; }
-        details.more summary { cursor: pointer; font-size: 13px; color: var(--light); margin-bottom: 10px; }
+        details.more { margin: 18px 0 0; }
+        details.more summary { cursor: pointer; font-size: 14px; color: var(--light); margin-bottom: 12px; font-weight: 600; }
+        .agent-rows { list-style: none; padding: 0; margin: 8px 0 0; }
+        .agent-rows li {
+            display: flex; align-items: center; justify-content: space-between; gap: 12px;
+            padding: 14px 0; border-top: 1px solid #eee;
+        }
+        .agent-rows li:first-child { border-top: none; }
+        .agent-rows .agent-meta { min-width: 0; flex: 1; }
+        .agent-rows .agent-name { font-weight: 650; font-size: 15px; }
+        .agent-rows .agent-job { color: var(--light); font-size: 13px; margin-top: 2px; line-height: 1.35; }
+        .agent-rows .agent-side { flex-shrink: 0; text-align: right; }
+        .agent-status { font-size: 12px; font-weight: 650; color: var(--ok); }
+        .agent-status.off { color: var(--light); }
+        .crew-cta { margin-top: 18px; padding-top: 16px; border-top: 1px solid #eee; }
         @media (max-width: 800px) { .admin-grid { grid-template-columns: 1fr; } }
         .tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -116,12 +131,13 @@
             td, th { padding: 8px 4px; }
             .hide-sm { display: none; }
             .vendor-row { flex-wrap: wrap; }
-            .admin-nav a { font-size: 12px; padding: 7px 10px; }
+            .admin-nav button { font-size: 13px; padding: 8px 12px; }
             main { padding: 16px 12px 80px; }
             header { gap: 8px; }
             header h1 { font-size: 16px; }
             .tab { min-height: 44px; display: inline-flex; align-items: center; }
             button, button.small { min-height: 44px; }
+            .agent-rows li { flex-wrap: wrap; }
         }
     </style>
 </head>
@@ -168,6 +184,7 @@
     let lastReport = null;
     let importing = null; // { pdf: base64, preview } while an inspector's report is being reviewed
     let editing = null; // template being edited, or {} for a new one
+    let adminPanel = null; // one Store admin section at a time
     const features = {}; // store-type switches for the starter list, e.g. { fuel: true }
 
     if (window.opsai) {
@@ -543,7 +560,7 @@
                 (board.canEdit ? '<button type="button" class="small" data-remove-vendor="' + i + '">Remove</button>' : '') + '</div>';
         }).join('');
         return '<div class="card"><h2>Vendors</h2>' +
-            '<p class="muted card-help">When someone sends an order photo or a typed list, opsAi asks them to confirm the vendor. Change these names to yours.</p>' +
+            '<p class="muted card-help">Used when someone sends an invoice or order.</p>' +
             (board.canEdit
                 ? '<form id="vendorsForm">' + (rows || '<div class="muted">No vendors yet.</div>') +
                   '<div class="row" style="margin-top: 10px;"><button type="button" class="small" id="addVendorBtn">+ Add vendor</button><button type="submit" class="primary">Save vendors</button></div></form>'
@@ -570,7 +587,7 @@
             : '<p class="muted">No document map yet. Add one so WhatsApp photos use this store’s lines.</p>';
         const editor = board.canEdit ? pictureMapEditor() : '';
         return '<div class="card"><h2>Report samples</h2>' +
-            '<p class="muted card-help">Teach opsAi how ' + storeLabel + ' reports. Pick this store in the list above, then paste a message or attach the picture you actually send.</p>' +
+            '<p class="muted card-help">Teach how ' + storeLabel + ' reports look (map kept, not the photo file).</p>' +
             (board.canEdit
                 ? '<form id="samplesForm"><label>Typical daily close</label><textarea name="dailyClose" maxlength="2000" placeholder="Rockaway cash 106 card 334 gas 1355 deposit 1653">' + esc(s.dailyClose || '') + '</textarea>' +
                   '<p class="muted" style="margin: 6px 0 8px;">' + closeHelp + '</p>' +
@@ -726,7 +743,7 @@
         const canOwners = board.canManageOwners;
         if (!board.canEdit && team.whatsapp.length === 0) return '';
         let html = '<div class="card"><div class="row" style="justify-content: space-between; align-items: baseline; margin-bottom: 8px;"><h2 style="margin:0;">WhatsApp team</h2>' + (team.whatsapp.length ? '<span class="count">' + team.whatsapp.length + '</span>' : '') + '</div>';
-        html += '<p class="muted card-help">Numbers can be changed later. For 1:1, everyone listed here messages opsAi directly. Prefer a store group instead? Pick <strong>Store group (invite link)</strong> on the dashboard WhatsApp card. A partner can be a second owner.</p>';
+        html += '<p class="muted card-help">People here message opsAi on WhatsApp 1:1.</p>';
         if (team.whatsapp.length === 0) html += '<div class="muted" style="margin-bottom: 8px;">No WhatsApp numbers yet.</div>';
         else {
             html += '<table><thead><tr><th>Name</th><th>Number</th><th>Role</th>' + (board.canEdit ? '<th></th>' : '') + '</tr></thead><tbody>';
@@ -759,7 +776,7 @@
         const canOwners = board.canManageOwners;
         if (!board.canEdit && team.dashboard.length === 0) return '';
         let html = '<div class="card"><div class="row" style="justify-content: space-between; align-items: baseline; margin-bottom: 8px;"><h2 style="margin:0;">Dashboard login</h2>' + (team.dashboard.length ? '<span class="count">' + team.dashboard.length + '</span>' : '') + '</div>';
-        html += '<p class="muted card-help">Who can open this store on the website. They sign up first, then you add their email. Add a partner as Owner to share reports and admin.</p>';
+        html += '<p class="muted card-help">Who can open this store on the website (after they sign up).</p>';
         if (team.dashboard.length === 0) html += '<div class="muted" style="margin-bottom: 8px;">No dashboard logins yet.</div>';
         else {
             html += '<table><thead><tr><th>Name</th><th>Email</th><th>Role</th>' + (board.canEdit ? '<th></th>' : '') + '</tr></thead><tbody>';
@@ -780,34 +797,34 @@
 
     function addStoreCard() {
         if (!board.canManageOwners) return '';
-        return '<div class="card"><h2>Add another business</h2><p class="muted card-help">Same login and WhatsApp number. Each business or location gets its own ID (S001, S002) and name. Name it in the message (for example "Denville cash 120") so opsAi files it in the right place.</p>' +
+        return '<div class="card"><h2>Add another business</h2><p class="muted card-help">Same login — new store ID and books.</p>' +
             '<a href="/onboarding?add=1"><button type="button" class="primary">Add another business</button></a></div>';
     }
 
     function removeStoreCard() {
         if (!board.canManageOwners) return '';
-        return '<div class="card danger-card"><h2>Remove this store</h2><p class="muted card-help">Takes it off the dashboard. Past reports stay. You can add a new store from Store admin or the dashboard.</p>' +
+        return '<div class="card danger-card"><h2>Remove this store</h2><p class="muted card-help">Removes it from the dashboard. Past reports stay saved.</p>' +
             '<button class="danger" data-deactivate-store>Remove store</button></div>';
     }
 
     function setupCard() {
         const link = '/onboarding?setup=' + encodeURIComponent(storeId);
         if (!board.setup) {
-            return board.canEdit ? '<div class="card"><h2>Hours and shifts</h2><p class="muted card-help">Tell us your shifts and opening hours and we place the starter tasks to fit them.</p><a href="' + esc(link) + '"><button class="primary">Set up now</button></a></div>' : '';
+            return board.canEdit ? '<div class="card"><h2>Hours and shifts</h2><p class="muted card-help">Set shifts so starter tasks land at the right times.</p><a href="' + esc(link) + '"><button class="primary">Set up now</button></a></div>' : '';
         }
         const st = board.setup;
         const hours = st.open24h ? 'Open 24 hours' : 'Open ' + esc(st.opensAt) + ' to ' + esc(st.closesAt);
         return '<div class="card"><div class="row" style="justify-content: space-between; align-items: flex-start;"><div><h2 style="margin-bottom: 6px;">Hours and shifts</h2>' +
             '<div><strong>' + esc(STORE_TYPES[st.storeType] || st.storeType) + '</strong> · ' + hours + (st.fuel ? ' · fuel pumps' : '') + '</div>' +
             '<div class="muted">Shifts: ' + st.shifts.map(function (x) { return esc(x.name) + ' ' + esc(x.start); }).join(', ') + '</div></div>' +
-            (board.canEdit ? '<a href="' + esc(link) + '"><button class="small">Change store setup</button></a>' : '') + '</div></div>';
+            (board.canEdit ? '<a href="' + esc(link) + '"><button class="small">Change</button></a>' : '') + '</div></div>';
     }
 
     function googleSheetsCard() {
         const gs = board.googleSheets || {};
         if (!board.canEdit && !gs.connected) return '';
         let html = '<div class="card"><h2>Google Sheets</h2>';
-        html += '<p class="muted card-help">Each store keeps one Google Sheet for the year. The <strong>Summary</strong> tab always shows this month’s current totals (sales, invoices, paid outs, standing) and refreshes every time someone replies OK. Daily closes also append on month tabs like <strong>2026-11</strong>. Create a blank Sheet, share it with the opsAi email as Editor, then paste the link here.</p>';
+        html += '<p class="muted card-help">One sheet per store. Share Editor access, then paste the link.</p>';
         if (!gs.credentialsReady) {
             html += '<div class="notice err">opsAi Sheets credentials are not on this server yet. Connecting a link still saves; rows will write once the server has Google set up.</div>';
         }
@@ -831,39 +848,83 @@
         return html + '</div>';
     }
 
-    function aiChatCard() {
+    function agentsCard() {
+        const agents = board.agents || {};
         const chat = board.aiChat || {};
         const isOwner = board.canManageOwners;
-        if (!chat.enrolled && !isOwner && !board.canEdit) return '';
+        const catalog = agents.catalog || [];
+        const booksOn = !!(agents.enabled && agents.enabled.books) || !!chat.enrolled;
         const price = chat.monthlyUsd != null ? chat.monthlyUsd : 20;
-        let html = '<div class="card"><h2>AI chat</h2>';
-        html += '<p class="muted card-help">Owners and managers ask here or in the opsAi WhatsApp <strong>1:1</strong> (not the group). AI classifies the question, code loads confirmed numbers from your store (AI never fetches the DB), then AI writes a short professional summary. Vague asks get a clearer follow-up. Add-on <strong>$' + esc(String(price)) + '/store/mo</strong>.</p>';
-        if (chat.enrolled) {
-            html += '<p><strong>Enrolled</strong>' + (chat.enrolledAt ? ' · since ' + esc(String(chat.enrolledAt).slice(0, 10)) : '') + '</p>';
-            html += '<form id="aiChatQuestionForm" style="margin-top: 8px;">' +
-                '<label>Question</label>' +
-                '<textarea name="question" rows="2" maxlength="500" required placeholder="How is standing this month? What’s still owed to Pepsi?" style="width:100%;margin:6px 0 8px;"></textarea>' +
+        if (!catalog.length && !booksOn && !isOwner && !board.canEdit) return '';
+
+        let html = '<div class="card">';
+        html += '<p class="muted card-help">' + esc(agents.marketingLine || 'Your store’s AI crew — you confirm.') + '</p>';
+
+        if (catalog.length) {
+            html += '<ul class="agent-rows">';
+            catalog.forEach(function (a) {
+                const on = a.enabled !== false;
+                const priceLabel = a.pricing === 'addon'
+                    ? ('$' + (a.monthlyUsd != null ? a.monthlyUsd : price) + '/mo')
+                    : 'Included';
+                html += '<li><div class="agent-meta"><div class="agent-name">' + esc(a.name) + '</div>' +
+                    '<div class="agent-job">' + esc(a.job) + '</div></div><div class="agent-side">' +
+                    '<div class="agent-status' + (on ? '' : ' off') + '">' + (on ? 'On' : 'Off') + ' · ' + esc(priceLabel) + '</div>';
+                if (isOwner && a.canToggle && a.id === 'staff') {
+                    html += '<div style="margin-top:8px;"><button type="button" class="small" data-agent-toggle="staff" data-agent-on="' + (on ? '0' : '1') + '">' +
+                        (on ? 'Turn off' : 'Turn on') + '</button></div>';
+                }
+                if (isOwner && a.id === 'books') {
+                    html += '<div style="margin-top:8px;">';
+                    if (on) {
+                        html += '<button type="button" class="small danger" id="unenrollAiChat">Turn off</button>';
+                    } else if (chat.selfEnroll || agents.selfEnrollBooks) {
+                        html += '<button type="button" class="primary" id="enrollAiChat">Enable · $' + esc(String(price)) + '</button>';
+                    } else {
+                        html += '<span class="muted" style="font-size:12px;">Enrollment closed</span>';
+                    }
+                    html += '</div>';
+                }
+                html += '</div></li>';
+            });
+            html += '</ul>';
+        }
+
+        if (isOwner) {
+            const auto = agents.autonomy === 'auto_remind' ? 'auto_remind' : 'draft_only';
+            html += '<p style="margin-top:14px;"><button type="button" class="small" id="setAgentAutonomy" data-autonomy="' +
+                (auto === 'draft_only' ? 'auto_remind' : 'draft_only') + '">' +
+                (auto === 'draft_only' ? 'Allow Follow-up auto-remind' : 'Use draft-only reminders') +
+                '</button></p>';
+        }
+
+        html += '<div class="crew-cta">';
+        html += '<a href="/crew?storeId=' + encodeURIComponent(storeId) + '"><button type="button" class="primary">Open Crew chat</button></a>';
+        if (booksOn) {
+            html += '<form id="aiChatQuestionForm" style="margin-top: 16px;">' +
+                '<label>Ask Books</label>' +
+                '<textarea name="question" rows="2" maxlength="500" required placeholder="How is standing this month?" style="width:100%;margin:6px 0 8px;"></textarea>' +
                 '<button type="submit" class="primary">Ask</button></form>' +
                 '<pre id="aiChatAnswer" class="muted" style="white-space:pre-wrap;margin-top:12px;display:none;"></pre>';
-            if (isOwner) {
-                html += '<p style="margin-top:12px;"><button type="button" class="small danger" id="unenrollAiChat">Unenroll AI chat</button></p>';
-            }
-        } else if (isOwner) {
-            if (chat.selfEnroll) {
-                html += '<button type="button" class="primary" id="enrollAiChat">Enroll AI chat · $' + esc(String(price)) + '/mo</button>';
-            } else {
-                html += '<div class="notice">New AI chat enrollments are temporarily closed. Stores already enrolled keep access.</div>';
-            }
-        } else {
-            html += '<p class="muted">Not enrolled. The store owner can enroll when the add-on is available.</p>';
+        } else if (!isOwner) {
+            html += '<p class="muted" style="margin-top:12px;">Books is off until the owner enables it.</p>';
         }
+        html += '</div>';
         return html + '</div>';
     }
 
-    function adminNav(items) {
-        return '<nav class="admin-nav" aria-label="Jump to a section">' + items.filter(Boolean).map(function (x) {
-            return '<a href="#' + esc(x.id) + '">' + esc(x.label) + (x.count ? ' <span>' + esc(x.count) + '</span>' : '') + '</a>';
+    function adminNav(items, activeId) {
+        return '<nav class="admin-nav" aria-label="Store admin sections">' + items.filter(Boolean).map(function (x) {
+            return '<button type="button" data-admin-panel="' + esc(x.id) + '"' + (x.id === activeId ? ' class="active"' : '') + '>' +
+                esc(x.label) + (x.count != null ? ' <span>' + esc(x.count) + '</span>' : '') + '</button>';
         }).join('') + '</nav>';
+    }
+
+    function adminSection(id, title, lead, body, activeId) {
+        return '<section class="admin-panel' + (id === activeId ? ' is-open' : '') + '" id="' + esc(id) + '" data-panel="' + esc(id) + '">' +
+            '<div class="admin-head"><h2>' + esc(title) + '</h2></div>' +
+            (lead ? '<p class="admin-lead" style="margin-top:0;">' + lead + '</p>' : '') +
+            body + '</section>';
     }
 
     function shiftOrder(keys) {
@@ -905,37 +966,67 @@
         const peopleGrid = waCard || dashCard ? '<div class="admin-grid">' + waCard + dashCard + '</div>' : '';
         const vendorCard = vendorsCard();
         const sampleCard = samplesCard();
-        const ordersGrid = vendorCard || sampleCard ? '<div class="admin-grid">' + vendorCard + sampleCard + '</div>' : '';
+        const crewCard = agentsCard();
 
-        let html = '<p class="admin-lead">Owners and managers add reminders here. The team gets a WhatsApp message when one is due, then answers with the task number and proof (a photo captioned with the number, or text like <strong>2 190F</strong>). Pay is never part of this.</p>';
-        if (!board.canEdit) html += '<div class="notice err">Only owners and managers can change tasks or samples.</div>';
-        html += adminNav([
+        const navItems = [
+            crewCard ? { id: 'admin-crew', label: 'Crew' } : null,
             (waCard || dashCard) ? { id: 'admin-people', label: 'People', count: team.whatsapp.length + team.dashboard.length } : null,
             { id: 'admin-store', label: 'Store' },
-            ordersGrid ? { id: 'admin-orders', label: 'Vendors & samples', count: vendorCount || null } : null,
+            (vendorCard || sampleCard) ? { id: 'admin-vendors', label: 'Vendors', count: vendorCount || null } : null,
             { id: 'admin-tasks', label: 'Tasks', count: board.templates.length },
-            board.canEdit ? { id: 'admin-add', label: 'Add more', count: offered.length || null } : null,
-        ]);
+        ].filter(Boolean);
+
+        const allowed = {};
+        navItems.forEach(function (x) { allowed[x.id] = true; });
+        if (!adminPanel || !allowed[adminPanel]) {
+            adminPanel = board.canManageOwners && allowed['admin-crew']
+                ? 'admin-crew'
+                : (allowed['admin-people'] ? 'admin-people' : navItems[0].id);
+        }
+
+        let html = '';
+        if (!board.canEdit) html += '<div class="notice err">Only owners and managers can change settings.</div>';
+        html += adminNav(navItems, adminPanel);
+
+        if (crewCard) {
+            html += adminSection(
+                'admin-crew',
+                'Crew',
+                'Enable agents for this store. Staff use WhatsApp; you can chat in-app.',
+                crewCard,
+                adminPanel
+            );
+        }
 
         if (waCard || dashCard) {
-            html += '<section class="admin-section" id="admin-people"><div class="admin-kicker">People</div>' + peopleGrid + '</section>';
+            html += adminSection('admin-people', 'People', 'Who can message and who can open the dashboard.', peopleGrid, adminPanel);
         }
 
-        html += '<section class="admin-section" id="admin-store"><div class="admin-kicker">Store</div><div class="admin-grid">' + setupCard() + googleSheetsCard() + aiChatCard() + addStoreCard() + removeStoreCard() + '</div></section>';
+        let storeBody = '<div class="admin-grid">' + setupCard() + googleSheetsCard() + '</div>';
+        if (board.canManageOwners) {
+            storeBody += '<details class="more"><summary>Danger zone</summary><div class="admin-grid" style="margin-top:8px;">' +
+                addStoreCard() + removeStoreCard() + '</div></details>';
+        }
+        html += adminSection('admin-store', 'Store', 'Hours, shifts, and the sheet for confirmed entries.', storeBody, adminPanel);
 
-        if (ordersGrid) {
-            html += '<section class="admin-section" id="admin-orders"><div class="admin-kicker">Orders and reports</div>' + ordersGrid + '</section>';
+        if (vendorCard || sampleCard) {
+            let vendorsBody = vendorCard || '';
+            if (sampleCard) {
+                vendorsBody += '<details class="more"><summary>Document maps &amp; samples</summary>' + sampleCard + '</details>';
+            }
+            html += adminSection('admin-vendors', 'Vendors', 'Who shows up when someone sends an invoice or order.', vendorsBody, adminPanel);
         }
 
-        html += '<section class="admin-section" id="admin-tasks"><div class="admin-head"><div class="admin-kicker">Reminders for ' + esc(board.storeName) + '</div>' +
-            (board.canEdit ? '<button class="primary" data-new>+ New task</button>' : '') + '</div>' +
-            (board.canEdit && !editing ? '<p class="muted" style="margin: 0 0 12px;">Add your own reminder: what to do, category, shift, time, and daily / weekly / monthly.</p>' : '');
-        if (editing && board.canEdit) html += renderForm();
+        let tasksBody = '';
+        if (board.canEdit) {
+            tasksBody += '<div class="admin-head" style="margin-bottom:12px;"><span></span><button class="primary" data-new>+ New task</button></div>';
+        }
+        if (editing && board.canEdit) tasksBody += renderForm();
         if (board.templates.length === 0) {
-            html += '<div class="card"><div class="empty">No tasks yet. Add your own, or pick from Add more below.</div></div>';
+            tasksBody += '<div class="card"><div class="empty">No tasks yet.</div></div>';
         } else {
             shiftOrder(Object.keys(groups)).forEach(function (g) {
-                html += '<div class="card"><div class="row" style="justify-content: space-between; align-items: baseline; margin-bottom: 8px;"><h2 style="margin:0;">' + esc(g) + '</h2><span class="count">' + groups[g].length + '</span></div><table><tbody>' + groups[g].map(function (t) {
+                tasksBody += '<div class="card"><div class="row" style="justify-content: space-between; align-items: baseline; margin-bottom: 8px;"><h2 style="margin:0;">' + esc(g) + '</h2><span class="count">' + groups[g].length + '</span></div><table><tbody>' + groups[g].map(function (t) {
                     return '<tr><td>' + (t.standardId ? '<strong>' + esc(t.standardId) + '</strong> ' : '') + '<strong>' + esc(t.title) + '</strong> ' + crit(t.criticality) + (t.active ? '' : ' <span class="badge b-off">Off</span>') + (t.photoCheck ? ' <span class="badge b-off">AI photo check</span>' : '') +
                         '<div class="muted">' + esc(t.scheduleText) + (limitText(t) ? ' · answer ' + esc(limitText(t)) : '') + '</div></td>' +
                         '<td class="hide-sm">' + esc(CATEGORIES[t.category] || t.category) + '<div class="muted">' + esc(EVIDENCE[t.evidence] || t.evidence) + ' · ' + esc(t.points) + ' pt</div></td>' +
@@ -943,24 +1034,21 @@
                 }).join('') + '</tbody></table></div>';
             });
         }
-        html += '</section>';
-
         if (board.canEdit) {
-            html += '<section class="admin-section" id="admin-add"><div class="admin-kicker">Add more</div><div class="card"><h2>' +
-                (isSevenEleven() ? 'Starter reminders and 7Clean' : 'Starter reminders') + '</h2>' +
-                '<p class="muted card-help">Onboarding only turned on a few for office, salon, and other businesses. Tick more here anytime. After you add them they leave this list and show above, where you can edit times.</p>';
-            html += (board.features || []).filter(function (f) {
-                    const t = board.setup && board.setup.storeType;
-                    const shop = t === 'seven_eleven' || t === 'convenience' || t === 'gas_station';
-                    if (shop) return f.id === 'fuel';
-                    return f.id !== 'fuel';
-                }).map(function (f) {
-                    return '<label style="color: var(--text); font-size: 14px; margin-bottom: 10px;"><input type="checkbox" data-feature="' + esc(f.id) + '"' + (features[f.id] ? ' checked' : '') + '> ' + esc(f.label) + '</label>';
-                }).join('');
+            let addMore = '<div class="card"><h2>' + (isSevenEleven() ? 'Starter reminders' : 'Starter reminders') + '</h2>' +
+                '<p class="muted card-help">Tick extras anytime. They move into the list above so you can edit times.</p>';
+            addMore += (board.features || []).filter(function (f) {
+                const t = board.setup && board.setup.storeType;
+                const shop = t === 'seven_eleven' || t === 'convenience' || t === 'gas_station';
+                if (shop) return f.id === 'fuel';
+                return f.id !== 'fuel';
+            }).map(function (f) {
+                return '<label style="color: var(--text); font-size: 14px; margin-bottom: 10px;"><input type="checkbox" data-feature="' + esc(f.id) + '"' + (features[f.id] ? ' checked' : '') + '> ' + esc(f.label) + '</label>';
+            }).join('');
             if (offered.length === 0) {
-                html += '<div class="empty">Every starter reminder for this store is already added. Edit them in the cards above, or write your own with + New task.</div>';
+                addMore += '<div class="empty">Every starter reminder is already added.</div>';
             } else {
-                html += Object.keys(byGroup).map(function (g) {
+                addMore += Object.keys(byGroup).map(function (g) {
                     return '<div class="preset-group"><div class="row" style="justify-content: space-between;"><strong style="font-size: 13px;">' + esc(g) + '</strong>' +
                         '<button type="button" class="small" data-pick-group="' + esc(g) + '">Tick all</button></div>' + byGroup[g].map(function (p) {
                             return '<label class="preset" style="color: var(--text); font-size: 14px;"><input type="checkbox" data-preset="' + esc(p.id) + '" data-group="' + esc(g) + '"><span>' +
@@ -971,8 +1059,17 @@
                 }).join('') +
                 '<button type="button" class="primary" data-import>Add selected</button>';
             }
-            html += '</div></section>';
+            addMore += '</div>';
+            tasksBody += '<details class="more"><summary>Add more starters' + (offered.length ? ' (' + offered.length + ')' : '') + '</summary>' + addMore + '</details>';
         }
+        html += adminSection(
+            'admin-tasks',
+            'Tasks',
+            'Reminders for ' + esc(board.storeName) + '. Team replies on WhatsApp with the task number and proof.',
+            tasksBody,
+            adminPanel
+        );
+
         return html;
     }
 
@@ -1119,14 +1216,30 @@
             if (await act({ action: 'clear_google_sheet' }, 'Google Sheet disconnected.')) load();
             return;
         }
+        if (el.getAttribute('data-admin-panel')) {
+            adminPanel = el.getAttribute('data-admin-panel');
+            render();
+            return;
+        }
         if (el.id === 'enrollAiChat') {
-            if (!confirm('Enroll this store in AI chat? Add-on is about $' + ((board.aiChat && board.aiChat.monthlyUsd) || 20) + '/store/mo when billing is live.')) return;
-            if (await act({ action: 'set_ai_chat', enrolled: true }, 'AI chat enrolled for this store.')) load();
+            if (!confirm('Enable the Books agent for this store? Add-on is about $' + ((board.aiChat && board.aiChat.monthlyUsd) || 20) + '/store/mo when billing is live.')) return;
+            if (await act({ action: 'set_agents', books: true }, 'Books agent enabled for this store.')) load();
             return;
         }
         if (el.id === 'unenrollAiChat') {
-            if (!confirm('Unenroll AI chat for this store?')) return;
-            if (await act({ action: 'set_ai_chat', enrolled: false }, 'AI chat unenrolled.')) load();
+            if (!confirm('Turn off the Books agent for this store?')) return;
+            if (await act({ action: 'set_agents', books: false }, 'Books agent turned off.')) load();
+            return;
+        }
+        if (el.id === 'setAgentAutonomy') {
+            const next = el.getAttribute('data-autonomy') || 'draft_only';
+            if (await act({ action: 'set_agents', autonomy: next }, next === 'auto_remind' ? 'Follow-up may auto-remind.' : 'Autonomy set to draft-only.')) load();
+            return;
+        }
+        if (el.getAttribute('data-agent-toggle') === 'staff') {
+            const turnOn = el.getAttribute('data-agent-on') === '1';
+            if (!turnOn && !confirm('Turn off Staff? Shift task proof on WhatsApp will stop for this store until you turn it back on.')) return;
+            if (await act({ action: 'set_agents', staff: turnOn }, turnOn ? 'Staff agent on.' : 'Staff agent off.')) load();
             return;
         }
         if (el.dataset.removeDash) {

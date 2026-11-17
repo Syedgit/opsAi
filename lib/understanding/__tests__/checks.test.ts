@@ -132,10 +132,10 @@ describe('checkDailyClose', () => {
     expect(failed?.difference).toBe(10);
   });
 
-  it('adds up the POS close screen (fuel - discounts + non-fuel) and flags the open period', () => {
+  it('adds up the POS close screen (fuel - discounts + non-fuel) without a partial-day warning', () => {
     const checks = checkDailyClose(posClose);
     expect(checks.find((c) => c.id === 'day_total_sum')?.status).toBe('pass');
-    expect(checks.find((c) => c.id === 'period_open')?.status).toBe('warn');
+    expect(checks.find((c) => c.id === 'period_open')).toBeUndefined();
   });
 
   it('explains both text-message deposits without any configured rule', () => {

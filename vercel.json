@@ -102,12 +102,20 @@
       "destination": "/tasks.html"
     },
     {
+      "source": "/crew",
+      "destination": "/crew.html"
+    },
+    {
       "source": "/api/stores/tasks",
       "destination": "/api/stores/tasks.ts"
     },
     {
       "source": "/api/stores/ask",
       "destination": "/api/stores/ask.ts"
+    },
+    {
+      "source": "/api/stores/entry",
+      "destination": "/api/stores/entry.ts"
     },
     {
       "source": "/api/cron/tasks",

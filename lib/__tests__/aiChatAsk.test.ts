@@ -93,6 +93,7 @@ describe('answerAiChatQuestion guardrails', () => {
       },
     });
     expect(result.skipped).toBeUndefined();
+    expect(result.agentId).toBe('books');
     expect(result.answer).toContain('standing or open invoices');
     expect(prisma.pendingActions.findMany).not.toHaveBeenCalled();
   });
@@ -110,6 +111,7 @@ describe('answerAiChatQuestion guardrails', () => {
         `Summary for ${(facts as { store?: string }).store}: none open.`,
     });
     expect(prisma.pendingActions.findMany).toHaveBeenCalled();
+    expect(result.agentId).toBe('books');
     expect(result.answer).toContain('Summary for Rockaway');
   });
 
@@ -119,6 +121,7 @@ describe('answerAiChatQuestion guardrails', () => {
       classify: async () => ({ topic: 'not_ai_chat', period: null, vendor: null, clarifyPrompt: null }),
     });
     expect(result.skipped).toBe(true);
+    expect(result.agentId).toBe('books');
     expect(prisma.pendingActions.findMany).not.toHaveBeenCalled();
   });
 });
@@ -183,6 +186,7 @@ describe('tryWhatsAppAiChat', () => {
     });
     expect(result.handled).toBe(true);
     if (result.handled) {
+      expect(result.agentId).toBe('books');
       expect(result.answer).toContain('Rockaway');
       expect(result.answer).toContain('Professional note');
     }

@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en" data-app-shell="app">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#111111">
+    <meta name="color-scheme" content="light">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="opsAi">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/icon-180.png">
+    <link rel="icon" type="image/png" href="/icon-192.png">
+    <link rel="stylesheet" href="/app-shell.css?v=3">
+    <script src="/app-shell.js?v=2"></script>
+    <title>opsAi · Crew</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #f4f5f7; --card: #fff; --text: #141414; --muted: #6b7280;
+            --border: #e5e7eb; --accent: #111; --ok: #059669;
+        }
+        html { -webkit-text-size-adjust: 100%; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg); color: var(--text); min-height: 100dvh;
+        }
+        header {
+            background: #111; color: #fff; padding: 14px 20px;
+            padding-top: max(14px, env(safe-area-inset-top));
+            display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+        }
+        header a { color: #fff; text-decoration: none; opacity: .85; font-size: 14px; }
+        header .brand-logo { line-height: 0; opacity: 1; background: #fff; border-radius: 8px; padding: 4px 8px; }
+        header .brand-logo img { display: block; height: 28px; width: auto; }
+        header h1 { font-size: 18px; flex: 1; min-width: 6rem; }
+        header select { padding: 8px 10px; border-radius: 6px; border: none; font-size: 16px; flex: 1; max-width: 100%; font-family: inherit; }
+        button { cursor: pointer; font-size: 14px; border-radius: 8px; padding: 8px 14px; border: 1px solid var(--border); background: #fff; font-family: inherit; }
+        button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+        button.small { padding: 4px 10px; font-size: 12px; }
+        button:disabled { opacity: .5; cursor: default; }
+        .notice { padding: 10px 14px; border-radius: 8px; font-size: 14px; margin: 12px 16px 0; }
+        .notice.err { background: #fee2e2; color: #991b1b; }
+        .notice.ok { background: #d1fae5; color: #065f46; }
+        .shell {
+            display: grid; grid-template-columns: 260px 1fr; gap: 0;
+            max-width: 1100px; margin: 0 auto; min-height: calc(100dvh - 72px);
+            border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+            background: var(--card);
+        }
+        .agent-list {
+            border-right: 1px solid var(--border); padding: 16px 12px 24px;
+            background: #fafafa;
+        }
+        .agent-list h2 {
+            font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+            color: var(--muted); font-weight: 700; padding: 0 8px 10px;
+        }
+        .agent-btn {
+            width: 100%; text-align: left; border: none; background: transparent;
+            padding: 12px 12px; border-radius: 10px; margin-bottom: 4px;
+        }
+        .agent-btn:hover { background: #eee; }
+        .agent-btn.active { background: #fff; box-shadow: inset 0 0 0 1px var(--border); }
+        .agent-btn .name { font-weight: 650; font-size: 15px; display: block; }
+        .agent-btn .job { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.35; }
+        .agent-btn .badge {
+            display: inline-block; margin-top: 6px; font-size: 11px; font-weight: 650;
+            color: var(--ok);
+        }
+        .agent-btn .badge.off { color: var(--muted); }
+        .thread {
+            display: flex; flex-direction: column; min-height: calc(100dvh - 72px);
+        }
+        .thread-head {
+            padding: 18px 20px 14px; border-bottom: 1px solid var(--border);
+        }
+        .thread-head h2 { font-size: 20px; font-weight: 650; letter-spacing: -0.02em; }
+        .thread-head p { color: var(--muted); font-size: 14px; margin-top: 4px; line-height: 1.4; max-width: 36rem; }
+        .messages {
+            flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px;
+        }
+        .bubble {
+            max-width: min(520px, 92%); padding: 12px 14px; border-radius: 14px;
+            font-size: 14px; line-height: 1.45; white-space: pre-wrap;
+        }
+        .bubble.agent { background: #f3f4f6; align-self: flex-start; border-bottom-left-radius: 4px; }
+        .bubble.you { background: #111; color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
+        .bubble.system { align-self: center; background: transparent; color: var(--muted); font-size: 13px; text-align: center; max-width: 28rem; }
+        .chip {
+            display: inline-block; margin-bottom: 6px; padding: 2px 8px; border-radius: 999px;
+            background: #e8e8e8; color: #333; font-size: 11px; font-weight: 650;
+        }
+        .composer {
+            border-top: 1px solid var(--border); padding: 12px 16px 16px;
+            padding-bottom: max(16px, env(safe-area-inset-bottom));
+            display: flex; gap: 8px; align-items: flex-end; background: #fff;
+        }
+        .composer textarea {
+            flex: 1; min-height: 44px; max-height: 120px; resize: vertical;
+            padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px;
+            font-size: 16px; font-family: inherit;
+        }
+        .empty-state { padding: 40px 24px; text-align: center; color: var(--muted); }
+        .admin-links { padding: 8px 12px 0; font-size: 13px; }
+        .admin-links a { color: var(--muted); }
+        @media (max-width: 720px) {
+            .shell { grid-template-columns: 1fr; min-height: auto; }
+            .agent-list {
+                border-right: none; border-bottom: 1px solid var(--border);
+                display: flex; gap: 6px; overflow-x: auto; padding: 12px;
+                -webkit-overflow-scrolling: touch;
+            }
+            .agent-list h2 { display: none; }
+            .agent-btn { min-width: 140px; flex-shrink: 0; }
+            .thread { min-height: 70dvh; }
+        }
+    </style>
+</head>
+<body>
+    <div id="appSplash" aria-hidden="true"><img src="/icon-192.png" alt=""><span>opsAi</span></div>
+<header>
+    <a href="/dashboard" class="brand-logo" aria-label="Operation Intelligence"><img src="/logo.jpg" alt="Operation Intelligence"></a>
+    <a href="/dashboard">&larr; Dashboard</a>
+    <h1>Crew</h1>
+    <select id="storeSelect" aria-label="Store"></select>
+    <button type="button" class="small" id="logoutBtn">Log out</button>
+</header>
+<div id="notice"></div>
+<main id="app"><div class="empty-state">Loading…</div></main>
+
+<script>
+(function () {
+    let storeId = new URLSearchParams(location.search).get('storeId') || '';
+    let board = null;
+    let activeAgent = 'supervisor';
+    const threads = {};
+
+    if (window.opsai) {
+        window.opsai.me().then(function (d) { if (!d) location.href = '/login'; });
+    }
+
+    function esc(value) {
+        return String(value === null || value === undefined ? '' : value)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function note(kind, text) {
+        document.getElementById('notice').innerHTML = text
+            ? '<div class="notice ' + kind + '">' + esc(text) + '</div>'
+            : '';
+    }
+
+    function authHeaders() {
+        return { 'Content-Type': 'application/json' };
+    }
+
+    async function loadBoard() {
+        const qs = new URLSearchParams({ storeId: storeId }).toString();
+        const res = await fetch('/api/stores/tasks?' + qs, { headers: authHeaders() });
+        if (res.status === 401) { location.href = '/login'; return null; }
+        const data = await res.json().catch(function () { return {}; });
+        if (!res.ok) throw new Error(data.error || ('Server answered ' + res.status));
+        return data;
+    }
+
+    function catalog() {
+        const agents = (board && board.agents) || {};
+        const rows = agents.catalog || [];
+        return [
+            {
+                id: 'supervisor',
+                name: 'Supervisor',
+                job: 'Open chat — routes to the right agent and tool',
+                enabled: true,
+            },
+        ].concat(rows);
+    }
+
+    function ensureThread(id) {
+        if (!threads[id]) threads[id] = [];
+        return threads[id];
+    }
+
+    function agentById(id) {
+        return catalog().find(function (a) { return a.id === id; }) || null;
+    }
+
+    function booksOn() {
+        return !!(board.agents && board.agents.enabled && board.agents.enabled.books) ||
+            !!(board.aiChat && board.aiChat.enrolled);
+    }
+
+    function canOwnerChat() {
+        return !!(board && (board.canEdit || board.canManageOwners));
+    }
+
+    function welcomeFor(agent) {
+        if (!agent) return 'Pick an agent to start.';
+        if (agent.id === 'supervisor') {
+            if (!booksOn()) return 'Enable Books under Tasks → Store admin → Crew to ask about standing and invoices.';
+            return 'Ask anything about confirmed books — standing, open bills, invoice counts. Short follow-ups like “paid ones” work here.';
+        }
+        if (agent.id === 'books') {
+            if (!agent.enabled) return 'Books is off. Enable it under Store admin → Crew.';
+            return 'Direct Books chat. Same tools as Supervisor, pinned to Books.';
+        }
+        if (agent.id === 'close') {
+            return 'Close captures daily sales and deposits on WhatsApp (OK/FIX). Field capture stays there for now.';
+        }
+        if (agent.id === 'finance') {
+            return 'Finance captures invoices on WhatsApp. Ask Supervisor or Books for open bills and invoice counts.';
+        }
+        if (agent.id === 'staff') {
+            return agent.enabled
+                ? 'Staff runs shift tasks on WhatsApp.'
+                : 'Staff is off. Turn it on under Store admin → Crew.';
+        }
+        if (agent.id === 'followup') {
+            return 'Follow-up runs reminders in the background.';
+        }
+        return agent.job;
+    }
+
+    function historyPayload(threadId) {
+        return ensureThread(threadId)
+            .filter(function (m) { return m.role === 'you' || m.role === 'agent'; })
+            .filter(function (m) { return m.text && m.text !== 'Thinking…'; })
+            .slice(-10)
+            .map(function (m) {
+                return { role: m.role === 'you' ? 'user' : 'assistant', text: m.text };
+            });
+    }
+
+    function renderMessages() {
+        const agent = agentById(activeAgent);
+        const list = ensureThread(activeAgent);
+        const msgs = document.getElementById('messages');
+        if (!msgs) return;
+        if (!list.length) {
+            msgs.innerHTML = '<div class="bubble system">' + esc(welcomeFor(agent)) + '</div>';
+            return;
+        }
+        msgs.innerHTML = list.map(function (m) {
+            var chip = m.chip ? '<div class="chip">' + esc(m.chip) + '</div>' : '';
+            return '<div class="bubble ' + esc(m.role) + '">' + chip + esc(m.text) + '</div>';
+        }).join('');
+        msgs.scrollTop = msgs.scrollHeight;
+    }
+
+    function render() {
+        const list = catalog();
+        if (list.length <= 1 && !(board && board.agents)) {
+            document.getElementById('app').innerHTML =
+                '<div class="empty-state">No agents on this store yet. Open <a href="/tasks?storeId=' +
+                encodeURIComponent(storeId) + '">Store admin</a>.</div>';
+            return;
+        }
+        if (!agentById(activeAgent)) activeAgent = 'supervisor';
+        const agent = agentById(activeAgent);
+        const chatOk = canOwnerChat() && booksOn() &&
+            (activeAgent === 'supervisor' || activeAgent === 'books');
+
+        let html = '<div class="shell"><aside class="agent-list"><h2>Crew</h2>';
+        list.forEach(function (a) {
+            html += '<button type="button" class="agent-btn' + (a.id === activeAgent ? ' active' : '') +
+                '" data-agent="' + esc(a.id) + '"><span class="name">' + esc(a.name) + '</span>' +
+                '<span class="job">' + esc(a.job) + '</span>' +
+                '<span class="badge' + (a.enabled ? '' : ' off') + '">' + (a.enabled ? 'On' : 'Off') + '</span></button>';
+        });
+        html += '<div class="admin-links"><a href="/tasks?storeId=' + encodeURIComponent(storeId) + '">Store admin →</a></div>';
+        html += '</aside><section class="thread"><div class="thread-head"><h2>' + esc(agent ? agent.name : 'Crew') + '</h2>' +
+            '<p>' + esc(agent ? agent.job : '') + '</p></div>' +
+            '<div class="messages" id="messages"></div>';
+        if (chatOk) {
+            html += '<form class="composer" id="crewForm">' +
+                '<textarea name="question" rows="1" maxlength="500" required placeholder="' +
+                (activeAgent === 'supervisor' ? 'Ask the crew…' : 'Ask Books…') +
+                '"></textarea>' +
+                '<button type="submit" class="primary" id="crewSend">Send</button></form>';
+        } else if (!booksOn() && (activeAgent === 'supervisor' || activeAgent === 'books')) {
+            html += '<div class="composer"><p class="bubble system" style="margin:0;width:100%;">Enable Books in Store admin to chat here.</p></div>';
+        } else {
+            html += '<div class="composer"><p class="bubble system" style="margin:0;width:100%;">Field work for this agent stays on WhatsApp 1:1 for now.</p></div>';
+        }
+        html += '</section></div>';
+        document.getElementById('app').innerHTML = html;
+        renderMessages();
+    }
+
+    async function askCrew(question, threadId) {
+        const res = await fetch('/api/stores/ask', {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({
+                storeId: storeId,
+                question: question,
+                history: historyPayload(threadId),
+                agentId: threadId === 'books' ? 'books' : 'supervisor',
+            }),
+        });
+        if (res.status === 401) { location.href = '/login'; return null; }
+        const data = await res.json().catch(function () { return {}; });
+        if (!res.ok) throw new Error(data.error || ('Server answered ' + res.status));
+        return data;
+    }
+
+    document.addEventListener('click', function (e) {
+        const btn = e.target.closest('[data-agent]');
+        if (!btn) return;
+        activeAgent = btn.getAttribute('data-agent');
+        render();
+    });
+
+    document.addEventListener('submit', async function (e) {
+        if (e.target.id !== 'crewForm') return;
+        e.preventDefault();
+        const f = new FormData(e.target);
+        const question = String(f.get('question') || '').trim();
+        if (!question) return;
+        const threadId = activeAgent === 'books' ? 'books' : 'supervisor';
+        const thread = ensureThread(threadId);
+        thread.push({ role: 'you', text: question });
+        e.target.reset();
+        renderMessages();
+        thread.push({ role: 'agent', text: 'Thinking…' });
+        renderMessages();
+        try {
+            const data = await askCrew(question, threadId);
+            thread.pop();
+            const chip = (data.agent || 'Books') + (data.toolId ? ' · ' + data.toolId : '');
+            thread.push({ role: 'agent', text: data.answer || 'No answer.', chip: chip });
+        } catch (err) {
+            thread.pop();
+            thread.push({ role: 'agent', text: err.message || 'Could not ask.' });
+        }
+        renderMessages();
+    });
+
+    document.getElementById('logoutBtn').addEventListener('click', async function () {
+        try { await fetch('/api/auth/logout', { method: 'POST', headers: authHeaders() }); } catch (e) { /* ignore */ }
+        location.href = '/login';
+    });
+
+    (async function boot() {
+        try {
+            const res = await fetch('/api/stores', { headers: authHeaders() });
+            if (res.status === 401) { location.href = '/login'; return; }
+            const data = await res.json();
+            const stores = Array.isArray(data.stores) ? data.stores : [];
+            const select = document.getElementById('storeSelect');
+            select.innerHTML = '';
+            if (!stores.length) {
+                document.getElementById('app').innerHTML = '<div class="empty-state">No stores yet.</div>';
+                return;
+            }
+            stores.forEach(function (s) {
+                const o = document.createElement('option');
+                o.value = s.storeId;
+                o.textContent = s.storeName + ' (' + s.storeId + ')';
+                select.appendChild(o);
+            });
+            if (!stores.some(function (s) { return s.storeId === storeId; })) storeId = stores[0].storeId;
+            select.value = storeId;
+            select.addEventListener('change', async function () {
+                storeId = select.value;
+                history.replaceState(null, '', '/crew?storeId=' + encodeURIComponent(storeId));
+                note('', '');
+                board = await loadBoard();
+                render();
+            });
+            board = await loadBoard();
+            render();
+        } catch (e) {
+            note('err', 'Could not load crew. ' + e.message);
+            document.getElementById('app').innerHTML = '';
+        }
+    })();
+})();
+</script>
+</body>
+</html>

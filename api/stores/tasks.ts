@@ -57,6 +57,11 @@ import {
   readAiChatState,
   withAiChatEnrollment,
 } from '../../lib/aiChatAccess';
+import {
+  agentsBoardPayload,
+  syncAgentsBooksFromAiChat,
+  withStoreAgentsUpdate,
+} from '../../lib/agents/crew';
 
 const prisma = new PrismaClient();
 
@@ -142,6 +147,12 @@ const BodySchema = z.discriminatedUnion('action', [
   }),
   z.object({ action: z.literal('clear_google_sheet') }),
   z.object({ action: z.literal('set_ai_chat'), enrolled: z.boolean() }),
+  z.object({
+    action: z.literal('set_agents'),
+    staff: z.boolean().optional(),
+    books: z.boolean().optional(),
+    autonomy: z.enum(['draft_only', 'auto_remind']).optional(),
+  }),
 ]);
 
 /** An "every N days" task counts from a start date: the owner's, or today (store time) when they left it out. */
@@ -239,6 +250,12 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       selfEnroll: aiChatSelfEnrollAllowed(),
       monthlyUsd: AI_CHAT_USD_PER_STORE_PER_MONTH,
       adminOnly: true,
+      agentId: 'books' as const,
+      agentName: 'Books',
+    };
+    const agents = {
+      ...agentsBoardPayload(store.profileJson),
+      selfEnrollBooks: aiChatSelfEnrollAllowed(),
     };
     const timeZone = isValidTimeZone(store.timezone) ? store.timezone : 'America/New_York';
 
@@ -260,6 +277,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         ...pictureMaps(store.profileJson),
         googleSheets,
         aiChat,
+        agents,
         buckets: TASK_BUCKETS,
       });
       return;
@@ -333,6 +351,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         ...pictureMaps(store.profileJson),
         googleSheets,
         aiChat,
+        agents,
         buckets: TASK_BUCKETS,
       });
       return;
@@ -576,26 +595,81 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
 
     if (body.action === 'set_ai_chat') {
       if (access.role !== 'OWNER') {
-        res.status(403).json({ error: 'Only the store owner can change AI chat enrollment' });
+        res.status(403).json({ error: 'Only the store owner can change Books (AI chat) enrollment' });
         return;
       }
       if (body.enrolled && !aiChatSelfEnrollAllowed() && !readAiChatState(store.profileJson).enrolled) {
         res.status(402).json({
-          error: `AI chat enrollment is temporarily closed ($${AI_CHAT_USD_PER_STORE_PER_MONTH}/store/mo add-on). Try again later or contact support.`,
+          error: `Books enrollment is temporarily closed ($${AI_CHAT_USD_PER_STORE_PER_MONTH}/store/mo add-on). Try again later or contact support.`,
         });
         return;
       }
+      const nextProfile = syncAgentsBooksFromAiChat(
+        withAiChatEnrollment(store.profileJson, body.enrolled)
+      );
       await prisma.storeConfig.update({
         where: { storeId },
-        data: { profileJson: withAiChatEnrollment(store.profileJson, body.enrolled) as object },
+        data: { profileJson: nextProfile as object },
       });
       res.status(200).json({
         success: true,
         aiChat: {
-          ...readAiChatState(withAiChatEnrollment(store.profileJson, body.enrolled)),
+          ...readAiChatState(nextProfile),
           selfEnroll: aiChatSelfEnrollAllowed(),
           monthlyUsd: AI_CHAT_USD_PER_STORE_PER_MONTH,
           adminOnly: true,
+          agentId: 'books',
+          agentName: 'Books',
+        },
+        agents: {
+          ...agentsBoardPayload(nextProfile),
+          selfEnrollBooks: aiChatSelfEnrollAllowed(),
+        },
+      });
+      return;
+    }
+
+    if (body.action === 'set_agents') {
+      if (access.role !== 'OWNER') {
+        res.status(403).json({ error: 'Only the store owner can change agents' });
+        return;
+      }
+      if (
+        body.books === true &&
+        !aiChatSelfEnrollAllowed() &&
+        !readAiChatState(store.profileJson).enrolled
+      ) {
+        res.status(402).json({
+          error: `Books enrollment is temporarily closed ($${AI_CHAT_USD_PER_STORE_PER_MONTH}/store/mo add-on). Try again later or contact support.`,
+        });
+        return;
+      }
+      if (body.staff === undefined && body.books === undefined && body.autonomy === undefined) {
+        res.status(400).json({ error: 'Send staff, books, and/or autonomy to update' });
+        return;
+      }
+      const nextProfile = withStoreAgentsUpdate(store.profileJson, {
+        staff: body.staff,
+        books: body.books,
+        autonomy: body.autonomy,
+      });
+      await prisma.storeConfig.update({
+        where: { storeId },
+        data: { profileJson: nextProfile as object },
+      });
+      res.status(200).json({
+        success: true,
+        agents: {
+          ...agentsBoardPayload(nextProfile),
+          selfEnrollBooks: aiChatSelfEnrollAllowed(),
+        },
+        aiChat: {
+          ...readAiChatState(nextProfile),
+          selfEnroll: aiChatSelfEnrollAllowed(),
+          monthlyUsd: AI_CHAT_USD_PER_STORE_PER_MONTH,
+          adminOnly: true,
+          agentId: 'books',
+          agentName: 'Books',
         },
       });
       return;

@@ -372,6 +372,7 @@ describe('owner pages', () => {
       'dashboard.html',
       'onboarding.html',
       'tasks.html',
+      'crew.html',
       'billing.html',
       'index.html',
     ];
