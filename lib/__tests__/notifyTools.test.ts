@@ -1,5 +1,5 @@
 import { readToolsWanted, withToolsWanted, BUSINESS_TOOLS } from '../notify/tools';
-import { withChannelPrefs, readChannelPrefs } from '../notify/channels';
+import { withChannelPrefs, readChannelPrefs, taskAlertsEnabled } from '../notify/channels';
 import { formatOwnerDigest } from '../notify/digest';
 import { verifySlackSignature } from '../notify/slack';
 import crypto from 'crypto';
@@ -36,6 +36,14 @@ describe('business tools prefs', () => {
     expect(prefs.tools.email).toBe(true);
     expect(prefs.tools.slack).toBe(true);
     expect(prefs.emailDigest.enabled).toBe(true);
+  });
+
+  it('defaults WhatsApp task alerts on and can pause them', () => {
+    expect(taskAlertsEnabled(null)).toBe(true);
+    const off = withChannelPrefs({}, { taskAlerts: { enabled: false } });
+    expect(taskAlertsEnabled(off)).toBe(false);
+    const on = withChannelPrefs(off, { taskAlerts: { enabled: true } });
+    expect(taskAlertsEnabled(on)).toBe(true);
   });
 });
 

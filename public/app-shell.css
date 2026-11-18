@@ -145,3 +145,54 @@ html.app-standalone .auth-container {
 @media (display-mode: standalone), (display-mode: fullscreen) {
   html { background: #111; }
 }
+
+/* Phone bottom nav: Chat (Riley) · Today · More */
+#opsaiTabBar {
+  display: none;
+}
+@media (max-width: 768px) {
+  html.opsai-mobile-tabs body {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  }
+  #opsaiTabBar {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 2147481000;
+    background: rgba(255, 255, 255, 0.96);
+    border-top: 1px solid #e5e7eb;
+    padding: 6px 8px max(6px, env(safe-area-inset-bottom));
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    justify-content: space-around;
+    align-items: stretch;
+    gap: 4px;
+  }
+  #opsaiTabBar a {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-height: 48px;
+    text-decoration: none;
+    color: #6b7280;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    border-radius: 10px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #opsaiTabBar a[aria-current="page"] {
+    color: #111827;
+    background: #f3f4f6;
+  }
+  #opsaiTabBar .tab-ico {
+    font-size: 18px;
+    line-height: 1;
+    font-weight: 700;
+  }
+}

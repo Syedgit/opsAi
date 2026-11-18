@@ -59,7 +59,9 @@ import {
 } from '../../lib/aiChatAccess';
 import {
   agentsBoardPayload,
+  packForStoreType,
   syncAgentsBooksFromAiChat,
+  withAgentPack,
   withStoreAgentsUpdate,
 } from '../../lib/agents/crew';
 import { channelsBoardPayload, withChannelPrefs } from '../../lib/notify/channels';
@@ -162,6 +164,7 @@ const BodySchema = z.discriminatedUnion('action', [
     slackEnabled: z.boolean().optional(),
     slackChannelId: z.string().max(64).nullable().optional(),
     slackTeamId: z.string().max(64).nullable().optional(),
+    taskAlertsEnabled: z.boolean().optional(),
     tools: z
       .object({
         whatsapp: z.boolean().optional(),
@@ -272,8 +275,9 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       agentId: 'books' as const,
       agentName: 'Books',
     };
+    const setup = readStoredSetup(store.setupJson);
     const agents = {
-      ...agentsBoardPayload(store.profileJson),
+      ...agentsBoardPayload(store.profileJson, setup?.storeType ?? null),
       selfEnrollBooks: aiChatSelfEnrollAllowed(),
     };
     const channels = channelsBoardPayload(store.profileJson);
@@ -289,7 +293,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       const now = new Date();
       if (one(req.query.view) === 'setup') {
         res.status(200).json({
-          success: true, storeName: store.storeName, canEdit, setup: readStoredSetup(store.setupJson),
+          success: true, storeName: store.storeName, canEdit, setup,
           storeTypes: storeTypeOptions().map((t) => ({ ...t, modules: dashboardModules(t.id, t.defaults.fuel) })),
           storeFeatures: Object.entries(STORE_FEATURE_LABEL).map(([id, label]) => ({ id, label })),
           messageSamples: parseStoredProfile(store.profileJson).messageSamples,
@@ -303,7 +307,6 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       });
       return;
     }
-    const setup = readStoredSetup(store.setupJson);
       if (one(req.query.view) === 'inspection') {
         if (!inspectionApplies(setup?.storeType ?? null)) {
           res.status(400).json({ error: 'The inspection score is for 7-Eleven stores.' });
@@ -321,13 +324,21 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         );
         for (const r of latestRare) if (r && !seenRuns.has(r.id)) runs.push(r);
         const lastFindings = Array.isArray(lastReport?.findings) ? (lastReport.findings as Array<{ standardId?: string }>) : [];
-        const catalog = TASK_PRESETS.filter((p) => p.source === 'report' && p.template.standardId).map((p) => ({
+        const reportPresets = TASK_PRESETS.filter((p) => p.source === 'report' && p.template.standardId);
+        const catalog = reportPresets.map((p) => ({
           standardId: p.template.standardId as string, presetId: p.id, title: p.template.title, category: p.template.category,
           criticality: p.template.criticality, points: p.template.points, requires: p.requires,
         }));
         const prediction = predictInspection(catalog, templates, runs, now, new Set(lastFindings.map((f) => f.standardId).filter((id): id is string => Boolean(id))));
         res.status(200).json({
           success: true, storeName: store.storeName, canEdit, prediction, generatedAt: now,
+          timeZone,
+          templates: templates.map(templateView),
+          presets: reportPresets.map((p) => ({
+            presetId: p.id,
+            ...p.template,
+            scheduleText: describeSchedule(p.template),
+          })),
           lastReport: lastReport && {
             inspectedOn: lastReport.inspectedOn, percent: lastReport.percent, cycle: lastReport.cycle, visit: lastReport.visit,
             property: lastReport.property, categories: lastReport.categories, findings: lastReport.findings,
@@ -428,10 +439,23 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         res.status(400).json({ error: `A store can have up to ${MAX_TEMPLATES_PER_STORE} tasks` });
         return;
       }
-      await prisma.storeConfig.update({ where: { storeId }, data: { setupJson: parsedSetup.data as unknown as Prisma.InputJsonValue } });
+      const nextPack = packForStoreType(parsedSetup.data.storeType);
+      const nextProfile = withAgentPack(store.profileJson, nextPack);
+      await prisma.storeConfig.update({
+        where: { storeId },
+        data: {
+          setupJson: parsedSetup.data as unknown as Prisma.InputJsonValue,
+          profileJson: nextProfile as object,
+        },
+      });
       const today = localDateString(new Date(), timeZone);
       for (const x of toAdd) await prisma.taskTemplate.create({ data: { ...withAnchor(x.template, today), storeId } });
-      res.status(200).json({ success: true, added: toAdd.length, skipped: chosen.length - toAdd.length });
+      res.status(200).json({
+        success: true,
+        added: toAdd.length,
+        skipped: chosen.length - toAdd.length,
+        agents: { ...agentsBoardPayload(nextProfile, parsedSetup.data.storeType), selfEnrollBooks: aiChatSelfEnrollAllowed() },
+      });
       return;
     }
 
@@ -645,7 +669,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
           agentName: 'Books',
         },
         agents: {
-          ...agentsBoardPayload(nextProfile),
+          ...agentsBoardPayload(nextProfile, setup?.storeType ?? null),
           selfEnrollBooks: aiChatSelfEnrollAllowed(),
         },
       });
@@ -686,7 +710,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       res.status(200).json({
         success: true,
         agents: {
-          ...agentsBoardPayload(nextProfile),
+          ...agentsBoardPayload(nextProfile, setup?.storeType ?? null),
           selfEnrollBooks: aiChatSelfEnrollAllowed(),
         },
         aiChat: {
@@ -712,6 +736,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         body.slackEnabled === undefined &&
         body.slackChannelId === undefined &&
         body.slackTeamId === undefined &&
+        body.taskAlertsEnabled === undefined &&
         body.tools === undefined
       ) {
         res.status(400).json({ error: 'Send a tool or channel preference to update' });
@@ -733,6 +758,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
           ...(body.slackChannelId !== undefined ? { channelId: body.slackChannelId } : {}),
           ...(body.slackTeamId !== undefined ? { teamId: body.slackTeamId } : {}),
         },
+        taskAlerts: body.taskAlertsEnabled !== undefined ? { enabled: body.taskAlertsEnabled } : undefined,
         tools: body.tools,
       });
       if (body.tools && typeof body.tools.books === 'boolean') {
@@ -749,7 +775,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         success: true,
         channels: channelsBoardPayload(nextProfile),
         agents: {
-          ...agentsBoardPayload(nextProfile),
+          ...agentsBoardPayload(nextProfile, setup?.storeType ?? null),
           selfEnrollBooks: aiChatSelfEnrollAllowed(),
         },
         aiChat: {
@@ -765,13 +791,15 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
     }
 
     if (body.action === 'close') {
-      const run = await prisma.taskRun.findFirst({ where: { id: body.runId, storeId, status: 'OPEN' } });
+      // Owner/manager clearing a row from Due: drop reminders and hide it. Does not count as a miss.
+      const run = await prisma.taskRun.findFirst({
+        where: { id: body.runId, storeId, status: { in: ['OPEN', 'MISSED'] } },
+      });
       if (!run) {
-        res.status(404).json({ error: 'Open task not found' });
+        res.status(404).json({ error: 'Task not found' });
         return;
       }
-      // A manager closing a task by hand: it counts as missed, so it stops nagging but is not a free pass.
-      await prisma.taskRun.update({ where: { id: run.id }, data: { status: 'MISSED' } });
+      await prisma.taskRun.update({ where: { id: run.id }, data: { status: 'CANCELLED' } });
       res.status(200).json({ success: true });
       return;
     }

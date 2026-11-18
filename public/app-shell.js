@@ -137,9 +137,47 @@
     sheet.classList.add('open');
   }
 
+  function storeQuery() {
+    try {
+      var id = new URLSearchParams(location.search).get('storeId');
+      return id ? ('?storeId=' + encodeURIComponent(id)) : '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function pathTab() {
+    var p = location.pathname.replace(/\/$/, '') || '/';
+    if (p === '/crew' || p === '/chat') return 'chat';
+    if (p === '/tasks') return 'today';
+    if (p === '/more' || p === '/dashboard' || p === '/billing' || p === '/pricing') return 'more';
+    return '';
+  }
+
+  function mountMobileTabs() {
+    if (mode !== 'app' || !isPhone()) return;
+    var tab = pathTab();
+    if (!tab) return;
+    if (document.getElementById('opsaiTabBar')) return;
+    root.classList.add('opsai-mobile-tabs');
+    var q = storeQuery();
+    var bar = document.createElement('nav');
+    bar.id = 'opsaiTabBar';
+    bar.setAttribute('aria-label', 'Main');
+    bar.innerHTML =
+      '<a href="/crew' + q + '" data-tab="chat"' + (tab === 'chat' ? ' aria-current="page"' : '') + '>' +
+        '<span class="tab-ico" aria-hidden="true">◎</span><span>Chat</span></a>' +
+      '<a href="/tasks' + q + '" data-tab="today"' + (tab === 'today' ? ' aria-current="page"' : '') + '>' +
+        '<span class="tab-ico" aria-hidden="true">☰</span><span>Today</span></a>' +
+      '<a href="/more' + q + '" data-tab="more"' + (tab === 'more' ? ' aria-current="page"' : '') + '>' +
+        '<span class="tab-ico" aria-hidden="true">···</span><span>More</span></a>';
+    document.body.appendChild(bar);
+  }
+
   function onReady() {
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(function () {});
     document.addEventListener('click', keepInApp);
+    mountMobileTabs();
     if (root.classList.contains('app-launch')) {
       var done = false;
       var finish = function () {

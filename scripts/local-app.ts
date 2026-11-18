@@ -25,9 +25,14 @@ import webhookHandler from '../api/webhook/whatsapp';
 import billingHandler from '../api/billing/index';
 import stripeWebhookHandler from '../api/webhook/stripe';
 import usageHandler from '../api/admin/usage';
+import { PrismaClient } from '@prisma/client';
+import { runTaskTick } from '../lib/tasks/tick';
 
 const PORT = Number(process.env.PORT ?? 3000);
 const PUBLIC = join(__dirname, '..', 'public');
+// Off by default — a cold tick can create/alert a backlog across every store and flood WhatsApp.
+// Set LOCAL_TASK_TICK_MS=60000 (or any positive ms) to enable while developing.
+const LOCAL_TICK_MS = Number(process.env.LOCAL_TASK_TICK_MS ?? 0);
 
 type VercelHandler = (req: VercelRequest, res: VercelResponse) => void | Promise<void>;
 
@@ -75,6 +80,7 @@ app.get('/onboarding', sendPage('onboarding.html'));
 app.get('/dashboard', sendPage('dashboard.html'));
 app.get('/tasks', sendPage('tasks.html'));
 app.get('/crew', sendPage('crew.html'));
+app.get('/more', sendPage('more.html'));
 app.get('/pricing', sendPage('pricing.html'));
 app.get('/billing', sendPage('billing.html'));
 app.get('/internal', sendPage('internal.html'));
@@ -108,4 +114,22 @@ app.listen(PORT, () => {
   console.log(`WhatsApp webhook:                http://localhost:${PORT}/api/webhook/whatsapp`);
   console.log(`Stripe webhook:                  http://localhost:${PORT}/api/webhook/stripe`);
   console.log(`CEO usage:                       http://localhost:${PORT}/internal`);
+
+  // Local only: fire task create/alert/remind without Vercel cron.
+  if (LOCAL_TICK_MS > 0) {
+    const prisma = new PrismaClient();
+    const tick = async () => {
+      try {
+        const result = await runTaskTick(prisma, new Date());
+        if (result.created || result.alerted || result.reminded || result.escalated) {
+          console.log('[local task tick]', result);
+        }
+      } catch (error) {
+        console.error('[local task tick] failed', error);
+      }
+    };
+    void tick();
+    setInterval(tick, LOCAL_TICK_MS);
+    console.log(`Local task tick:                 every ${Math.round(LOCAL_TICK_MS / 1000)}s`);
+  }
 });

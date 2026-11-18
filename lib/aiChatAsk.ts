@@ -5,9 +5,10 @@ import { loadStoreReport } from './storeReport';
 import { loadOpenInvoices } from './tasks/invoiceReminder';
 import { paymentDueOn, remainingOf } from './understanding/invoiceBalance';
 import type { AgentId, StoreAgentId } from './agents/crew';
-import { AGENT_DISPLAY } from './agents/crew';
+import { AGENT_DISPLAY, resolveAgentPack } from './agents/crew';
 import { runSupervisor, type ChatTurn, type SupervisorRouter } from './agents/supervisor';
 import { loadToolFacts } from './agents/tools/loaders';
+import { readStoredSetup } from './tasks/storeSetup';
 import { logApp, logAppError, serializeError } from './requestLog';
 
 /** Short-lived WhatsApp 1:1 thread memory (best-effort on serverless). */
@@ -416,7 +417,10 @@ export async function answerAiChatQuestion(
     history?: ChatTurn[];
     agentFilter?: StoreAgentId | 'supervisor' | null;
     booksEnrolled?: boolean;
+    pack?: import('./agents/packs').VerticalPack | null;
     route?: SupervisorRouter;
+    /** web = crew UI (never silent-skip); whatsapp = may skip ops capture. */
+    channel?: 'web' | 'whatsapp';
   } = {}
 ): Promise<CrewAnswer> {
   // Legacy test hook: topic classifier → same loaders via tool id mapping.
@@ -467,12 +471,15 @@ export async function answerAiChatQuestion(
 
   const booksEnrolled = options.booksEnrolled !== false;
   const history = options.history ?? [];
+  const channel = options.channel ?? 'web';
   const route = await runSupervisor(question, {
     history,
     booksEnrolled,
     agentFilter: options.agentFilter ?? 'supervisor',
+    pack: options.pack,
     env: options.env,
     route: options.route,
+    channel,
   });
 
   const loaded = await loadToolFacts(
@@ -486,6 +493,16 @@ export async function answerAiChatQuestion(
   );
   if ('kind' in loaded) {
     if (loaded.kind === 'skip') {
+      // WhatsApp may leave real ops captures alone; web/crew always answers.
+      if (channel === 'web') {
+        return {
+          answer:
+            'What do you want to know — standing/DMR, open invoices, who was paid last, or invoice counts?',
+          agentId: 'books',
+          agent: AGENT_DISPLAY.books,
+          toolId: 'clarify',
+        };
+      }
       return {
         answer: '',
         skipped: true,
@@ -564,11 +581,14 @@ export async function tryWhatsAppAiChat(
 
   const store = await prisma.storeConfig.findUnique({
     where: { storeId: input.storeId },
-    select: { storeName: true, profileJson: true },
+    select: { storeName: true, profileJson: true, setupJson: true },
   });
   if (!store || !isAiChatEnrolled(store.profileJson)) {
     return { handled: false };
   }
+
+  const setup = readStoredSetup(store.setupJson);
+  const pack = resolveAgentPack(store.profileJson, setup?.storeType ?? null);
 
   const result = await answerAiChatQuestion(prisma, input.storeId, store.storeName, text, {
     env: input.env,
@@ -577,6 +597,8 @@ export async function tryWhatsAppAiChat(
     history,
     agentFilter: 'supervisor',
     booksEnrolled: true,
+    pack,
+    channel: 'whatsapp',
   });
   if (result.skipped) return { handled: false };
   pushWaThread(input.storeId, input.phoneE164, { role: 'user', text });

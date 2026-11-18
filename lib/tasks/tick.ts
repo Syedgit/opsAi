@@ -3,17 +3,31 @@ import { managerPhonesForStore, postToStoreGroups, sendWhatsAppMessage } from '.
 import { maybeMorningDepositText } from '../understanding/depositDue';
 import { releaseAwaitingCloses } from '../understanding/awaitingText';
 import { maybeThursdayHoursText } from '../understanding/hoursDigest';
-import { alertMessage, escalationMessage, reminderMessage, type MessageRun } from './messages';
+import { alertMessage, reminderMessage, type MessageRun } from './messages';
 import { dueSoFar } from './schedule';
 import { localDateString } from './time';
 import { logApp, logAppError, serializeError } from '../requestLog';
+import { taskAlertsEnabled } from '../notify/channels';
+import {
+  adminDailySummaryMessageId,
+  adminSummaryWindow,
+  adminWeeklySummaryMessageId,
+  filterRunsForCadence,
+  formatAdminTaskSummary,
+  shouldSendDailyAdminSummary,
+  shouldSendWeeklyAdminSummary,
+  weekDatesInclusive,
+  type SummaryRun,
+  type SummaryTemplate,
+} from './adminSummary';
 
 /**
  * The heartbeat of the task system. Called every few minutes by a scheduler (see README).
  * Each call, for every store with active tasks:
  *   1. creates a run for each task that has come due,
  *   2. closes runs that were replaced by a newer one (or are over a day old),
- *   3. announces newly due tasks, reminds about open ones, and escalates stale ones to the owner.
+ *   3. announces newly due tasks and reminds staff about open ones,
+ *   4. sends brief daily / weekly summaries to owners (not per-task escalations).
  * It is safe to call twice in a row: runs are unique per task and due time, and each message is
  * only sent once its own timer has elapsed.
  */
@@ -35,6 +49,8 @@ export interface TickResult {
   errors: number;
   depositNudges: number;
   hoursDigests: number;
+  dailySummaries: number;
+  weeklySummaries: number;
 }
 
 interface TemplateRow {
@@ -103,23 +119,31 @@ const toMessageRun = (run: RunRow, instructions?: string | null): MessageRun => 
   fallback: run.fallback,
 });
 
-/** Group first (the shift sees it together). With no group, staff get a DM; a solo owner does too. */
+/**
+ * Group first (the shift sees it together). Otherwise DM store staff.
+ * Owners/managers are not CC'd on every due/remind — they get brief daily/weekly summaries.
+ * If there is no staff listing, fall back to owners/managers, then manager phones.
+ */
 export async function deliverToStore(prisma: PrismaClient, storeId: string, text: string): Promise<number> {
   const posted = await postToStoreGroups(prisma, storeId, text);
   if (posted > 0) return posted;
 
   const members = await prisma.userDirectory.findMany({ where: { storeId, isActive: true } });
-  const staff = members.filter((member) => member.role !== 'OWNER');
-  const targets = staff.length > 0 ? staff : members.filter((member) => member.role === 'OWNER');
+  const staff = members.filter((member) => member.role === 'STAFF');
+  const bosses = members.filter((member) => member.role === 'OWNER' || member.role === 'MANAGER');
+  const targets = staff.length > 0 ? staff : bosses.length > 0 ? bosses : members;
+  const seen = new Set<string>();
   let sent = 0;
-  if (targets.length > 0) {
-    for (const member of targets) {
-      if (await sendWhatsAppMessage(prisma, member.phoneE164, text, storeId)) sent += 1;
-    }
-    return sent;
+  for (const member of targets) {
+    if (seen.has(member.phoneE164)) continue;
+    seen.add(member.phoneE164);
+    if (await sendWhatsAppMessage(prisma, member.phoneE164, text, storeId)) sent += 1;
   }
+  if (sent > 0) return sent;
   const fallback = await managerPhonesForStore(prisma, storeId);
   for (const phone of fallback) {
+    if (seen.has(phone)) continue;
+    seen.add(phone);
     if (await sendWhatsAppMessage(prisma, phone, text, storeId)) sent += 1;
   }
   return sent;
@@ -143,11 +167,16 @@ function smallestFreeCode(used: Set<number>): number {
 }
 
 async function tickStore(prisma: PrismaClient, storeId: string, templates: TemplateRow[], now: Date, result: TickResult): Promise<void> {
-  const store = await prisma.storeConfig.findUnique({ where: { storeId }, select: { storeName: true, timezone: true, active: true } });
+  const store = await prisma.storeConfig.findUnique({
+    where: { storeId },
+    select: { storeName: true, timezone: true, active: true, profileJson: true },
+  });
   if (!store || store.active === false) return;
   const timeZone = store.timezone || 'America/New_York';
   const today = localDateString(now, timeZone);
   const byId = new Map(templates.map((t) => [t.id, t]));
+  // When alerts are off we still advance run state so turning them back on does not dump a backlog.
+  const alertsOn = taskAlertsEnabled(store.profileJson);
 
   const openRows = (await prisma.taskRun.findMany({ where: { storeId, status: 'OPEN' } })) as RunRow[];
   const todayRows = (await prisma.taskRun.findMany({ where: { storeId, localDate: today } })) as RunRow[];
@@ -218,14 +247,15 @@ async function tickStore(prisma: PrismaClient, storeId: string, templates: Templ
   const gone = new Set([...cancelled, ...toClose]);
   const live = open.filter((r) => !gone.has(r.id)).sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime() || a.code - b.code);
 
-  // 3a. Announce what just came due, in one message.
+  // 3a. Announce what just came due, in one message (or quietly mark alerted when muted).
   const fresh = live.filter((r) => !r.alertedAt);
   if (fresh.length > 0) {
     const text = alertMessage(store.storeName, fresh.map((r) => toMessageRun(r, byId.get(r.templateId)?.instructions)), timeZone);
-    if ((await deliverToStore(prisma, storeId, text)) > 0) {
+    const ok = alertsOn ? (await deliverToStore(prisma, storeId, text)) > 0 : true;
+    if (ok) {
       await prisma.taskRun.updateMany({ where: { id: { in: fresh.map((r) => r.id) } }, data: { alertedAt: now } });
       fresh.forEach((r) => (r.alertedAt = now));
-      result.alerted += fresh.length;
+      if (alertsOn) result.alerted += fresh.length;
     }
   }
 
@@ -237,26 +267,25 @@ async function tickStore(prisma: PrismaClient, storeId: string, templates: Templ
   });
   if (nag.length > 0) {
     const text = reminderMessage(store.storeName, nag.map((r) => toMessageRun(r)), timeZone, now);
-    if ((await deliverToStore(prisma, storeId, text)) > 0) {
+    const ok = alertsOn ? (await deliverToStore(prisma, storeId, text)) > 0 : true;
+    if (ok) {
       for (const r of nag) {
         await prisma.taskRun.update({ where: { id: r.id }, data: { lastReminderAt: now, reminderCount: r.reminderCount + 1 } });
       }
-      result.reminded += nag.length;
+      if (alertsOn) result.reminded += nag.length;
     }
   }
 
-  // 4. Tell the owner and managers about tasks still open well past due.
+  // 4. Mark overdue runs as escalated for the board, but do not WhatsApp the owner —
+  // they get a brief daily / weekly summary instead (see tickAdminSummaries).
   const stale = live.filter((r) => {
     if (r.escalatedAt || !r.alertedAt) return false;
     const minutes = byId.get(r.templateId)?.escalateAfterMinutes ?? DEFAULT_ESCALATE_MINUTES;
     return now.getTime() - r.dueAt.getTime() >= minutes * 60000;
   });
   if (stale.length > 0) {
-    const text = escalationMessage(store.storeName, stale.map((r) => toMessageRun(r)), timeZone, now);
-    if ((await notifyManagers(prisma, storeId, text)) > 0) {
-      await prisma.taskRun.updateMany({ where: { id: { in: stale.map((r) => r.id) } }, data: { escalatedAt: now } });
-      result.escalated += stale.length;
-    }
+    await prisma.taskRun.updateMany({ where: { id: { in: stale.map((r) => r.id) } }, data: { escalatedAt: now } });
+    result.escalated += stale.length;
   }
 }
 
@@ -340,8 +369,95 @@ async function tickThursdayHours(
   }
 }
 
+async function tickAdminSummaries(
+  prisma: PrismaClient,
+  now: Date,
+  options: { storeId?: string },
+  result: TickResult
+): Promise<void> {
+  const stores = await prisma.storeConfig.findMany({
+    where: { active: true, ...(options.storeId ? { storeId: options.storeId } : {}) },
+    select: { storeId: true, storeName: true, timezone: true, profileJson: true, active: true },
+  });
+  for (const store of stores) {
+    try {
+      if (!taskAlertsEnabled(store.profileJson)) continue;
+      const timeZone = store.timezone?.trim() || 'America/New_York';
+      const { today, nowMinutes, weekStart } = adminSummaryWindow(now, timeZone);
+      const templates = (await prisma.taskTemplate.findMany({
+        where: { storeId: store.storeId, active: true },
+        select: { id: true, frequency: true, daysOfWeek: true },
+      })) as SummaryTemplate[];
+      if (templates.length === 0) continue;
+
+      const sendIfDue = async (
+        cadence: 'daily' | 'weekly',
+        messageId: string,
+        dates: Set<string>,
+        label: string
+      ) => {
+        const already = await prisma.messageLog.findUnique({ where: { messageId }, select: { messageId: true } });
+        if (already) return;
+        const dateList = [...dates];
+        const runs = (await prisma.taskRun.findMany({
+          where: { storeId: store.storeId, localDate: { in: dateList } },
+          select: { title: true, status: true, localDate: true, templateId: true },
+          take: 2000,
+        })) as SummaryRun[];
+        const scoped = filterRunsForCadence(runs, templates, cadence, dates);
+        const text = formatAdminTaskSummary({ storeName: store.storeName, cadence, label, runs: scoped });
+        if (!text) return;
+        if ((await notifyManagers(prisma, store.storeId, text)) === 0) return;
+        try {
+          await prisma.messageLog.create({
+            data: {
+              messageId,
+              phoneE164: 'opsai',
+              storeId: store.storeId,
+              messageType: cadence === 'daily' ? 'task_summary_daily' : 'task_summary_weekly',
+              messageText: text,
+              processed: true,
+            },
+          });
+        } catch (error) {
+          if ((error as { code?: string }).code !== 'P2002') throw error;
+        }
+        if (cadence === 'daily') result.dailySummaries += 1;
+        else result.weeklySummaries += 1;
+      };
+
+      if (shouldSendDailyAdminSummary(today, nowMinutes)) {
+        await sendIfDue('daily', adminDailySummaryMessageId(store.storeId, today), new Set([today]), today);
+      }
+      if (shouldSendWeeklyAdminSummary(today, nowMinutes)) {
+        await sendIfDue(
+          'weekly',
+          adminWeeklySummaryMessageId(store.storeId, weekStart),
+          weekDatesInclusive(weekStart, today),
+          `week of ${weekStart}`
+        );
+      }
+    } catch (error) {
+      result.errors += 1;
+      logAppError('tick.admin_summary', { storeId: store.storeId, ...serializeError(error) });
+    }
+  }
+}
+
 export async function runTaskTick(prisma: PrismaClient, now: Date = new Date(), options: { storeId?: string } = {}): Promise<TickResult> {
-  const result: TickResult = { stores: 0, created: 0, alerted: 0, reminded: 0, escalated: 0, closed: 0, errors: 0, depositNudges: 0, hoursDigests: 0 };
+  const result: TickResult = {
+    stores: 0,
+    created: 0,
+    alerted: 0,
+    reminded: 0,
+    escalated: 0,
+    closed: 0,
+    errors: 0,
+    depositNudges: 0,
+    hoursDigests: 0,
+    dailySummaries: 0,
+    weeklySummaries: 0,
+  };
 
   const all = (await prisma.taskTemplate.findMany({ where: options.storeId ? { storeId: options.storeId } : {} })) as TemplateRow[];
   const activeByStore = new Map<string, TemplateRow[]>();
@@ -376,6 +492,12 @@ export async function runTaskTick(prisma: PrismaClient, now: Date = new Date(), 
   } catch (error) {
     result.errors += 1;
     logAppError('tick.hours', serializeError(error));
+  }
+  try {
+    await tickAdminSummaries(prisma, now, options, result);
+  } catch (error) {
+    result.errors += 1;
+    logAppError('tick.admin_summary', serializeError(error));
   }
   logApp('tick.done', { store: options.storeId || 'all', ...result });
   return result;

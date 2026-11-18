@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <meta name="theme-color" content="#111111">
+    <meta name="theme-color" content="#f5f7fa">
     <meta name="color-scheme" content="light">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
@@ -20,8 +20,8 @@
     <link rel="apple-touch-startup-image" href="/splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
     <link rel="apple-touch-startup-image" href="/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
     <link rel="apple-touch-startup-image" href="/splash-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
-    <link rel="stylesheet" href="/app-shell.css?v=3">
-    <script src="/app-shell.js?v=2"></script>
+    <link rel="stylesheet" href="/app-shell.css?v=4">
+    <script src="/app-shell.js?v=3"></script>
     <title>opsAi Dashboard</title>
     <style>
         * {
@@ -43,9 +43,13 @@
             --warning: #f59e0b;
             --danger: #ef4444;
             --sidebar-width: 260px;
-            --sidebar-bg: #111111;
-            --sidebar-bg-end: #0a0a0a;
-            --sidebar-accent: #2dd4bf;
+            --sidebar-bg: #ffffff;
+            --sidebar-bg-end: #f8faf9;
+            --sidebar-accent: var(--primary);
+            --sidebar-text: #1f2937;
+            --sidebar-muted: #6b7280;
+            --sidebar-hover: #f0fdf4;
+            --sidebar-active: #e8f8ef;
         }
         
         html { -webkit-text-size-adjust: 100%; overflow-x: clip; overflow-y: auto; }
@@ -62,16 +66,17 @@
         body.nav-open { overflow: hidden; }
         input, select, textarea, button { font-size: 16px; font-family: inherit; }
         
-        /* Sidebar */
+        /* Sidebar — light, same theme as the page */
         .sidebar {
             width: var(--sidebar-width);
             background: linear-gradient(180deg, var(--sidebar-bg) 0%, var(--sidebar-bg-end) 100%);
-            color: white;
+            color: var(--sidebar-text);
             position: fixed;
             height: 100vh;
             height: 100dvh;
             overflow-y: auto;
-            box-shadow: 2px 0 16px rgba(0,0,0,0.18);
+            border-right: 1px solid var(--border);
+            box-shadow: none;
             z-index: 1000;
             padding-top: env(safe-area-inset-top);
             padding-bottom: env(safe-area-inset-bottom);
@@ -80,13 +85,13 @@
             display: none;
             position: fixed;
             inset: 0;
-            background: rgba(0,0,0,0.45);
+            background: rgba(17,24,39,0.28);
             z-index: 999;
         }
         
         .sidebar-header {
-            padding: 24px 20px;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding: 20px 18px 16px;
+            border-bottom: 1px solid var(--border);
             display: flex;
             align-items: flex-start;
             gap: 8px;
@@ -99,68 +104,78 @@
             height: 44px;
             margin: -4px -8px 0 0;
             background: transparent;
-            color: #fff;
+            color: var(--sidebar-muted);
             border: none;
             border-radius: 8px;
             font-size: 28px;
             line-height: 1;
             cursor: pointer;
         }
+        .sidebar-close:hover { background: var(--sidebar-hover); color: var(--sidebar-text); }
         
         .sidebar-header .brand-logo {
             display: block;
-            background: #fff;
+            background: transparent;
             border-radius: 10px;
-            padding: 8px 10px;
-            margin-bottom: 10px;
+            padding: 4px 2px;
+            margin-bottom: 4px;
             line-height: 0;
         }
         .sidebar-header .brand-logo img {
             display: block;
             width: 100%;
             height: auto;
+            max-height: 40px;
+            object-fit: contain;
+            object-position: left center;
         }
         .sidebar-header .brand-logo:hover {
-            opacity: 0.92;
+            opacity: 0.9;
         }
         
         .sidebar-menu {
-            padding: 20px 0;
+            padding: 16px 0 20px;
         }
         
         .menu-item {
             display: flex;
             align-items: center;
-            padding: 14px 20px;
-            color: rgba(255,255,255,0.9);
+            margin: 2px 10px;
+            padding: 11px 12px;
+            color: var(--sidebar-text);
             text-decoration: none;
-            transition: all 0.2s;
+            transition: background 0.15s ease, color 0.15s ease;
             cursor: pointer;
-            border-left: 3px solid transparent;
+            border-left: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 500;
         }
         
         .menu-item:hover {
-            background: rgba(255,255,255,0.06);
-            border-left-color: var(--sidebar-accent);
+            background: var(--sidebar-hover);
+            color: var(--secondary);
         }
         
         .menu-item.active {
-            background: rgba(45,212,191,0.12);
-            border-left-color: var(--sidebar-accent);
-            font-weight: 600;
+            background: var(--sidebar-active);
+            color: var(--secondary);
+            font-weight: 650;
+            box-shadow: inset 0 0 0 1px #b8e6c8;
         }
         
         .menu-item-icon {
-            font-size: 20px;
-            margin-right: 12px;
-            width: 24px;
+            font-size: 18px;
+            margin-right: 10px;
+            width: 22px;
             text-align: center;
+            opacity: 0.9;
         }
         
         .menu-section {
-            margin-top: 24px;
-            padding-top: 24px;
-            border-top: 1px solid rgba(255,255,255,0.1);
+            margin-top: 18px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border);
         }
         
         .whatsapp-setup-card {
@@ -237,11 +252,13 @@
         }
 
         .menu-section-title {
-            padding: 0 20px 12px;
+            padding: 0 22px 10px;
             font-size: 11px;
             text-transform: uppercase;
-            opacity: 0.6;
-            letter-spacing: 1px;
+            color: var(--sidebar-muted);
+            opacity: 1;
+            letter-spacing: 0.06em;
+            font-weight: 700;
         }
         
         /* Main Content */
@@ -926,11 +943,11 @@
         /* Mobile Menu Toggle */
         .menu-toggle {
             display: none;
-            background: #111;
-            color: white;
-            border: none;
+            background: #fff;
+            color: var(--text);
+            border: 1px solid var(--border);
             padding: 10px 14px;
-            border-radius: 8px;
+            border-radius: 10px;
             cursor: pointer;
             font-size: 20px;
             position: fixed;
@@ -939,6 +956,7 @@
             z-index: 1001;
             min-width: 44px;
             min-height: 44px;
+            box-shadow: 0 4px 14px rgba(17,24,39,0.08);
         }
         
         /* Responsive */
@@ -974,7 +992,7 @@
             
             .sidebar.open {
                 transform: translateX(0);
-                box-shadow: 4px 0 20px rgba(0,0,0,0.2);
+                box-shadow: 8px 0 28px rgba(17,24,39,0.12);
             }
             
             .main-content {
@@ -1157,67 +1175,34 @@
         <nav class="sidebar-menu">
             <a href="#" class="menu-item active" data-page="dashboard">
                 <span class="menu-item-icon">📈</span>
-                <span>Dashboard</span>
+                <span>Overview</span>
             </a>
-            
+            <a href="#" class="menu-item" data-page="sales" data-mod="money">
+                <span class="menu-item-icon">💰</span>
+                <span>Closes</span>
+            </a>
+            <a href="#" class="menu-item" data-page="invoices" data-mod="money">
+                <span class="menu-item-icon">🧾</span>
+                <span>Invoices</span>
+            </a>
+            <a href="#" class="menu-item" data-page="paidouts" data-mod="money">
+                <span class="menu-item-icon">💵</span>
+                <span>Paid outs</span>
+            </a>
+            <a href="#" class="menu-item" data-page="summary" data-mod="money">
+                <span class="menu-item-icon">📊</span>
+                <span>Reports</span>
+            </a>
+            <a href="/tasks" class="menu-item" id="tasksMenuItem">
+                <span class="menu-item-icon">✅</span>
+                <span>Tasks</span>
+            </a>
+            <a href="/crew" class="menu-item" id="crewMenuItem">
+                <span class="menu-item-icon">💬</span>
+                <span>Ask agents</span>
+            </a>
+
             <div class="menu-section">
-                <div class="menu-section-title">Operations</div>
-                <a href="#" class="menu-item" data-page="sales" data-mod="money">
-                    <span class="menu-item-icon">💰</span>
-                    <span>Daily Sales</span>
-                </a>
-                <a href="#" class="menu-item" data-page="invoices" data-mod="money">
-                    <span class="menu-item-icon">🧾</span>
-                    <span>Invoices</span>
-                </a>
-                <a href="#" class="menu-item" data-page="expenses" data-mod="money">
-                    <span class="menu-item-icon">💸</span>
-                    <span>Expenses</span>
-                </a>
-                <a href="#" class="menu-item" data-page="fuel" data-mod="fuel">
-                    <span class="menu-item-icon">⛽</span>
-                    <span>Fuel Sales</span>
-                </a>
-                <a href="#" class="menu-item" data-page="prices" data-mod="fuel">
-                    <span class="menu-item-icon">🏷️</span>
-                    <span>Gas prices</span>
-                </a>
-                <a href="#" class="menu-item" data-page="paidouts" data-mod="money">
-                    <span class="menu-item-icon">💵</span>
-                    <span>Paid Outs</span>
-                </a>
-                <a href="#" class="menu-item" data-page="dashboard" data-open-tab="schedules" data-mod="schedules">
-                    <span class="menu-item-icon">🗓️</span>
-                    <span>Schedule</span>
-                </a>
-                <a href="#" class="menu-item" data-page="orders" data-mod="orders">
-                    <span class="menu-item-icon">📦</span>
-                    <span>Orders</span>
-                </a>
-                <a href="/tasks" class="menu-item" id="tasksMenuItem">
-                    <span class="menu-item-icon">✅</span>
-                    <span>Tasks &amp; alerts</span>
-                </a>
-                <a href="/crew" class="menu-item" id="crewMenuItem">
-                    <span class="menu-item-icon">💬</span>
-                    <span>Ask agents</span>
-                </a>
-            </div>
-            
-            <div class="menu-section" data-mod="money">
-                <div class="menu-section-title">Analytics</div>
-                <a href="#" class="menu-item" data-page="summary" data-mod="money">
-                    <span class="menu-item-icon">📊</span>
-                    <span>Reports &amp; AI analytics</span>
-                </a>
-            </div>
-            
-            <div class="menu-section">
-                <div class="menu-section-title">System</div>
-                <a href="#" class="menu-item" data-page="activity">
-                    <span class="menu-item-icon">📋</span>
-                    <span>Activity Log</span>
-                </a>
                 <a href="#" class="menu-item" data-page="settings">
                     <span class="menu-item-icon">⚙️</span>
                     <span>Settings</span>
@@ -1379,13 +1364,9 @@
                 </div>
                 
                 <div class="nav-tabs">
-                    <button class="nav-tab active" data-tab="sales" data-mod="money">Daily Sales</button>
-                    <button class="nav-tab" data-tab="invoices" data-mod="money">Invoices & Expenses</button>
-                    <button class="nav-tab" data-tab="fuel" data-mod="fuel">Fuel Sales</button>
-                    <button class="nav-tab" data-tab="prices" data-mod="fuel">Gas prices</button>
-                    <button class="nav-tab" data-tab="paidouts" data-mod="money">Paid Outs</button>
-                    <button class="nav-tab" data-tab="orders" data-mod="orders">Orders</button>
-                    <button class="nav-tab" data-tab="schedules" data-mod="schedules">Schedule</button>
+                    <button class="nav-tab active" data-tab="sales" data-mod="money">Closes</button>
+                    <button class="nav-tab" data-tab="invoices" data-mod="money">Invoices</button>
+                    <button class="nav-tab" data-tab="paidouts" data-mod="money">Paid outs</button>
                     <a class="nav-tab" id="tasksLink" href="/tasks" style="text-decoration: none; display: inline-block;">Tasks &amp; alerts &rarr;</a>
                 </div>
                 
@@ -1688,7 +1669,9 @@
         let currentTab = 'sales';
         let currentPage = 'dashboard';
         let activityLog = [];
-        let currentModules = { money: true, fuel: true, orders: true, schedules: true, tasks: true };
+        // fuel: true on gas stores still stores data; nav/tabs for Fuel Sales & Gas prices stay off for now.
+        let currentModules = { money: true, fuel: false, orders: true, schedules: true, tasks: true };
+        const NAV_HIDE_MODS = { fuel: true };
         const SCHED_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
         let scheduleDraft = { weekStart: '', rows: [] };
 
@@ -1699,10 +1682,10 @@
         }
 
         function applyBusinessModules(modules) {
-            currentModules = modules || { money: true, fuel: true, orders: true, schedules: true, tasks: true };
+            currentModules = modules || { money: true, fuel: false, orders: true, schedules: true, tasks: true };
             document.querySelectorAll('[data-mod]').forEach(function (el) {
                 const key = el.getAttribute('data-mod');
-                const on = currentModules[key] !== false;
+                const on = currentModules[key] !== false && !NAV_HIDE_MODS[key];
                 if (el.classList.contains('page')) return;
                 el.style.display = on ? '' : 'none';
             });

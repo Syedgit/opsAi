@@ -20,8 +20,8 @@
     <link rel="apple-touch-startup-image" href="/splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
     <link rel="apple-touch-startup-image" href="/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
     <link rel="apple-touch-startup-image" href="/splash-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
-    <link rel="stylesheet" href="/app-shell.css?v=3">
-    <script src="/app-shell.js?v=2"></script>
+    <link rel="stylesheet" href="/app-shell.css?v=4">
+    <script src="/app-shell.js?v=3"></script>
     <title>opsAi · Tasks &amp; alerts</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -173,7 +173,7 @@
 <main>
     <div id="notice"></div>
     <div class="tabs">
-        <div class="tab active" data-view="today">Today</div>
+        <div class="tab active" data-view="today">Due</div>
         <div class="tab" data-view="inspection">Inspection</div>
         <div class="tab" data-view="setup">Store admin</div>
     </div>
@@ -197,14 +197,17 @@
     const EVIDENCE = { photo: 'Photo', text: 'Text answer', either: 'Photo or text', none: 'Just "done"' };
     const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-    let storeId = new URLSearchParams(location.search).get('storeId') || '';
-    let view = 'today';
+    const pageParams = new URLSearchParams(location.search);
+    let storeId = pageParams.get('storeId') || '';
+    const startView = pageParams.get('view');
+    let view = startView === 'setup' || startView === 'inspection' || startView === 'today' ? startView : 'today';
     let board = null;
     let inspection = null;
     let lastReport = null;
     let importing = null; // { pdf: base64, preview } while an inspector's report is being reviewed
     let editing = null; // template being edited, or {} for a new one
-    let adminPanel = null; // one Store admin section at a time
+    const startPanel = pageParams.get('panel');
+    let adminPanel = startPanel && String(startPanel).indexOf('admin-') === 0 ? startPanel : null; // one Store admin section at a time
     const features = {}; // store-type switches for the starter list, e.g. { fuel: true }
 
     if (window.opsai) {
@@ -255,6 +258,7 @@
         document.getElementById('content').innerHTML = '<div class="empty">Loading…</div>';
         try {
             board = await api('GET');
+            Object.keys(features).forEach(function (k) { delete features[k]; });
             if (board.setup) {
                 (board.setup.features || []).forEach(function (id) { features[id] = true; });
                 if (board.setup.fuel) features.fuel = true;
@@ -264,6 +268,12 @@
                     features.shelves = true;
                     features.restroom = true;
                     features.till = true;
+                } else if (t === 'office' || t === 'real_estate' || t === 'personal') {
+                    // Desk businesses never get shop-floor feature flags.
+                    delete features.cooler;
+                    delete features.shelves;
+                    delete features.restroom;
+                    delete features.till;
                 }
             }
             render();
@@ -290,54 +300,97 @@
     }
 
     function renderToday() {
-        const t = board.scoreToday, w = board.scoreWeek;
-        let html = '<div class="scores">' + scoreCard('Today', t.total) + scoreCard('Last 7 days', w.total) +
-            w.byCategory.map(function (c) { return scoreCard(c.label, c); }).join('') + '</div>';
+        const t = board.scoreToday;
+        let html = '<div class="scores">' +
+            scoreCard('Due score', t.total) +
+            '<div class="score"><div class="label">Store day</div><div class="big" style="font-size:18px;font-weight:650;">' +
+            esc(board.today || '') + '</div><div class="muted" style="margin-top:6px;">' + esc(board.timeZone) + '</div></div></div>';
 
         if (!board.setup && board.templates.length === 0) html = setupCard() + html;
         const runs = board.runs.filter(function (r) { return r.status !== 'CANCELLED'; });
-        const open = runs.filter(function (r) { return r.status === 'OPEN'; });
-        const closed = runs.filter(function (r) { return r.status !== 'OPEN'; }).reverse();
+        const open = runs.filter(function (r) { return r.status === 'OPEN'; })
+            .sort(function (a, b) { return new Date(a.dueAt) - new Date(b.dueAt); });
+        const closed = runs.filter(function (r) { return r.status !== 'OPEN'; })
+            .filter(function (r) { return r.localDate === board.today || (r.completedAt && String(r.completedAt).slice(0, 10) === board.today); })
+            .reverse();
 
         const photoBadge = function (r) {
             const note = r.photoNote ? '<div class="muted">' + esc(r.photoNote) + '</div>' : '';
-            if (r.photoVerdict === 'pass') return ' <span class="badge b-off">Photo checked ✓</span>' + note;
-            if (r.photoVerdict === 'fail') return ' <span class="badge b-late">Photo did not pass</span>' + note;
+            if (r.photoVerdict === 'pass') return ' <span class="badge b-off">Photo OK</span>' + note;
+            if (r.photoVerdict === 'fail') return ' <span class="badge b-late">Photo failed</span>' + note;
             if (r.photoVerdict === 'unclear') return ' <span class="badge b-open">Photo unclear</span>' + note;
-            if (r.photoVerdict === 'unchecked') return ' <span class="badge b-off">Photo not checked</span>' + note;
-            if (r.photoVerdict === 'approved') return ' <span class="badge b-off">Photo accepted by a manager</span>';
+            if (r.photoVerdict === 'unchecked') return ' <span class="badge b-off">Photo pending</span>' + note;
+            if (r.photoVerdict === 'approved') return ' <span class="badge b-off">Photo accepted</span>';
             return '';
         };
         const proof = function (r) {
             if (r.status === 'OPEN' && r.hasPhoto) {
-                return '<div class="proof"><button class="small" data-photo="' + esc(r.id) + '">View latest photo</button><div data-photo-box="' + esc(r.id) + '"></div></div>';
+                return '<div class="proof"><button class="small" data-photo="' + esc(r.id) + '">View photo</button><div data-photo-box="' + esc(r.id) + '"></div></div>';
             }
             if (r.status !== 'DONE') return '<span class="muted">—</span>';
             let p = '<div class="proof">';
             if (r.resultValue !== null && r.resultValue !== undefined) p += '<div><strong>' + esc(r.resultValue) + esc(unitText(r.unit)) + '</strong></div>';
             else if (r.evidenceText) p += '<div>' + esc(r.evidenceText) + '</div>';
             if (r.hasPhoto) p += '<button class="small" data-photo="' + esc(r.id) + '">View photo</button><div data-photo-box="' + esc(r.id) + '"></div>';
-            if (!r.evidenceText && !r.hasPhoto) p += '<span class="muted">Marked done</span>';
-            return p + '<div class="muted">at ' + esc(clock(r.completedAt)) + '</div></div>';
+            if (!r.evidenceText && !r.hasPhoto) p += '<span class="muted">Done</span>';
+            return p + '<div class="muted">' + esc(clock(r.completedAt)) + '</div></div>';
         };
         const rows = function (list) {
             return list.map(function (r) {
-                return '<tr><td><strong>' + esc(r.code) + '</strong></td><td>' + (r.standardId ? '<strong>' + esc(r.standardId) + '</strong> ' : '') + esc(r.title) + ' ' + crit(r.criticality) + '<div class="muted">' + esc(CATEGORIES[r.category] || r.category) + ' · ' + esc(r.points) + ' pt</div>' +
-                    (r.issueText ? '<div class="low" style="font-size: 13px;">Problem reported: ' + esc(r.issueText) + '</div>' : '') + '</td>' +
-                    '<td>' + esc(clock(r.dueAt)) + '</td><td>' + statusBadge(r) + (r.outcome === 'fail' && r.status === 'OPEN' ? ' <span class="badge b-late">Out of range' + (r.resultValue !== null && r.resultValue !== undefined ? ': ' + esc(r.resultValue) + esc(unitText(r.unit)) : '') + '</span>' : '') +
-                    (r.outcome === 'problem' && r.status === 'OPEN' ? ' <span class="badge b-late">Problem</span>' : '') + photoBadge(r) + (r.outcome === 'fixed' ? ' <span class="badge b-off">Fixed after a problem</span>' : '') +
-                    (r.escalated ? ' <span class="muted">owner told</span>' : '') + '</td><td class="proof">' + proof(r) + '</td>' +
-                    (board.canEdit && r.status === 'OPEN' ? '<td>' + (r.hasPhoto && (r.photoVerdict === 'fail' || r.photoVerdict === 'unclear') ? '<button class="small" data-approve="' + esc(r.id) + '">Accept photo</button> ' : '') + '<button class="small danger" data-close="' + esc(r.id) + '">Close as missed</button></td>' : '<td></td>') + '</tr>';
+                return '<tr><td>' + esc(r.title) + ' ' + crit(r.criticality) +
+                    '<div class="muted">' + esc(CATEGORIES[r.category] || r.category) +
+                    (r.issueText ? ' · ' + esc(r.issueText) : '') + '</div></td>' +
+                    '<td>' + esc(clock(r.dueAt)) + '</td><td>' + statusBadge(r) +
+                    (r.outcome === 'fail' && r.status === 'OPEN' ? ' <span class="badge b-late">Out of range</span>' : '') +
+                    (r.outcome === 'problem' && r.status === 'OPEN' ? ' <span class="badge b-late">Problem</span>' : '') +
+                    photoBadge(r) +
+                    (r.escalated ? ' <span class="muted">escalated</span>' : '') + '</td><td class="proof">' + proof(r) + '</td>' +
+                    (board.canEdit && (r.status === 'OPEN' || r.status === 'MISSED')
+                        ? '<td>' + (r.status === 'OPEN' && r.hasPhoto && (r.photoVerdict === 'fail' || r.photoVerdict === 'unclear')
+                            ? '<button class="small" data-approve="' + esc(r.id) + '">Accept</button> '
+                            : '') +
+                          '<button class="small danger" data-close="' + esc(r.id) + '">Remove</button></td>'
+                        : '<td></td>') + '</tr>';
             }).join('');
         };
-        const head = '<thead><tr><th>#</th><th>Task</th><th>Due</th><th>Status</th><th>Proof</th><th></th></tr></thead>';
+        const head = '<thead><tr><th>Task</th><th>Due</th><th>Status</th><th>Proof</th><th></th></tr></thead>';
 
-        html += '<div class="card"><div class="row" style="justify-content: space-between;"><h2>Open now (' + open.length + ')</h2>' +
-            (board.canEdit ? '<button data-run-now class="small">Send alerts now</button>' : '') + '</div>' +
-            (open.length ? '<table>' + head + '<tbody>' + rows(open) + '</tbody></table>' : '<div class="empty">Nothing is waiting on the team. 👍</div>') + '</div>';
-        html += '<div class="card"><h2>Finished today (' + closed.length + ')</h2>' +
-            (closed.length ? '<table>' + head + '<tbody>' + rows(closed) + '</tbody></table>' : '<div class="empty">Nothing finished yet today.</div>') + '</div>';
-        html += '<p class="muted">Score = points of finished tasks ÷ points of tasks that are finished or past their late time. Tasks still open but not yet late do not count either way. Times are ' + esc(board.timeZone) + '.</p>';
+        const alertsOn = !(board.channels && board.channels.taskAlerts && board.channels.taskAlerts.enabled === false);
+        html += '<div class="card"><div class="row" style="justify-content: space-between; gap:10px; flex-wrap:wrap;"><div>' +
+            '<h2 style="margin:0;">Needs action' + (open.length ? ' · ' + open.length : '') + '</h2>' +
+            '<p class="muted" style="margin:6px 0 0;">' +
+            (alertsOn
+                ? 'Staff get due/remind messages. Admins get a brief daily summary (daily tasks) and weekly summary (weekly tasks) after 8pm store time. Tap <strong>Send alerts</strong> locally after a due time.'
+                : 'WhatsApp alerts are <strong>off</strong> for this store. Due times still track here; nothing is sent until you turn them on.') +
+            '</p></div>' +
+            (board.canEdit
+                ? '<div class="row" style="gap:10px;align-items:center;">' +
+                  '<label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer;white-space:nowrap;">' +
+                  '<input type="checkbox" data-task-alerts' + (alertsOn ? ' checked' : '') + '> WhatsApp alerts</label>' +
+                  '<button data-run-now class="primary"' + (alertsOn ? '' : ' disabled title="Turn on WhatsApp alerts first"') + '>Send alerts</button></div>'
+                : '') + '</div>' +
+            (open.length
+                ? '<table style="margin-top:12px;">' + head + '<tbody>' + rows(open) + '</tbody></table>'
+                : '<div class="empty">Nothing due right now. If you just set Lock up for a past time, turn on alerts and tap Send alerts.</div>') + '</div>';
+
+        const upcoming = (board.templates || []).filter(function (t) {
+            if (!t.active) return false;
+            return !(board.runs || []).some(function (r) {
+                return r.title === t.title && r.status === 'OPEN';
+            });
+        });
+        if (upcoming.length && !open.length) {
+            html += '<div class="card"><h2>Scheduled today</h2><p class="muted" style="margin-bottom:10px;">These are on the store. They appear above after Send alerts (or the cron) runs past their due time.</p><ul style="margin:0;padding-left:18px;font-size:14px;line-height:1.6;">';
+            upcoming.slice(0, 12).forEach(function (t) {
+                html += '<li><strong>' + esc(t.title) + '</strong> · ' + esc(t.scheduleText || '') + '</li>';
+            });
+            html += '</ul></div>';
+        }
+
+        if (closed.length) {
+            html += '<div class="card"><h2>Done today · ' + closed.length + '</h2>' +
+                '<table>' + head + '<tbody>' + rows(closed) + '</tbody></table></div>';
+        }
         return html;
     }
 
@@ -349,12 +402,37 @@
             const data = await api('GET', null, { view: 'inspection' });
             inspection = data.prediction;
             lastReport = data.lastReport || null;
-            if (board) board.canEdit = data.canEdit; else board = { canEdit: data.canEdit, timeZone: 'America/New_York' };
+            if (!board) board = {};
+            board.canEdit = data.canEdit;
+            board.storeName = data.storeName || board.storeName;
+            board.timeZone = data.timeZone || board.timeZone || 'America/New_York';
+            board.templates = Array.isArray(data.templates) ? data.templates : (board.templates || []);
+            board.inspectionPresets = Array.isArray(data.presets) ? data.presets : [];
             render();
         } catch (e) {
             document.getElementById('content').innerHTML = '';
             note('err', 'Could not load the inspection view. ' + e.message);
         }
+    }
+
+    function templateForStandard(standardId) {
+        if (!board || !board.templates || !standardId) return null;
+        return board.templates.find(function (t) { return t.standardId === standardId; }) || null;
+    }
+
+    function presetForId(presetId) {
+        if (!board || !board.inspectionPresets || !presetId) return null;
+        return board.inspectionPresets.find(function (p) { return p.presetId === presetId; }) || null;
+    }
+
+    function scheduleLine(t) {
+        if (!t) return '';
+        const bits = [];
+        if (t.shift) bits.push(t.shift);
+        if (t.startTime) bits.push(t.startTime);
+        if (t.evidence && EVIDENCE[t.evidence]) bits.push(EVIDENCE[t.evidence]);
+        if (t.points != null) bits.push(t.points + ' pt');
+        return bits.length ? '<div class="muted">' + esc(bits.join(' · ')) + '</div>' : '';
     }
 
     const MAX_REPORT_BYTES = 2500000;
@@ -424,7 +502,9 @@
     function renderInspection() {
         const p = inspection;
         if (!p) return '<div class="empty">Loading…</div>';
-        let html = renderImport() + renderLastReport();
+        let html = '';
+        if (editing && board && board.canEdit) html += renderForm();
+        html += renderImport() + renderLastReport();
         if (p.autoFail.length) {
             html += '<div class="notice err"><strong>Auto-fail risk.</strong> ' + p.autoFail.map(function (r) { return esc(r.standardId) + ' ' + esc(r.title); }).join('; ') + '. An inspection can fail outright on these.</div>';
         }
@@ -435,8 +515,13 @@
             p.byCategory.map(function (c) { return '<div class="score"><div class="label">' + esc(c.label) + '</div><div class="big ' + pctClass(c.percent) + '">' + (c.percent === null ? '—' : esc(c.percent) + '%') + '</div><div class="muted">' + esc(c.earned) + ' / ' + esc(c.possible) + ' pts</div></div>'; }).join('') + '</div>';
 
         const row = function (r, extra) {
+            const t = templateForStandard(r.standardId);
+            const edit = board && board.canEdit && t
+                ? '<button class="small" data-edit-standard="' + esc(t.id) + '">Edit</button>'
+                : '';
             return '<tr><td><strong>' + esc(r.standardId) + '</strong></td><td>' + esc(r.title) + ' ' + crit(r.criticality) + (r.repeat ? ' <span class="badge b-late">Repeat</span>' : '') + (r.lastFinding && !r.repeat ? ' <span class="badge b-late">Found at last inspection</span>' : '') +
-                '<div class="muted">' + esc(CATEGORIES[r.category] || r.category) + '</div></td><td>' + esc(r.points) + ' pt</td><td>' + (extra || '') + '</td></tr>';
+                '<div class="muted">' + esc(CATEGORIES[r.category] || r.category) + '</div>' + scheduleLine(t) + '</td><td>' + esc(r.points) + ' pt</td><td>' +
+                (extra || '') + (edit ? (extra ? ' ' : '') + edit : '') + '</td></tr>';
         };
         html += '<div class="card"><h2>Would cost points right now (' + p.fails.length + ')</h2>' +
             (p.fails.length ? '<table><tbody>' + p.fails.map(function (r) { return row(r, '<span class="low">' + esc(r.reason) + '</span>'); }).join('') + '</tbody></table>' : '<div class="empty">Nothing is failing on the standards you track. 👍</div>') + '</div>';
@@ -444,10 +529,17 @@
             html += '<div class="card"><h2>Waiting for proof (' + p.pending.length + ')</h2><table><tbody>' + p.pending.map(function (r) { return row(r, '<span class="muted">not due or not answered yet</span>'); }).join('') + '</tbody></table></div>';
         }
         if (p.notTracked.length) {
-            html += '<div class="card"><h2>Not tracked yet (' + p.notTracked.length + ')</h2><p class="muted" style="margin-bottom: 8px;">An inspector checks these, but nobody is being asked about them here. Add the ones that apply to your store.</p><table><tbody>' +
-                p.notTracked.map(function (r) { return row(r, board && board.canEdit ? '<button class="small" data-add-standard="' + esc(r.presetId) + '">Add task</button>' : ''); }).join('') + '</tbody></table></div>';
+            html += '<div class="card"><h2>Not tracked yet (' + p.notTracked.length + ')</h2><p class="muted" style="margin-bottom: 8px;">An inspector checks these, but nobody is being asked about them here. Add one and set shift, time, proof, and points.</p><table><tbody>' +
+                p.notTracked.map(function (r) {
+                    return '<tr><td><strong>' + esc(r.standardId) + '</strong></td><td>' + esc(r.title) + ' ' + crit(r.criticality) +
+                        '<div class="muted">' + esc(CATEGORIES[r.category] || r.category) + '</div></td><td>' + esc(r.points) + ' pt</td><td>' +
+                        (board && board.canEdit ? '<button class="small" data-add-standard="' + esc(r.presetId) + '">Add task</button>' : '') + '</td></tr>';
+                }).join('') + '</tbody></table></div>';
         }
-        html += '<div class="card"><h2>Passing (' + p.passes.length + ')</h2>' + (p.passes.length ? '<div class="muted">' + p.passes.map(function (r) { return esc(r.standardId); }).join(', ') + '</div>' : '<div class="muted">None yet.</div>') + '</div>';
+        html += '<div class="card"><h2>Passing (' + p.passes.length + ')</h2>' +
+            (p.passes.length
+                ? '<table><tbody>' + p.passes.map(function (r) { return row(r, '<span class="muted">ok</span>'); }).join('') + '</tbody></table>'
+                : '<div class="muted">None yet.</div>') + '</div>';
         html += '<p class="muted">This is a prediction from what your team has proven through tasks, not the inspector\'s score. It covers only the standards in the list (what the 7Clean report we have shows), so the real inspection can include items not shown here. A standard passes when its latest task was done with proof, and fails when it was missed, is late, read out of range, or has a problem reported.</p>';
         return html;
     }
@@ -483,11 +575,26 @@
         }).join('') + '</select>';
     }
 
+    /** HH:MM end time later than start (same day). Prefer +8h, at least +1h, never past 23:59. */
+    function defaultEndAfterStart(startHHMM) {
+        const m = /^(\d{1,2}):(\d{2})$/.exec(String(startHHMM || '').trim());
+        let startMin = m ? Number(m[1]) * 60 + Number(m[2]) : 10 * 60;
+        if (startMin < 0) startMin = 0;
+        let endMin = Math.min(startMin + 8 * 60, 23 * 60 + 59);
+        if (endMin <= startMin) endMin = Math.min(startMin + 60, 23 * 60 + 59);
+        if (endMin <= startMin) return '';
+        const hh = String(Math.floor(endMin / 60)).padStart(2, '0');
+        const mm = String(endMin % 60).padStart(2, '0');
+        return hh + ':' + mm;
+    }
+
     function renderForm() {
         const t = editing;
         const val = function (k, d) { return t[k] === null || t[k] === undefined ? d : t[k]; };
         const days = t.daysOfWeek || [0, 1, 2, 3, 4, 5, 6];
         const repeats = Boolean(t.repeatEveryMinutes);
+        const startTime = val('startTime', '10:00');
+        const endTime = val('endTime', '') || (repeats ? defaultEndAfterStart(startTime) : '');
         const how = howOftenOf(t);
         const monthDay = (t.monthDays && t.monthDays[0]) || 1;
         const monthOpts = [];
@@ -503,16 +610,25 @@
         ];
         if (how === 'interval') howOpts.push(['interval', 'Every few days']);
         if (how === 'once') howOpts.push(['once', 'Once, on one date']);
-        return '<div class="card" id="formCard"><h2>' + (t.id ? 'Edit reminder' : 'New reminder') + '</h2>' +
-            '<p class="muted card-help">Name it, pick a category, the shift, the time, and how often. That is enough.</p><form id="taskForm">' +
+        const sevenClean = isSevenEleven() || Boolean(t.standardId);
+        return '<div class="card" id="formCard"><h2>' + (t.id ? 'Edit reminder' : (t.standardId ? 'Add ' + esc(t.standardId) + ' task' : 'New reminder')) + '</h2>' +
+            '<p class="muted card-help">' + (sevenClean
+                ? 'Set shift, time, proof, and points. Save to start tracking this standard.'
+                : 'Name it, pick a category, the shift, the time, and how often. That is enough.') + '</p><form id="taskForm">' +
             '<div class="grid">' +
             '<div style="grid-column: 1 / -1;"><label>What is the task?</label><input type="text" name="title" maxlength="120" required value="' + esc(val('title', '')) + '" placeholder="e.g. Pay the electric bill"></div>' +
             '<div><label>Category</label><select name="category">' + options(categoryMap(), val('category', 'other')) + '</select></div>' +
             '<div><label>Shift</label>' + shiftSelect(val('shift', '')) + '</div>' +
-            '<div><label>Time of the reminder (store time)</label><input type="time" name="startTime" required value="' + esc(val('startTime', '10:00')) + '"></div>' +
+            '<div><label>Time of the reminder (store time)</label><input type="time" name="startTime" required value="' + esc(startTime) + '"></div>' +
             '<div><label>How often</label><select name="howOften">' + howOpts.map(function (o) {
                 return '<option value="' + o[0] + '"' + (how === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
             }).join('') + '</select></div>' +
+            '<div><label>Proof</label><select name="evidence">' + options(EVIDENCE, val('evidence', t.id ? 'either' : (sevenClean ? 'photo' : 'text'))) + '</select></div>' +
+            (sevenClean
+                ? '<div><label>Points</label><input type="number" name="points" min="0" max="100" value="' + esc(val('points', '')) + '"></div>' +
+                  '<div><label>Standard ID</label><input type="text" name="standardId" maxlength="20" value="' + esc(val('standardId', '')) + '"></div>' +
+                  '<div><label>How serious is a miss?</label><select name="criticality"><option value="">Not set</option>' + options(CRITICALITY, val('criticality', '')) + '</select></div>'
+                : '') +
             '</div>' +
             '<div class="days" id="weeklyBox" style="margin: 14px 0;' + (how === 'weekly' ? '' : ' display:none;') + '"><label>Which days</label>' + DAYS.map(function (d, i) {
                 return '<label><input type="checkbox" name="day" value="' + i + '"' + (days.indexOf(i) >= 0 ? ' checked' : '') + '> ' + d + '</label>';
@@ -523,16 +639,8 @@
             '<div><label>First time on (optional, default today)</label><input type="date" name="anchorDate" value="' + esc(how === 'interval' ? val('anchorDate', '') : '') + '"></div></div>' +
             '<div class="grid" id="onceBox" style="margin: 14px 0;' + (how === 'once' ? '' : ' display:none;') + '">' +
             '<div><label>On this date</label><input type="date" name="onceDate" value="' + esc(how === 'once' ? val('anchorDate', '') : '') + '"></div></div>' +
-            '<div class="grid" style="margin-top: 8px;">' +
-            '<div><label>Proof</label><select name="evidence">' + options(EVIDENCE, val('evidence', t.id ? 'either' : 'text')) + '</select></div>' +
-            '</div>' +
             '<div style="margin-top: 14px;"><label>Note in the alert (optional)</label><textarea name="instructions" maxlength="500" placeholder="What good looks like, or what to reply">' + esc(val('instructions', '')) + '</textarea></div>' +
             '<details class="more"><summary>More options</summary>' +
-            (isSevenEleven() || t.standardId ? '<div class="grid">' +
-            '<div><label>Standard ID (optional, like FS6)</label><input type="text" name="standardId" maxlength="20" value="' + esc(val('standardId', '')) + '"></div>' +
-            '<div><label>How serious is a miss?</label><select name="criticality"><option value="">Not set</option>' + options(CRITICALITY, val('criticality', '')) + '</select></div>' +
-            '<div><label>Points (leave empty to use Critical 50 / Major 20 / Minor 3)</label><input type="number" name="points" min="0" max="100" value="' + esc(t.id ? val('points', '') : '') + '"></div>' +
-            '</div>' : '') +
             '<div style="margin: 14px 0;"><label>Have AI check the photo (optional)</label><input type="text" name="photoCheck" maxlength="200" value="' + esc(val('photoCheck', '')) + '" placeholder="What the photo must show"></div>' +
             '<div style="margin: 14px 0;"><label>Limit on a number answer (optional)</label>' +
             '<div class="grid"><div><label>At least</label><input type="number" step="any" name="minValue" value="' + esc(val('minValue', '')) + '"></div>' +
@@ -541,8 +649,9 @@
             '<div style="margin: 14px 0;"><label>If something is broken, what should they do meanwhile? (optional)</label><textarea name="fallback" maxlength="300" placeholder="e.g. Label printer broken? Write the date on tape.">' + esc(val('fallback', '')) + '</textarea></div>' +
             '<div style="margin: 14px 0;"><label><input type="checkbox" name="repeats"' + (repeats ? ' checked' : '') + '> Repeat during the day (for example every hour)</label>' +
             '<div class="grid" id="repeatBox" style="margin-top: 8px;' + (repeats ? '' : ' display:none;') + '">' +
-            '<div><label>Every (minutes)</label><input type="number" name="repeatEveryMinutes" min="5" max="720" value="' + esc(val('repeatEveryMinutes', 60)) + '"></div>' +
-            '<div><label>Until (same day)</label><input type="time" name="endTime" value="' + esc(val('endTime', '')) + '"></div></div></div>' +
+            '<div><label>Every (minutes)</label><input type="number" name="repeatEveryMinutes" min="5" max="720" value="' + esc(val('repeatEveryMinutes', 60)) + '"' + (repeats ? ' required' : '') + '></div>' +
+            '<div><label>Until (same day, after start)</label><input type="time" name="endTime" value="' + esc(endTime) + '"' + (repeats ? ' required' : '') + '></div>' +
+            '<p class="muted" style="grid-column:1/-1;margin:0;">Repeats need a later end time on the same day (e.g. start 7:00, until 15:00).</p></div></div>' +
             '<div class="grid">' +
             '<div><label>Remind every (minutes)</label><input type="number" name="remindEveryMinutes" min="5" max="240" value="' + esc(val('remindEveryMinutes', 15)) + '"></div>' +
             '<div><label>Tell the owner after (minutes)</label><input type="number" name="escalateAfterMinutes" min="10" max="1440" value="' + esc(val('escalateAfterMinutes', 60)) + '"></div>' +
@@ -878,7 +987,9 @@
         if (!catalog.length && !booksOn && !isOwner && !board.canEdit) return '';
 
         let html = '<div class="card">';
-        html += '<p class="muted card-help">' + esc(agents.marketingLine || 'Your store agents — you confirm every money post.') + '</p>';
+        html += '<p class="muted card-help">' +
+            (agents.packLabel ? '<strong>' + esc(agents.packLabel) + '</strong> · ' : '') +
+            esc(agents.marketingLine || 'Your store agents — you confirm every money post.') + '</p>';
 
         if (catalog.length) {
             html += '<ul class="agent-rows">';
@@ -1064,7 +1175,7 @@
             html += adminSection(
                 'admin-crew',
                 'Agents',
-                'Named agents for this store. Field capture stays on WhatsApp; ask Riley or Quinn in chat.',
+                'Named agents for this store. Field capture stays on WhatsApp; ask Zar or Quinn in chat.',
                 crewCard,
                 adminPanel
             );
@@ -1112,7 +1223,10 @@
             addMore += (board.features || []).filter(function (f) {
                 const t = board.setup && board.setup.storeType;
                 const shop = t === 'seven_eleven' || t === 'convenience' || t === 'gas_station';
+                const optionalFloor = t === 'appointments' || t === 'shipping' || t === 'other';
                 if (shop) return f.id === 'fuel';
+                // Office / real estate / personal: no cooler, shelves, restroom, or till toggles.
+                if (!optionalFloor) return false;
                 return f.id !== 'fuel';
             }).map(function (f) {
                 return '<label style="color: var(--text); font-size: 14px; margin-bottom: 10px;"><input type="checkbox" data-feature="' + esc(f.id) + '"' + (features[f.id] ? ' checked' : '') + '> ' + esc(f.label) + '</label>';
@@ -1162,6 +1276,13 @@
         const f = new FormData(form);
         const num = function (k) { const v = f.get(k); return v === null || v === '' ? null : Number(v); };
         const repeats = f.get('repeats') === 'on';
+        let endTime = repeats ? (f.get('endTime') || null) : null;
+        const startTime = f.get('startTime');
+        if (repeats) {
+            const startM = startTime ? Number(String(startTime).slice(0, 2)) * 60 + Number(String(startTime).slice(3, 5)) : null;
+            const endM = endTime ? Number(String(endTime).slice(0, 2)) * 60 + Number(String(endTime).slice(3, 5)) : null;
+            if (endM === null || startM === null || endM <= startM) endTime = defaultEndAfterStart(startTime);
+        }
         const how = f.get('howOften') || 'daily';
         let frequency = 'weekly';
         let daysOfWeek;
@@ -1197,8 +1318,8 @@
             unit: f.get('unit') || null,
             fallback: f.get('fallback') || null,
             shift: f.get('shift') || null,
-            startTime: f.get('startTime'),
-            endTime: repeats ? (f.get('endTime') || null) : null,
+            startTime: startTime,
+            endTime: endTime,
             repeatEveryMinutes: repeats ? num('repeatEveryMinutes') : null,
             frequency: frequency,
             daysOfWeek: daysOfWeek,
@@ -1227,6 +1348,17 @@
         }
     }
 
+    document.addEventListener('change', async function (e) {
+        const el = e.target;
+        if (!el || !el.hasAttribute || !el.hasAttribute('data-task-alerts')) return;
+        const on = el.checked;
+        el.disabled = true;
+        const ok = await act({ action: 'set_channels', taskAlertsEnabled: on }, on ? 'WhatsApp alerts on for this store.' : 'WhatsApp alerts off for this store.');
+        if (!ok) el.checked = !on;
+        el.disabled = false;
+        if (ok) load();
+    });
+
     document.addEventListener('click', async function (e) {
         const el = e.target.closest('button, .tab');
         if (!el) return;
@@ -1250,7 +1382,6 @@
             return;
         }
         if (el.dataset.close) {
-            if (!confirm('Close this task as missed? The team stops being reminded and it counts against the score.')) return;
             if (await act({ action: 'close', runId: el.dataset.close })) load();
             return;
         }
@@ -1371,7 +1502,27 @@
             return;
         }
         if (el.dataset.addStandard) {
-            if (await act({ action: 'import_presets', presetIds: [el.dataset.addStandard] }, 'Task added. Edit its times in Store admin.')) loadInspection();
+            const preset = presetForId(el.dataset.addStandard);
+            if (!preset) {
+                note('err', 'Could not load that standard. Refresh and try again.');
+                return;
+            }
+            editing = Object.assign({}, preset);
+            delete editing.id;
+            delete editing.presetId;
+            delete editing.scheduleText;
+            render();
+            const card = document.getElementById('formCard');
+            if (card) card.scrollIntoView({ behavior: 'smooth' });
+            return;
+        }
+        if (el.dataset.editStandard) {
+            editing = (board.templates || []).find(function (t) { return t.id === el.dataset.editStandard; }) || null;
+            render();
+            if (editing) {
+                const card = document.getElementById('formCard');
+                if (card) card.scrollIntoView({ behavior: 'smooth' });
+            }
             return;
         }
         if (el.hasAttribute('data-pick-group')) {
@@ -1484,7 +1635,16 @@
             ticked.forEach(function (id) { const c = document.querySelector('[data-preset="' + id + '"]'); if (c) c.checked = true; });
             return;
         }
-        if (e.target.name === 'repeats') document.getElementById('repeatBox').style.display = e.target.checked ? '' : 'none';
+        if (e.target.name === 'repeats') {
+            const box = document.getElementById('repeatBox');
+            if (box) box.style.display = e.target.checked ? '' : 'none';
+            const end = document.querySelector('#taskForm [name="endTime"]');
+            const start = document.querySelector('#taskForm [name="startTime"]');
+            const every = document.querySelector('#taskForm [name="repeatEveryMinutes"]');
+            if (end) end.required = e.target.checked;
+            if (every) every.required = e.target.checked;
+            if (e.target.checked && end && !end.value && start) end.value = defaultEndAfterStart(start.value);
+        }
         if (e.target.name === 'howOften' || e.target.name === 'frequency') {
             const v = e.target.value;
             const weeklyBox = document.getElementById('weeklyBox');
@@ -1613,7 +1773,11 @@
         e.preventDefault();
         const template = readForm(e.target);
         const body = editing && editing.id ? { action: 'update', id: editing.id, template: template } : { action: 'create', template: template };
-        if (await act(body, 'Task saved.')) { editing = null; load(); }
+        if (await act(body, 'Task saved.')) {
+            editing = null;
+            if (view === 'inspection') loadInspection();
+            else load();
+        }
     });
 
     (async function init() {

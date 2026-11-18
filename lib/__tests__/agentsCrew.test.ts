@@ -54,6 +54,7 @@ describe('agents crew config', () => {
   it('board payload exposes catalog and marketing line', () => {
     const board = agentsBoardPayload({});
     expect(board.pack).toBe('c_store_gas');
+    expect(board.packLabel).toMatch(/C-store/i);
     expect(board.catalog.map((c) => c.id)).toEqual([
       'close',
       'finance',
@@ -63,7 +64,7 @@ describe('agents crew config', () => {
     ]);
     expect(board.catalog.find((c) => c.id === 'books')?.pricing).toBe('addon');
     expect(board.marketingLine).toMatch(/confirm/i);
-    expect(board.supervisor.name).toBe('Riley');
+    expect(board.supervisor.name).toBe('Zar');
     expect(board.catalog.find((c) => c.id === 'books')?.name).toBe('Quinn');
     expect(board.catalog.find((c) => c.id === 'close')?.role).toBe('Close');
   });

@@ -614,7 +614,8 @@
                 if (mods.fuelOption) {
                     html += '<div class="form-group"><label class="check-row"><input type="checkbox" id="fuelBox" ' + (st.fuel ? 'checked' : '') + '> This location sells fuel (pumps / spill kit reminders)</label></div>';
                 }
-                if (['appointments', 'shipping', 'other', 'office', 'real_estate', 'personal'].indexOf(st.storeType) >= 0) {
+                // Floor extras only for businesses that might have them — not office / real estate / personal.
+                if (['appointments', 'shipping', 'other'].indexOf(st.storeType) >= 0) {
                     const extras = (window._storeFeatures && window._storeFeatures.length)
                         ? window._storeFeatures.filter(function (f) { return f.id !== 'fuel'; })
                         : [
@@ -625,7 +626,7 @@
                         ];
                     const have = st.features || [];
                     html += '<div class="form-group"><label>What does this location have?</label>' +
-                        '<div class="help-text" style="margin-bottom:8px;">Only tick what is here. A salon or clinic with a cooler and shelves should tick those; a UPS counter usually does not. These add reminders on the next screen — they stay off until you tick them.</div>' +
+                        '<div class="help-text" style="margin-bottom:8px;">Only tick what is here. A salon with product shelves should tick those; a UPS counter usually does not. These add reminders on the next screen.</div>' +
                         extras.map(function (f) {
                             return '<label class="check-row"><input type="checkbox" data-feature="' + esc(f.id) + '"' + (have.indexOf(f.id) >= 0 ? ' checked' : '') + '> ' + esc(f.label) + '</label>';
                         }).join('') + '</div>';

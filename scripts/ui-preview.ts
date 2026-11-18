@@ -386,7 +386,7 @@ function tasksApi(req: http.IncomingMessage, res: http.ServerResponse, url: URL,
       return sendJson(res, 200, { success: true, preview: true });
     }
     const run = sampleRuns.find((r) => r.id === b.runId);
-    if (b.action === 'close' && run) { run.status = 'MISSED'; run.completedAt = null; }
+    if (b.action === 'close' && run) { run.status = 'CANCELLED'; run.completedAt = null; }
     if (b.action === 'approve' && run) { run.status = 'DONE'; run.completedAt = new Date(); run.outcome = 'fixed'; run.photoVerdict = 'approved'; run.evidenceType = 'photo'; }
     if (b.action === 'run_now') return sendJson(res, 200, { success: true, note: 'Preview: nothing was sent.' });
     if (b.action === 'preview_report' || b.action === 'apply_report') return sendJson(res, 400, { error: 'Report import needs the real server (not in the sample preview).' });

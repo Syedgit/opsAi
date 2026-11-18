@@ -4,7 +4,8 @@ import { z } from 'zod';
 import { requireStoreAccess } from '../../lib/storeAccess';
 import { isAiChatEnrolled, AI_CHAT_USD_PER_STORE_PER_MONTH } from '../../lib/aiChatAccess';
 import { answerAiChatQuestion } from '../../lib/aiChatAsk';
-import { AGENT_DISPLAY } from '../../lib/agents/crew';
+import { AGENT_DISPLAY, resolveAgentPack } from '../../lib/agents/crew';
+import { readStoredSetup } from '../../lib/tasks/storeSetup';
 import { logApp, logAppError, loggedHandler, serializeError } from '../../lib/requestLog';
 
 const prisma = new PrismaClient();
@@ -50,7 +51,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
 
   const store = await prisma.storeConfig.findUnique({
     where: { storeId },
-    select: { storeName: true, profileJson: true },
+    select: { storeName: true, profileJson: true, setupJson: true },
   });
   if (!store) {
     res.status(404).json({ error: 'Store not found' });
@@ -75,27 +76,29 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       channel: 'web',
       agentFilter,
     });
+    const pack = resolveAgentPack(store.profileJson, readStoredSetup(store.setupJson)?.storeType ?? null);
     const result = await answerAiChatQuestion(prisma, storeId, store.storeName, question, {
       history,
       agentFilter,
       booksEnrolled: true,
+      pack,
+      channel: 'web',
     });
-    if (result.skipped || !result.answer) {
-      res.status(400).json({
-        error:
-          'That does not look like a books question. Try standing/DMR, open invoices, or invoice counts.',
-        agentId: result.agentId,
-      });
-      return;
+    // Soft-fail: always return a usable reply on web — never a dead-end 400 for routing.
+    const answer =
+      result.answer ||
+      'What do you want to know — standing/DMR, open invoices, who was paid last, or invoice counts?';
+    if (result.skipped && !result.answer) {
+      logApp('ask.soft_clarify', { storeId, agentFilter, toolId: result.toolId || null });
     }
     const agentId = result.agentId;
     res.status(200).json({
       success: true,
       enrolled: true,
-      answer: result.answer,
+      answer,
       agentId,
       agent: result.agent || AGENT_DISPLAY[agentId] || 'Books',
-      toolId: result.toolId || null,
+      toolId: result.toolId || (result.skipped ? 'clarify' : null),
     });
   } catch (error) {
     logAppError('ask.data', serializeError(error));

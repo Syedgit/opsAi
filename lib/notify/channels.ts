@@ -25,15 +25,22 @@ export type SlackPrefs = {
   teamId: string | null;
 };
 
+export type TaskAlertsPrefs = {
+  /** WhatsApp due / remind / escalate for shift tasks. Default on. */
+  enabled: boolean;
+};
+
 export type ChannelPrefs = {
   emailDigest: EmailDigestPrefs;
   slack: SlackPrefs;
+  taskAlerts: TaskAlertsPrefs;
   tools: ToolsWanted;
 };
 
 const DEFAULTS: ChannelPrefs = {
   emailDigest: { enabled: false, to: null },
   slack: { enabled: false, channelId: null, teamId: null },
+  taskAlerts: { enabled: true },
   tools: readToolsWanted(null),
 };
 
@@ -56,6 +63,7 @@ export function readChannelPrefs(profileJson: unknown): ChannelPrefs {
       : null;
   const teamId =
     typeof slackRaw.teamId === 'string' && slackRaw.teamId.trim() ? slackRaw.teamId.trim() : null;
+  const taskAlertsRaw = asObj(channels.taskAlerts) || {};
   return {
     emailDigest: {
       enabled: emailRaw.enabled === true,
@@ -66,8 +74,15 @@ export function readChannelPrefs(profileJson: unknown): ChannelPrefs {
       channelId,
       teamId,
     },
+    // Default on — only an explicit false pauses WhatsApp task alerts.
+    taskAlerts: { enabled: taskAlertsRaw.enabled !== false },
     tools: readToolsWanted(profileJson),
   };
+}
+
+/** Whether due / remind / escalate may send WhatsApp for this store. */
+export function taskAlertsEnabled(profileJson: unknown): boolean {
+  return readChannelPrefs(profileJson).taskAlerts.enabled;
 }
 
 export function withChannelPrefs(
@@ -75,6 +90,7 @@ export function withChannelPrefs(
   patch: {
     emailDigest?: Partial<EmailDigestPrefs>;
     slack?: Partial<SlackPrefs>;
+    taskAlerts?: Partial<TaskAlertsPrefs>;
     tools?: Partial<ToolsWanted>;
   }
 ): Record<string, unknown> {
@@ -107,6 +123,9 @@ export function withChannelPrefs(
           : null
         : prev.slack.teamId,
   };
+  const taskAlerts: TaskAlertsPrefs = {
+    enabled: patch.taskAlerts?.enabled ?? prev.taskAlerts.enabled,
+  };
   const channels = asObj(base.channels) ? { ...(base.channels as Record<string, unknown>) } : {};
   const tools = (channels.tools as ToolsWanted | undefined) || prev.tools;
   // Keep tools.wanted in sync when email/slack toggles change from the detail form.
@@ -122,7 +141,7 @@ export function withChannelPrefs(
   delete next.tools;
   return {
     ...next,
-    channels: { ...channels, emailDigest, slack, tools },
+    channels: { ...channels, emailDigest, slack, taskAlerts, tools },
   };
 }
 

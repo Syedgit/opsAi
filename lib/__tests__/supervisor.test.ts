@@ -1,4 +1,10 @@
-import { routeFromKeywords, parseSupervisorRoute, normalizeRoute } from '../agents/supervisor';
+import {
+  routeFromKeywords,
+  parseSupervisorRoute,
+  normalizeRoute,
+  shouldPreferKeywordRoute,
+  runSupervisor,
+} from '../agents/supervisor';
 import { toolsForSupervisor, isCrewToolId } from '../agents/tools/catalog';
 
 describe('crew tool catalog', () => {
@@ -22,6 +28,10 @@ describe('routeFromKeywords', () => {
     );
     expect(routeFromKeywords('total paid invoices').toolId).toBe('invoice_period_summary');
     expect(routeFromKeywords('total paid invoices').slots?.status).toBe('paid');
+    expect(routeFromKeywords('who was the vendor paid last time').toolId).toBe(
+      'invoice_period_summary'
+    );
+    expect(routeFromKeywords('who was the vendor paid last time').slots?.status).toBe('paid');
 
     const follow = routeFromKeywords('paid ones', [
       { role: 'user', text: 'how many invoices this month' },
@@ -29,6 +39,37 @@ describe('routeFromKeywords', () => {
     ]);
     expect(follow.toolId).toBe('invoice_period_summary');
     expect(follow.slots?.status).toBe('paid');
+  });
+
+  it('overrides AI not_ai_chat when keywords map a books question', async () => {
+    const keyword = routeFromKeywords('who was the vendor paid last time');
+    expect(
+      shouldPreferKeywordRoute(
+        'who was the vendor paid last time',
+        { agentId: 'books', toolId: 'not_ai_chat', clarity: 'not_ai_chat', slots: {}, ask: null },
+        keyword
+      )
+    ).toBe(true);
+    expect(
+      shouldPreferKeywordRoute(
+        'Pepsi paid cash 500 remaining 400',
+        { agentId: 'books', toolId: 'not_ai_chat', clarity: 'not_ai_chat', slots: {}, ask: null },
+        routeFromKeywords('Pepsi paid cash 500 remaining 400')
+      )
+    ).toBe(false);
+
+    const route = await runSupervisor('who was the vendor paid last time', {
+      booksEnrolled: true,
+      route: async () => ({
+        agentId: 'books',
+        toolId: 'not_ai_chat',
+        clarity: 'not_ai_chat',
+        slots: {},
+        ask: null,
+      }),
+    });
+    expect(route.toolId).toBe('invoice_period_summary');
+    expect(route.slots?.status).toBe('paid');
   });
 
   it('uses thread for short total after invoices', () => {

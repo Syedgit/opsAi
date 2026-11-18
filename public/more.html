@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en" data-app-shell="app">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#111111">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="opsAi">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/icon-180.png">
+    <link rel="icon" type="image/png" href="/icon-192.png">
+    <link rel="stylesheet" href="/app-shell.css?v=4">
+    <script src="/app-shell.js?v=3"></script>
+    <title>opsAi · More</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f3f4f6; color: #111827; min-height: 100dvh;
+        }
+        header {
+            background: #111; color: #fff; padding: 14px 16px;
+            padding-top: max(14px, env(safe-area-inset-top));
+            display: flex; gap: 10px; align-items: center;
+        }
+        header .brand-logo { background: #fff; border-radius: 8px; padding: 4px 8px; line-height: 0; }
+        header .brand-logo img { display: block; height: 28px; width: auto; }
+        header h1 { font-size: 17px; font-weight: 650; flex: 1; }
+        header select {
+            flex: 1; max-width: 55%; padding: 8px 10px; border-radius: 8px; border: none;
+            font-size: 15px; font-family: inherit;
+        }
+        main { max-width: 480px; margin: 0 auto; padding: 16px 16px 24px; }
+        .lead { color: #6b7280; font-size: 14px; margin-bottom: 14px; line-height: 1.4; }
+        .card {
+            background: #fff; border: 1px solid #e5e7eb; border-radius: 14px;
+            overflow: hidden; margin-bottom: 14px;
+        }
+        .card a, .card button.row {
+            display: flex; width: 100%; align-items: center; gap: 12px;
+            padding: 14px 16px; text-align: left; text-decoration: none; color: inherit;
+            background: #fff; border: none; border-bottom: 1px solid #f3f4f6;
+            font-size: 15px; font-family: inherit; cursor: pointer;
+        }
+        .card a:last-child, .card button.row:last-child { border-bottom: none; }
+        .card a:active, .card button.row:active { background: #f9fafb; }
+        .ico {
+            width: 36px; height: 36px; border-radius: 10px; background: #f3f4f6;
+            display: grid; place-items: center; font-size: 16px; flex-shrink: 0;
+        }
+        .meta { flex: 1; min-width: 0; }
+        .meta strong { display: block; font-weight: 650; }
+        .meta span { display: block; font-size: 12px; color: #6b7280; margin-top: 2px; }
+        .chev { color: #9ca3af; font-size: 18px; }
+        .empty { padding: 40px 16px; text-align: center; color: #6b7280; }
+        @media (min-width: 769px) {
+            .desk-hint { display: block; margin-bottom: 12px; font-size: 13px; color: #6b7280; }
+        }
+        @media (max-width: 768px) {
+            .desk-hint { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div id="appSplash" aria-hidden="true"><img src="/icon-192.png" alt=""><span>opsAi</span></div>
+    <header>
+        <a href="/crew" class="brand-logo" aria-label="opsAi"><img src="/logo.jpg" alt=""></a>
+        <h1>More</h1>
+        <select id="storeSelect" aria-label="Store"></select>
+    </header>
+    <main id="app"><div class="empty">Loading…</div></main>
+<script>
+(function () {
+    let storeId = new URLSearchParams(location.search).get('storeId') || '';
+
+    if (window.opsai) {
+        window.opsai.me().then(function (d) { if (!d) location.href = '/login'; });
+    }
+
+    function q() {
+        return storeId ? ('?storeId=' + encodeURIComponent(storeId)) : '';
+    }
+
+    function render() {
+        var html = '<p class="desk-hint">On a phone, this is the slim menu. Full reports stay under Reports.</p>';
+        html += '<p class="lead">Store tools and account. Day-to-day chat is with Zar.</p>';
+        html += '<div class="card">';
+        html += '<a href="/crew' + q() + '"><span class="ico">◎</span><div class="meta"><strong>Chat with Zar</strong><span>Ask about the store</span></div><span class="chev">›</span></a>';
+        html += '<a href="/tasks' + q() + '"><span class="ico">☰</span><div class="meta"><strong>Today</strong><span>Due tasks and alerts</span></div><span class="chev">›</span></a>';
+        html += '<a href="/dashboard' + q() + '"><span class="ico">📈</span><div class="meta"><strong>Reports</strong><span>Closes, invoices, standing</span></div><span class="chev">›</span></a>';
+        html += '</div><div class="card">';
+        html += '<a href="/tasks' + q() + '&view=setup&panel=admin-crew"><span class="ico">👥</span><div class="meta"><strong>Agents</strong><span>Turn agents on or off</span></div><span class="chev">›</span></a>';
+        html += '<a href="/tasks' + q() + '&view=setup"><span class="ico">⚙️</span><div class="meta"><strong>Store admin</strong><span>People, hours, reminders</span></div><span class="chev">›</span></a>';
+        html += '<a href="/billing"><span class="ico">💳</span><div class="meta"><strong>Billing</strong><span>Plan and usage</span></div><span class="chev">›</span></a>';
+        html += '</div><div class="card">';
+        html += '<button type="button" class="row" id="logoutBtn"><span class="ico">⎋</span><div class="meta"><strong>Log out</strong><span>Sign out of this device</span></div><span class="chev">›</span></button>';
+        html += '</div>';
+        document.getElementById('app').innerHTML = html;
+        document.getElementById('logoutBtn').addEventListener('click', function () {
+            if (window.opsai && window.opsai.logout) window.opsai.logout();
+            else location.href = '/login';
+        });
+    }
+
+    (async function boot() {
+        try {
+            const res = await fetch('/api/stores', { credentials: 'same-origin' });
+            if (res.status === 401) { location.href = '/login'; return; }
+            const data = await res.json();
+            const stores = Array.isArray(data.stores) ? data.stores : [];
+            const select = document.getElementById('storeSelect');
+            select.innerHTML = '';
+            if (!stores.length) {
+                document.getElementById('app').innerHTML = '<div class="empty">No stores yet.</div>';
+                return;
+            }
+            stores.forEach(function (s) {
+                const o = document.createElement('option');
+                o.value = s.storeId;
+                o.textContent = s.storeName;
+                select.appendChild(o);
+            });
+            if (!stores.some(function (s) { return s.storeId === storeId; })) storeId = stores[0].storeId;
+            select.value = storeId;
+            select.addEventListener('change', function () {
+                storeId = select.value;
+                history.replaceState(null, '', '/more?storeId=' + encodeURIComponent(storeId));
+                render();
+                // Refresh tab bar links with new storeId
+                location.reload();
+            });
+            history.replaceState(null, '', '/more?storeId=' + encodeURIComponent(storeId));
+            render();
+        } catch (e) {
+            document.getElementById('app').innerHTML = '<div class="empty">Could not load.</div>';
+        }
+    })();
+})();
+</script>
+</body>
+</html>

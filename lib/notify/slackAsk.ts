@@ -1,6 +1,8 @@
 import type { PrismaClient } from '@prisma/client';
 import { answerAiChatQuestion } from '../aiChatAsk';
 import { isAiChatEnrolled } from '../aiChatAccess';
+import { resolveAgentPack } from '../agents/crew';
+import { readStoredSetup } from '../tasks/storeSetup';
 import { readChannelPrefs } from './channels';
 import { postSlackMessage, slackUserEmail } from './slack';
 import { logApp, logAppError, serializeError } from '../requestLog';
@@ -53,7 +55,7 @@ export async function handleSlackAsk(
         where: { role: { in: ['OWNER', 'MANAGER'] } },
         select: {
           storeId: true,
-          store: { select: { storeId: true, storeName: true, active: true, profileJson: true } },
+          store: { select: { storeId: true, storeName: true, active: true, profileJson: true, setupJson: true } },
         },
       },
     },
@@ -88,10 +90,15 @@ export async function handleSlackAsk(
   }
 
   try {
+    const pack = resolveAgentPack(
+      booksFirst.store.profileJson,
+      readStoredSetup(booksFirst.store.setupJson)?.storeType ?? null
+    );
     const result = await answerAiChatQuestion(prisma, storeId, booksFirst.store.storeName, text, {
       history: [],
       agentFilter: 'supervisor',
       booksEnrolled: true,
+      pack,
       env,
     });
     const reply =

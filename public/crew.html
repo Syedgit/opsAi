@@ -12,8 +12,8 @@
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="apple-touch-icon" href="/icon-180.png">
     <link rel="icon" type="image/png" href="/icon-192.png">
-    <link rel="stylesheet" href="/app-shell.css?v=3">
-    <script src="/app-shell.js?v=2"></script>
+    <link rel="stylesheet" href="/app-shell.css?v=4">
+    <script src="/app-shell.js?v=3"></script>
     <title>opsAi · Ask agents</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -130,16 +130,22 @@
         .admin-links { padding: 12px 10px 0; font-size: 13px; }
         .admin-links a { color: var(--muted); text-decoration: none; }
         .admin-links a:hover { color: var(--text); }
-        @media (max-width: 720px) {
-            .shell { grid-template-columns: 1fr; margin: 0; border-radius: 0; border-left: none; border-right: none; min-height: auto; }
-            .agent-list {
-                border-right: none; border-bottom: 1px solid var(--border);
-                display: flex; gap: 6px; overflow-x: auto; padding: 12px;
-                -webkit-overflow-scrolling: touch;
+        @media (max-width: 768px) {
+            /* Phone: one chat with Zar — sub-agents stay behind the scenes. */
+            header .desk-only { display: none !important; }
+            header h1 { font-size: 16px; }
+            .shell {
+                grid-template-columns: 1fr; margin: 0; border-radius: 0;
+                border-left: none; border-right: none; min-height: calc(100dvh - 120px);
+                box-shadow: none;
             }
-            .agent-list h2 { display: none; }
-            .agent-btn { min-width: 168px; flex-shrink: 0; }
-            .thread { min-height: 68dvh; }
+            .agent-list { display: none; }
+            .thread { min-height: calc(100dvh - 120px); }
+            .thread-head { padding: 14px 16px 12px; }
+            .thread-head h2 { font-size: 18px; }
+            .thread-head p { font-size: 13px; }
+            .messages { padding: 16px; }
+            .composer { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
             .admin-links { display: none; }
         }
     </style>
@@ -148,10 +154,10 @@
     <div id="appSplash" aria-hidden="true"><img src="/icon-192.png" alt=""><span>opsAi</span></div>
 <header>
     <a href="/dashboard" class="brand-logo" aria-label="Operation Intelligence"><img src="/logo.jpg" alt="Operation Intelligence"></a>
-    <a href="/dashboard">&larr; Dashboard</a>
-    <h1>Ask agents</h1>
+    <a href="/dashboard" class="desk-only">&larr; Dashboard</a>
+    <h1>Chat</h1>
     <select id="storeSelect" aria-label="Store"></select>
-    <button type="button" class="small" id="logoutBtn">Log out</button>
+    <button type="button" class="small desk-only" id="logoutBtn">Log out</button>
 </header>
 <div id="notice"></div>
 <main id="app"><div class="empty-state">Loading…</div></main>
@@ -161,6 +167,7 @@
     let storeId = new URLSearchParams(location.search).get('storeId') || '';
     let board = null;
     let activeAgent = 'supervisor';
+    const mobileChat = window.matchMedia('(max-width: 768px)').matches;
     const threads = {};
     const AVATAR_COLORS = {
         supervisor: '#0f766e',
@@ -209,7 +216,7 @@
         const rows = agents.catalog || [];
         const supervisor = agents.supervisor || {
             id: 'supervisor',
-            name: 'Riley',
+            name: 'Zar',
             role: 'Ops lead',
             job: 'Routes your question to the right agent and tool',
             enabled: true,
@@ -239,17 +246,20 @@
         if (!agent) return 'Pick an agent to start.';
         if (agent.id === 'supervisor') {
             if (!booksOn()) return 'Enable Quinn (Books) under Store admin → Agents to ask about standing and invoices.';
-            return 'Ask Riley about confirmed books — standing, open bills, invoice counts. Short follow-ups like “paid ones” work here.';
+            if (mobileChat) {
+                return 'Chat with Zar. Mira, Jules, Avery, Sam, and Quinn handle the work behind the scenes — you stay in this thread.';
+            }
+            return 'Ask Zar about confirmed books — standing, open bills, invoice counts. Short follow-ups like “paid ones” work here.';
         }
         if (agent.id === 'books') {
             if (!agent.enabled) return 'Quinn is off. Enable Books under Store admin → Agents.';
-            return 'Direct chat with Quinn. Same tools as Riley, pinned to Books.';
+            return 'Direct chat with Quinn. Same tools as Zar, pinned to Books.';
         }
         if (agent.id === 'close') {
             return 'Mira captures daily sales and deposits on WhatsApp (OK/FIX). Field capture stays there for now.';
         }
         if (agent.id === 'finance') {
-            return 'Jules captures invoices on WhatsApp. Ask Riley or Quinn for open bills and invoice counts.';
+            return 'Jules captures invoices on WhatsApp. Ask Zar or Quinn for open bills and invoice counts.';
         }
         if (agent.id === 'staff') {
             return agent.enabled
@@ -300,39 +310,46 @@
         if (list.length <= 1 && !(board && board.agents)) {
             document.getElementById('app').innerHTML =
                 '<div class="empty-state">No agents on this store yet. Open <a href="/tasks?storeId=' +
-                encodeURIComponent(storeId) + '">Store admin</a>.</div>';
+                encodeURIComponent(storeId) + '&view=setup&panel=admin-crew">Store admin → Agents</a>.</div>';
             return;
         }
-        if (!agentById(activeAgent)) activeAgent = 'supervisor';
-        const agent = agentById(activeAgent);
+        // Phone: always Zar. Desktop can pick Quinn / others.
+        if (mobileChat) activeAgent = 'supervisor';
+        else if (!agentById(activeAgent)) activeAgent = 'supervisor';
+        const agent = agentById(activeAgent) || { id: 'supervisor', name: 'Zar', role: 'Ops lead', job: 'Routes to the right agent behind the scenes' };
         const chatOk = canOwnerChat() && booksOn() &&
             (activeAgent === 'supervisor' || activeAgent === 'books');
 
-        let html = '<div class="shell"><aside class="agent-list"><h2>Agents</h2>';
-        list.forEach(function (a) {
-            const role = a.role || '';
-            html += '<button type="button" class="agent-btn' + (a.id === activeAgent ? ' active' : '') +
-                '" data-agent="' + esc(a.id) + '">' + avatarHtml(a) +
-                '<div class="meta"><span class="name">' + esc(a.name) +
-                (role ? '<span class="role">' + esc(role) + '</span>' : '') + '</span>' +
-                '<span class="job">' + esc(a.job) + '</span>' +
-                '<span class="badge' + (a.enabled ? '' : ' off') + '">' + (a.enabled ? 'On' : 'Off') + '</span></div></button>';
-        });
-        html += '<div class="admin-links"><a href="/tasks?storeId=' + encodeURIComponent(storeId) + '">Manage agents →</a></div>';
-        html += '</aside><section class="thread"><div class="thread-head"><div class="who">' +
-            avatarHtml(agent || { id: 'supervisor', name: 'Riley' }, 44) +
-            '<div><h2>' + esc(agent ? agent.name : 'Riley') +
-            (agent && agent.role ? '<span class="role-pill">' + esc(agent.role) + '</span>' : '') +
-            '</h2><p>' + esc(agent ? agent.job : '') + '</p></div></div></div>' +
+        let html = '<div class="shell">';
+        if (!mobileChat) {
+            html += '<aside class="agent-list"><h2>Agents</h2>';
+            list.forEach(function (a) {
+                const role = a.role || '';
+                html += '<button type="button" class="agent-btn' + (a.id === activeAgent ? ' active' : '') +
+                    '" data-agent="' + esc(a.id) + '">' + avatarHtml(a) +
+                    '<div class="meta"><span class="name">' + esc(a.name) +
+                    (role ? '<span class="role">' + esc(role) + '</span>' : '') + '</span>' +
+                    '<span class="job">' + esc(a.job) + '</span>' +
+                    '<span class="badge' + (a.enabled ? '' : ' off') + '">' + (a.enabled ? 'On' : 'Off') + '</span></div></button>';
+            });
+            html += '<div class="admin-links"><a href="/tasks?storeId=' + encodeURIComponent(storeId) +
+                '&view=setup&panel=admin-crew">Manage agents →</a></div></aside>';
+        }
+        const jobLine = mobileChat
+            ? 'Ask anything about the store. The crew handles the rest behind the scenes.'
+            : (agent.job || '');
+        html += '<section class="thread"><div class="thread-head"><div class="who">' +
+            avatarHtml(agent, 44) +
+            '<div><h2>' + esc(agent.name || 'Zar') +
+            (agent.role ? '<span class="role-pill">' + esc(agent.role) + '</span>' : '') +
+            '</h2><p>' + esc(jobLine) + '</p></div></div></div>' +
             '<div class="messages" id="messages"></div>';
         if (chatOk) {
             html += '<form class="composer" id="crewForm">' +
-                '<textarea name="question" rows="1" maxlength="500" required placeholder="' +
-                (activeAgent === 'supervisor' ? 'Ask Riley…' : 'Ask Quinn…') +
-                '"></textarea>' +
+                '<textarea name="question" rows="1" maxlength="500" required placeholder="Message Zar…"></textarea>' +
                 '<button type="submit" class="primary" id="crewSend">Send</button></form>';
         } else if (!booksOn() && (activeAgent === 'supervisor' || activeAgent === 'books')) {
-            html += '<div class="composer"><p class="bubble system" style="margin:0;width:100%;">Enable Quinn (Books) in Store admin to chat here.</p></div>';
+            html += '<div class="composer"><p class="bubble system" style="margin:0;width:100%;">Enable Quinn (Books) in Store admin → Agents to chat here.</p></div>';
         } else {
             html += '<div class="composer"><p class="bubble system" style="margin:0;width:100%;">Field work for this agent stays on WhatsApp for now.</p></div>';
         }
@@ -360,7 +377,7 @@
 
     document.addEventListener('click', function (e) {
         const btn = e.target.closest('[data-agent]');
-        if (!btn) return;
+        if (!btn || mobileChat) return;
         activeAgent = btn.getAttribute('data-agent');
         render();
     });
@@ -381,7 +398,10 @@
         try {
             const data = await askCrew(question, threadId);
             thread.pop();
-            const chip = (data.agent || 'Quinn') + (data.toolId ? ' · ' + data.toolId : '');
+            // Mobile: Zar is the face; desktop can show which specialist answered.
+            const chip = mobileChat
+                ? 'Zar'
+                : ((data.agent || 'Quinn') + (data.toolId ? ' · ' + data.toolId : ''));
             thread.push({ role: 'agent', text: data.answer || 'No answer.', chip: chip });
         } catch (err) {
             thread.pop();
@@ -390,10 +410,13 @@
         renderMessages();
     });
 
-    document.getElementById('logoutBtn').addEventListener('click', async function () {
-        try { await fetch('/api/auth/logout', { method: 'POST', headers: authHeaders() }); } catch (e) { /* ignore */ }
-        location.href = '/login';
-    });
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', async function () {
+            try { await fetch('/api/auth/logout', { method: 'POST', headers: authHeaders() }); } catch (e) { /* ignore */ }
+            location.href = '/login';
+        });
+    }
 
     (async function boot() {
         try {

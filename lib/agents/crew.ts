@@ -4,12 +4,19 @@
  */
 
 import { ClassificationType } from '@prisma/client';
-import {
-  AI_CHAT_USD_PER_STORE_PER_MONTH,
-  readAiChatState,
-  withAiChatEnrollment,
-} from '../aiChatAccess';
+import { readAiChatState, withAiChatEnrollment } from '../aiChatAccess';
 import { USD_PER_STORE_PER_MONTH } from '../billing/plans';
+import type { StoreType } from '../tasks/storeSetup';
+import {
+  catalogForPack,
+  isVerticalPack,
+  packForStoreType,
+  PACK_LABEL,
+  type VerticalPack,
+} from './packs';
+
+export type { VerticalPack } from './packs';
+export { packForStoreType, PACK_LABEL } from './packs';
 
 export const AGENT_IDS = ['supervisor', 'close', 'finance', 'staff', 'books', 'followup'] as const;
 export type AgentId = (typeof AGENT_IDS)[number];
@@ -18,7 +25,6 @@ export type AgentId = (typeof AGENT_IDS)[number];
 export const STORE_AGENT_IDS = ['close', 'finance', 'staff', 'books', 'followup'] as const;
 export type StoreAgentId = (typeof STORE_AGENT_IDS)[number];
 
-export type VerticalPack = 'c_store_gas';
 export type AgentAutonomy = 'draft_only' | 'auto_remind';
 
 export type StoreAgentsConfig = {
@@ -42,63 +48,13 @@ export type AgentCatalogEntry = {
   defaultOn: boolean;
 };
 
-export const C_STORE_GAS_CATALOG: AgentCatalogEntry[] = [
-  {
-    id: 'close',
-    name: 'Mira',
-    role: 'Close',
-    job: 'Daily sales, DMR, and deposits — draft then OK/FIX on WhatsApp',
-    pricing: 'included',
-    monthlyUsd: 0,
-    core: true,
-    defaultOn: true,
-  },
-  {
-    id: 'finance',
-    name: 'Jules',
-    role: 'Finance',
-    job: 'Invoices, remaining balances, and vendor bills',
-    pricing: 'included',
-    monthlyUsd: 0,
-    core: true,
-    defaultOn: true,
-  },
-  {
-    id: 'followup',
-    name: 'Avery',
-    role: 'Follow-up',
-    job: 'Reminders for missing closes and overdue bills',
-    pricing: 'included',
-    monthlyUsd: 0,
-    core: true,
-    defaultOn: true,
-  },
-  {
-    id: 'staff',
-    name: 'Sam',
-    role: 'Staff',
-    job: 'Shift tasks, photo proof, and escalations',
-    pricing: 'included',
-    monthlyUsd: 0,
-    core: false,
-    defaultOn: true,
-  },
-  {
-    id: 'books',
-    name: 'Quinn',
-    role: 'Books',
-    job: 'Ask on confirmed store data — web and WhatsApp 1:1',
-    pricing: 'addon',
-    monthlyUsd: AI_CHAT_USD_PER_STORE_PER_MONTH,
-    core: false,
-    defaultOn: false,
-  },
-];
+/** @deprecated Prefer catalogForPack('c_store_gas'). */
+export const C_STORE_GAS_CATALOG: AgentCatalogEntry[] = catalogForPack('c_store_gas') as AgentCatalogEntry[];
 
 /** Main chat router — always present, not a toggleable store agent. */
 export const SUPERVISOR_AGENT = {
   id: 'supervisor' as const,
-  name: 'Riley',
+  name: 'Zar',
   role: 'Ops lead',
   job: 'Routes your question to the right agent and tool',
 };
@@ -139,10 +95,26 @@ function readAgentsBlob(profile: Record<string, unknown>): Record<string, unknow
 }
 
 /**
+ * Resolve pack: live storeType wins when provided; else persisted agents.pack; else c_store_gas.
+ */
+export function resolveAgentPack(
+  profileJson: unknown,
+  storeType?: StoreType | null
+): VerticalPack {
+  if (storeType !== undefined && storeType !== null) return packForStoreType(storeType);
+  const blob = readAgentsBlob(asProfile(profileJson));
+  if (isVerticalPack(blob.pack)) return blob.pack;
+  return 'c_store_gas';
+}
+
+/**
  * Resolved crew for a store. Books mirrors `aiChat.enrolled` (source of truth for the add-on).
  * Close / Finance / Follow-up stay on. Staff defaults on unless explicitly disabled.
  */
-export function readStoreAgentsConfig(profileJson: unknown): StoreAgentsConfig {
+export function readStoreAgentsConfig(
+  profileJson: unknown,
+  storeType?: StoreType | null
+): StoreAgentsConfig {
   const profile = asProfile(profileJson);
   const blob = readAgentsBlob(profile);
   const enabledRaw =
@@ -151,7 +123,7 @@ export function readStoreAgentsConfig(profileJson: unknown): StoreAgentsConfig {
       : {};
   const books = readAiChatState(profile).enrolled;
   const staff = enabledRaw.staff !== false;
-  const pack: VerticalPack = blob.pack === 'c_store_gas' ? 'c_store_gas' : 'c_store_gas';
+  const pack = resolveAgentPack(profile, storeType);
   const autonomy: AgentAutonomy = blob.autonomy === 'auto_remind' ? 'auto_remind' : 'draft_only';
 
   return {
@@ -164,6 +136,20 @@ export function readStoreAgentsConfig(profileJson: unknown): StoreAgentsConfig {
       books,
     },
     autonomy,
+  };
+}
+
+/** Persist pack on profile (e.g. after setup_apply). */
+export function withAgentPack(profileJson: unknown, pack: VerticalPack): Record<string, unknown> {
+  const base = asProfile(profileJson);
+  const prev = readStoreAgentsConfig(base);
+  return {
+    ...base,
+    agents: {
+      pack,
+      autonomy: prev.autonomy,
+      enabled: { ...prev.enabled },
+    },
   };
 }
 
@@ -287,16 +273,17 @@ export function agentForWhatsAppPath(
   }
 }
 
-export function agentsBoardPayload(profileJson: unknown) {
-  const config = readStoreAgentsConfig(profileJson);
+export function agentsBoardPayload(profileJson: unknown, storeType?: StoreType | null) {
+  const config = readStoreAgentsConfig(profileJson, storeType);
+  const catalog = catalogForPack(config.pack) as AgentCatalogEntry[];
   return {
     pack: config.pack,
-    packLabel: 'C-store / gas',
+    packLabel: PACK_LABEL[config.pack],
     autonomy: config.autonomy,
     enabled: config.enabled,
     baseMonthlyUsd: USD_PER_STORE_PER_MONTH,
     supervisor: { ...SUPERVISOR_AGENT, enabled: true },
-    catalog: C_STORE_GAS_CATALOG.map((entry) => ({
+    catalog: catalog.map((entry) => ({
       ...entry,
       enabled: config.enabled[entry.id],
       canToggle: !entry.core && (entry.id !== 'books' || true),

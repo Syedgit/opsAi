@@ -3,7 +3,7 @@
   "name": "Operation Intelligence",
   "short_name": "opsAi",
   "description": "WhatsApp operations for stores. Owners use this app. Staff message on WhatsApp.",
-  "start_url": "/dashboard",
+  "start_url": "/crew",
   "scope": "/",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],

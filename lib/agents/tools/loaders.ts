@@ -250,6 +250,7 @@ export async function loadToolFacts(
   let totalDollars = 0;
   let counted = 0;
   const vendors: Record<string, number> = {};
+  let lastPaid: { vendor: string; amount: number; date: string } | null = null;
 
   for (const row of rows) {
     const raw = row.payloadJson;
@@ -278,8 +279,15 @@ export async function loadToolFacts(
       openCount += 1;
       openDollars += remaining;
     } else {
+      const paidAmt = paid > 0 ? paid : total;
       paidCount += 1;
-      paidDollars += paid > 0 ? paid : total;
+      paidDollars += paidAmt;
+      // rows ascend by createdAt — last fully-paid invoice wins as most recent.
+      lastPaid = {
+        vendor,
+        amount: Math.round(paidAmt * 100) / 100,
+        date: d || row.createdAt.toISOString().slice(0, 10),
+      };
     }
   }
 
@@ -295,12 +303,21 @@ export async function loadToolFacts(
         ? `${openCount} open invoice(s) · ${money(Math.round(openDollars * 100) / 100)} still owed`
         : `${counted} invoice(s) · ${money(Math.round(totalDollars * 100) / 100)} billed · ${paidCount} paid · ${openCount} open (${money(Math.round(openDollars * 100) / 100)} owed)`;
 
+  const lastPaidLine = lastPaid
+    ? `Last paid vendor: ${lastPaid.vendor} · ${money(lastPaid.amount)} · ${lastPaid.date}`
+    : null;
+
   const fallback = [
     `${storeName} · ${report.label} invoices (confirmed WhatsApp data)`,
     focus,
-    topVendors.length ? `Top vendors: ${topVendors.map((v) => `${v.vendor} ${money(v.amount)}`).join(', ')}` : 'No vendor invoices in this window.',
+    status === 'paid' && lastPaidLine ? lastPaidLine : null,
+    topVendors.length
+      ? `Top vendors: ${topVendors.map((v) => `${v.vendor} ${money(v.amount)}`).join(', ')}`
+      : 'No vendor invoices in this window.',
     `Report also shows buying ${money(report.totals.buying)} across ${report.totals.invoices} invoice line(s) in standing.`,
-  ].join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   return {
     toolId: 'invoice_period_summary',
@@ -322,6 +339,7 @@ export async function loadToolFacts(
       paidDollars: Math.round(paidDollars * 100) / 100,
       openDollars: Math.round(openDollars * 100) / 100,
       topVendors,
+      lastPaidVendor: lastPaid,
       standingBuying: report.totals.buying,
       standingInvoiceLines: report.totals.invoices,
     },

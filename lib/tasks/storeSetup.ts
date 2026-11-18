@@ -72,6 +72,39 @@ export const STORE_TYPE_BLURB: Record<StoreType, string> = {
 
 export const MAX_SHIFTS = 4;
 
+const SHOP_TYPES: StoreType[] = ['seven_eleven', 'convenience', 'gas_station'];
+/** Can optionally tick cooler / shelves / restroom / till. Desk businesses cannot. */
+const OPTIONAL_FLOOR_TYPES: StoreType[] = ['appointments', 'shipping', 'other'];
+const FLOOR_FEATURES: StoreFeature[] = ['cooler', 'shelves', 'restroom', 'till'];
+
+export function defaultFeatures(storeType: StoreType): StoreFeature[] {
+  if (storeType === 'appointments') return ['till', 'restroom'];
+  return [];
+}
+
+/** Which optional floor features this business type may tick in setup / Store admin. */
+export function optionalFloorFeatureIds(storeType: StoreType | null | undefined): StoreFeature[] {
+  if (!storeType) return [];
+  if (SHOP_TYPES.includes(storeType)) return []; // shops get these automatically
+  if (OPTIONAL_FLOOR_TYPES.includes(storeType)) return FLOOR_FEATURES;
+  return []; // office, real_estate, personal — never cooler/till pack
+}
+
+/** Drop shop-floor features that do not belong on this business type. */
+export function sanitizeFeatures(
+  storeType: StoreType,
+  features: StoreFeature[],
+  fuel: boolean
+): StoreFeature[] {
+  const allowed = new Set<StoreFeature>(optionalFloorFeatureIds(storeType));
+  const cleaned = features.filter((f) => {
+    if (f === 'fuel') return fuel || storeType === 'gas_station';
+    if (SHOP_TYPES.includes(storeType)) return false; // implied, do not store
+    return allowed.has(f);
+  });
+  return Array.from(new Set(fuel ? [...cleaned, 'fuel' as const] : cleaned));
+}
+
 const hhmm = z
   .string()
   .trim()
@@ -120,10 +153,9 @@ export const StoreSetupSchema = z
     }
   })
   .transform((s) => {
-    const features = Array.from(new Set(s.fuel ? [...s.features, 'fuel' as const] : s.features));
     return {
       ...s,
-      features,
+      features: sanitizeFeatures(s.storeType, s.features, s.fuel),
       opensAt: s.open24h ? null : s.opensAt,
       closesAt: s.open24h ? null : s.closesAt,
       shifts: [...s.shifts].sort((a, b) => (parseHHMM(a.start) as number) - (parseHHMM(b.start) as number)),
@@ -131,16 +163,10 @@ export const StoreSetupSchema = z
   });
 export type StoreSetup = z.infer<typeof StoreSetupSchema>;
 
-const SHOP_TYPES: StoreType[] = ['seven_eleven', 'convenience', 'gas_station'];
-
-export function defaultFeatures(storeType: StoreType): StoreFeature[] {
-  if (storeType === 'appointments') return ['till', 'restroom'];
-  return [];
-}
-
 /** What this location actually has, including shop-floor defaults a c-store never has to tick. */
 export function featuresOn(setup: StoreSetup): Set<StoreFeature> {
-  const out = new Set<StoreFeature>(setup.features ?? []);
+  const cleaned = sanitizeFeatures(setup.storeType, setup.features ?? [], setup.fuel);
+  const out = new Set<StoreFeature>(cleaned);
   if (setup.fuel) out.add('fuel');
   if (SHOP_TYPES.includes(setup.storeType)) {
     out.add('cooler');

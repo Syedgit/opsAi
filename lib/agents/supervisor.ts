@@ -64,7 +64,8 @@ export function buildSupervisorSystem(toolDigest: string): string {
     'missing_closes = days without a close.',
     'help_capabilities = what can you do.',
     'unsupported = forecast, payroll, profit, wages, utility due dates.',
-    'not_ai_chat = posting a close/invoice/OK/FIX.',
+    'not_ai_chat = ONLY posting a close, invoice photo, or OK/FIX with amounts — never a who/what/how question.',
+    'Questions like “who was the vendor paid last”, “last paid vendor”, “paid invoices this month” → invoice_period_summary with status paid.',
     'clarify / need_slot = set ask to one short question; do not invent numbers.',
     'Default period to month when unspecified. Default status to all for invoice_period_summary unless they say paid or open.',
     'Catalog:',
@@ -72,8 +73,60 @@ export function buildSupervisorSystem(toolDigest: string): string {
   ].join('\n');
 }
 
-export function toolDigestForPrompt(booksEnrolled: boolean, agentFilter?: StoreAgentId | 'supervisor' | null): string {
-  return toolsForSupervisor({ booksEnrolled, agentFilter })
+const CONFIDENT_BOOKS_TOOLS = new Set([
+  'standing_report',
+  'open_invoices',
+  'invoice_period_summary',
+  'missing_closes',
+  'help_capabilities',
+]);
+
+/** High-confidence keyword hit — safe to skip the LLM router. */
+export function isConfidentBooksRoute(route: SupervisorRoute): boolean {
+  return route.clarity === 'ok' && CONFIDENT_BOOKS_TOOLS.has(route.toolId);
+}
+
+/**
+ * AI sometimes marks paid-vendor questions as ops capture; prefer keywords when clearly a question.
+ * Kept as a safety net when the LLM still runs (ambiguous keyword path).
+ */
+export function shouldPreferKeywordRoute(
+  question: string,
+  fromAi: SupervisorRoute,
+  keyword: SupervisorRoute
+): boolean {
+  if (fromAi.toolId !== 'not_ai_chat' && fromAi.clarity !== 'not_ai_chat') return false;
+  if (!isConfidentBooksRoute(keyword)) return false;
+  // Amounts / $ mean staff is posting an entry, not asking.
+  if (/\d/.test(question) || /\$/.test(question)) return false;
+  return true;
+}
+
+/** Web/crew chat is always an ask — never silent-skip as ops capture. */
+export function demoteNotAiChatForAskChannel(
+  route: SupervisorRoute,
+  question: string,
+  channel: 'web' | 'whatsapp' = 'web'
+): SupervisorRoute {
+  if (route.toolId !== 'not_ai_chat' && route.clarity !== 'not_ai_chat') return route;
+  const looksLikeCapture =
+    /\d/.test(question) || /\$/.test(question) || /^(ok|fix|done)\b/i.test(question.trim());
+  if (channel === 'whatsapp' && looksLikeCapture) return route;
+  return {
+    agentId: 'books',
+    toolId: 'clarify',
+    clarity: 'clarify',
+    slots: {},
+    ask: 'What do you want to know — standing/DMR, open invoices, who was paid last, or invoice counts?',
+  };
+}
+
+export function toolDigestForPrompt(
+  booksEnrolled: boolean,
+  agentFilter?: StoreAgentId | 'supervisor' | null,
+  pack?: import('./packs').VerticalPack | null
+): string {
+  return toolsForSupervisor({ booksEnrolled, agentFilter, pack })
     .filter((t) => !['clarify', 'unsupported', 'not_ai_chat'].includes(t.id) || t.id === 'help_capabilities')
     .map((t) => `- ${t.id} (${t.agentId}): ${t.description} Examples: ${t.examples.slice(0, 2).join(' | ') || '—'}`)
     .join('\n');
@@ -97,7 +150,8 @@ export function routeFromKeywords(question: string, history: ChatTurn[] = []): S
   }
 
   const aboutInvoices =
-    /invoice|bill|vendor|owe|owing|owed|pending|buying/.test(q) ||
+    /invoice|bill|vendor|owe|owing|owed|pending/.test(q) ||
+    /\b(who|which).{0,40}\bpaid\b|\blast\s+paid\b|\bpaid\s+last\b/.test(q) ||
     (/invoice|bill|vendor|owe|pending/.test(prior) &&
       /^(total|paid|open|all|yes|those|them|how many)\b/.test(q));
 
@@ -105,8 +159,13 @@ export function routeFromKeywords(question: string, history: ChatTurn[] = []): S
     const wantsCount =
       /how many|count|total|summary|so far|paid invoice|invoices we|invoices this|invoices made/.test(q) ||
       (/invoice|bill/.test(prior) && /^(total|paid|open|all|how many)\b/.test(q));
-    const status = /\bpaid\b/.test(q) ? 'paid' : /\bopen\b|\bstill owe|\bpending\b|\bunpaid\b/.test(q) ? 'open' : 'all';
-    if (wantsCount || status === 'paid') {
+    const wantsLastPaid = /\b(who|which).{0,40}\bpaid\b|\blast\s+paid\b|\bpaid\s+last\b|\blast\s+vendor\b/.test(q);
+    const status = /\bpaid\b/.test(q) || wantsLastPaid
+      ? 'paid'
+      : /\bopen\b|\bstill owe|\bpending\b|\bunpaid\b/.test(q)
+        ? 'open'
+        : 'all';
+    if (wantsCount || status === 'paid' || wantsLastPaid) {
       return {
         agentId: 'books',
         toolId: 'invoice_period_summary',
@@ -125,7 +184,7 @@ export function routeFromKeywords(question: string, history: ChatTurn[] = []): S
     };
   }
 
-  if (/missing close|no close|forgot.*close/.test(q)) {
+  if (/missing\s+(a\s+)?close|no close|forgot.*close|days?\s+missing/.test(q)) {
     return {
       agentId: 'books',
       toolId: 'missing_closes',
@@ -135,7 +194,10 @@ export function routeFromKeywords(question: string, history: ChatTurn[] = []): S
     };
   }
 
-  if (/stand|standing|dmr|how (are|is) (we|sales)|\bsales\b/.test(q)) {
+  if (
+    /stand|standing|dmr|how (are|is) (we|sales)|\bsales\b/.test(q) ||
+    /\b(buying|expenses?|till)\b/.test(q)
+  ) {
     return {
       agentId: 'books',
       toolId: 'standing_report',
@@ -190,7 +252,8 @@ export function parseSupervisorRoute(raw: string | null | undefined): Supervisor
 export function normalizeRoute(
   route: SupervisorRoute,
   booksEnrolled: boolean,
-  agentFilter?: StoreAgentId | 'supervisor' | null
+  agentFilter?: StoreAgentId | 'supervisor' | null,
+  pack?: import('./packs').VerticalPack | null
 ): SupervisorRoute {
   let toolId = route.toolId as CrewToolId;
   if (!isCrewToolId(toolId)) toolId = 'clarify';
@@ -211,7 +274,7 @@ export function normalizeRoute(
   }
 
   const allowed = new Set(
-    toolsForSupervisor({ booksEnrolled, agentFilter }).map((t) => t.id)
+    toolsForSupervisor({ booksEnrolled, agentFilter, pack }).map((t) => t.id)
   );
   if (!booksEnrolled && !['help_capabilities', 'clarify', 'unsupported', 'not_ai_chat'].includes(toolId)) {
     return {
@@ -281,16 +344,32 @@ export async function runSupervisor(
     history?: ChatTurn[];
     booksEnrolled: boolean;
     agentFilter?: StoreAgentId | 'supervisor' | null;
+    pack?: import('./packs').VerticalPack | null;
     env?: NodeJS.ProcessEnv;
     route?: SupervisorRouter;
+    /** web/crew = never silent-skip; whatsapp may skip real ops capture. */
+    channel?: 'web' | 'whatsapp';
   }
 ): Promise<SupervisorRoute> {
   const history = options.history ?? [];
-  const digest = toolDigestForPrompt(options.booksEnrolled, options.agentFilter);
+  const channel = options.channel ?? 'web';
+  const keyword = routeFromKeywords(question, history);
+
+  // Production default: known intents are deterministic — no LLM roulette.
+  if (isConfidentBooksRoute(keyword) && !options.route) {
+    return normalizeRoute(keyword, options.booksEnrolled, options.agentFilter, options.pack);
+  }
+
+  const digest = toolDigestForPrompt(options.booksEnrolled, options.agentFilter, options.pack);
   const env = options.env ?? process.env;
   const fromAi = options.route
     ? await options.route({ question, history, toolDigest: digest })
     : await defaultSupervisorRoute(question, history, digest, env);
-  const raw = fromAi || routeFromKeywords(question, history);
-  return normalizeRoute(raw, options.booksEnrolled, options.agentFilter);
+
+  let raw =
+    fromAi && shouldPreferKeywordRoute(question, fromAi, keyword)
+      ? keyword
+      : fromAi || keyword;
+  raw = demoteNotAiChatForAskChannel(raw, question, channel);
+  return normalizeRoute(raw, options.booksEnrolled, options.agentFilter, options.pack);
 }
