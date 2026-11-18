@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import Stripe from 'stripe';
+import { isAiChatEnrolled } from '../aiChatAccess';
 import { logApp, logAppError, serializeError } from '../requestLog';
 import {
   billedStoreQuantity,
@@ -12,6 +13,19 @@ import {
   type StripeBillingPatch,
   type StripeObject,
 } from './stripe';
+
+/** How many of the user's stores have Books (aiChat) enrolled. */
+export async function countBooksEnrolledStores(
+  prisma: PrismaClient,
+  storeIds: string[]
+): Promise<number> {
+  if (storeIds.length === 0) return 0;
+  const stores = await prisma.storeConfig.findMany({
+    where: { storeId: { in: storeIds } },
+    select: { profileJson: true },
+  });
+  return stores.filter((s) => isAiChatEnrolled(s.profileJson)).length;
+}
 
 export function getStripe(env: NodeJS.ProcessEnv = process.env): Stripe | null {
   const key = stripeConfig(env).secretKey;
@@ -98,6 +112,10 @@ export async function createCheckoutUrl(
 
   try {
     const customerId = await ensureCustomer(prisma, stripe, user);
+    const storeIds = user.stores
+      .map((row) => (row && typeof row === 'object' && 'storeId' in row ? String((row as { storeId: string }).storeId) : ''))
+      .filter(Boolean);
+    const booksQuantity = cfg.booksReady ? await countBooksEnrolledStores(prisma, storeIds) : 0;
     const session = await stripe.checkout.sessions.create(
       checkoutSessionParams({
         customerId,
@@ -106,6 +124,8 @@ export async function createCheckoutUrl(
         quantity: billedStoreQuantity(user.stores.length),
         appUrl: cfg.appUrl,
         trialEnd: stripeTrialEndUnix(user.trialEndsAt),
+        booksPriceId: cfg.booksReady ? cfg.booksPriceId : undefined,
+        booksQuantity,
       }) as Stripe.Checkout.SessionCreateParams
     );
     if (!session.url) {
@@ -235,15 +255,51 @@ export async function syncStripeSubscriptionQuantity(
     });
     if (!user?.stripeSubscriptionId) return;
     const quantity = billedStoreQuantity(user.stores.length);
+    const storeIds = user.stores.map((row) => row.storeId);
+    const booksQuantity = cfg.booksReady ? await countBooksEnrolledStores(prisma, storeIds) : 0;
     const sub = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
-    const item = sub.items.data.find((row) => row.price.id === cfg.priceId) ?? sub.items.data[0];
-    if (!item || item.quantity === quantity) return;
+    const items: Stripe.SubscriptionUpdateParams.Item[] = [];
+    const baseItem = sub.items.data.find((row) => row.price.id === cfg.priceId) ?? sub.items.data[0];
+    if (baseItem && baseItem.quantity !== quantity) {
+      items.push({ id: baseItem.id, quantity });
+    }
+    if (cfg.booksReady && cfg.booksPriceId) {
+      const booksItem = sub.items.data.find((row) => row.price.id === cfg.booksPriceId);
+      if (booksQuantity > 0) {
+        if (booksItem) {
+          if (booksItem.quantity !== booksQuantity) {
+            items.push({ id: booksItem.id, quantity: booksQuantity });
+          }
+        } else {
+          items.push({ price: cfg.booksPriceId, quantity: booksQuantity });
+        }
+      } else if (booksItem) {
+        items.push({ id: booksItem.id, deleted: true });
+      }
+    }
+    if (items.length === 0) return;
     await stripe.subscriptions.update(user.stripeSubscriptionId, {
-      items: [{ id: item.id, quantity }],
+      items,
       proration_behavior: 'create_prorations',
     });
-    logApp('billing.quantity', { userId, quantity });
+    logApp('billing.quantity', { userId, quantity, booksQuantity });
   } catch (error: unknown) {
     logAppError('billing.quantity', serializeError(error));
+  }
+}
+
+/** Soft past-due signal for billing UI (access stays open while Stripe retries). */
+export async function subscriptionPastDue(
+  user: { stripeSubscriptionId: string | null },
+  env: NodeJS.ProcessEnv = process.env
+): Promise<boolean> {
+  if (!user.stripeSubscriptionId) return false;
+  const stripe = getStripe(env);
+  if (!stripe) return false;
+  try {
+    const sub = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
+    return sub.status === 'past_due' || sub.status === 'unpaid';
+  } catch {
+    return false;
   }
 }

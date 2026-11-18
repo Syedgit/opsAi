@@ -1,6 +1,7 @@
 import {
   billedStoreQuantity,
   checkoutSessionParams,
+  estimateMonthlyUsd,
   patchFromStripeEvent,
   planStatusFromStripeSubscription,
   stripeConfig,
@@ -21,6 +22,12 @@ describe('stripeConfig', () => {
         STRIPE_WEBHOOK_SECRET: 'whsec_x',
         STRIPE_PRICE_ID: 'price_x',
       } as NodeJS.ProcessEnv).webhookReady
+    ).toBe(true);
+    expect(
+      stripeConfig({
+        STRIPE_SECRET_KEY: 'sk_test_x',
+        STRIPE_BOOKS_PRICE_ID: 'price_books',
+      } as NodeJS.ProcessEnv).booksReady
     ).toBe(true);
   });
 });
@@ -83,8 +90,12 @@ describe('patchFromStripeEvent', () => {
     });
   });
 
-  it('ignores a failed invoice so Stripe can retry', () => {
-    expect(patchFromStripeEvent('invoice.payment_failed', { customer: 'cus_1' })).toBeNull();
+  it('keeps access active on payment_failed while Stripe retries', () => {
+    expect(patchFromStripeEvent('invoice.payment_failed', { customer: 'cus_1', subscription: 'sub_1' })).toEqual({
+      stripeCustomerId: 'cus_1',
+      stripeSubscriptionId: 'sub_1',
+      planStatus: 'active',
+    });
   });
 
   it('reads userId from Checkout client_reference_id', () => {
@@ -107,6 +118,34 @@ describe('checkoutSessionParams', () => {
     expect(params.success_url).toContain('/billing?checkout=success');
     expect(params.subscription_data.trial_end).toBe(1700000000);
     expect(params.metadata.userId).toBe('u1');
+  });
+
+  it('adds a Books line item when enrolled stores and books price are set', () => {
+    const params = checkoutSessionParams({
+      customerId: 'cus_1',
+      userId: 'u1',
+      priceId: 'price_base',
+      quantity: 2,
+      appUrl: 'http://localhost:3000',
+      booksPriceId: 'price_books',
+      booksQuantity: 1,
+    });
+    expect(params.line_items).toEqual([
+      { price: 'price_base', quantity: 2 },
+      { price: 'price_books', quantity: 1 },
+    ]);
+    expect(params.metadata.booksQuantity).toBe('1');
+  });
+});
+
+describe('estimateMonthlyUsd', () => {
+  it('sums base stores plus Books add-ons', () => {
+    expect(estimateMonthlyUsd(2, 1)).toEqual({
+      baseUsd: 50,
+      booksUsd: 20,
+      totalUsd: 70,
+      booksPriceConfigured: false,
+    });
   });
 });
 

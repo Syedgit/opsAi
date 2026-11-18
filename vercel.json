@@ -98,6 +98,14 @@
       "destination": "/api/webhook/stripe.ts"
     },
     {
+      "source": "/api/webhook/slack",
+      "destination": "/api/webhook/slack.ts"
+    },
+    {
+      "source": "/api/cron/digest",
+      "destination": "/api/cron/digest.ts"
+    },
+    {
       "source": "/tasks",
       "destination": "/tasks.html"
     },

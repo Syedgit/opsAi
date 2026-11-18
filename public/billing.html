@@ -68,7 +68,7 @@
     </header>
     <main>
         <h1>Plan and usage</h1>
-        <p class="muted">14-day trial, then $25 per store per month. Five locations is $125. Time saved is desk work you skipped vs typing the same close or invoice into a sheet.</p>
+        <p class="muted">14-day trial, then $25 per store per month. Books add-on is $20 per enrolled store. Time saved is desk work you skipped vs typing the same close or invoice into a sheet.</p>
         <div id="banner"></div>
         <div class="card" id="planCard">Loading…</div>
         <div id="payActions"></div>
@@ -122,10 +122,13 @@
                 } else if (params.get('checkout') === 'cancel') {
                     banner.className = 'banner';
                     banner.textContent = 'Checkout canceled. You can add a card whenever you are ready.';
+                } else if (pay.pastDue) {
+                    banner.className = 'banner';
+                    banner.innerHTML = 'Payment failed. Update your card so the plan stays active. WhatsApp reports still save while Stripe retries.';
                 } else if (!b.access) {
                     banner.className = 'banner';
                     banner.textContent = pay.ready
-                        ? 'Your trial has ended. Add a card to stay on at $' + Number(b.monthlyUsd || 0).toFixed(0) + '/month. WhatsApp reports still save so you do not lose a close.'
+                        ? 'Your trial has ended. Subscribe at $' + Number(b.monthlyUsd || 0).toFixed(0) + '/month. WhatsApp reports still save so you do not lose a close.'
                         : 'Your trial has ended. Email support@opsai.us to stay on. WhatsApp reports still save so you do not lose a close.';
                 } else if (b.status === 'trial') {
                     banner.className = 'banner';
@@ -138,22 +141,32 @@
                     }
                 }
                 const storesCount = b.storeCount || 0;
+                const booksCount = b.booksStoreCount || 0;
+                const booksLine = booksCount > 0
+                    ? '<p>Books add-on · ' + esc(booksCount) + ' store' + (booksCount === 1 ? '' : 's') +
+                      ' · ' + money(b.booksUsdPerStore || 20) + '/store · ' + money(b.booksUsd || 0) + '/month</p>'
+                    : '<p class="muted">Books add-on · $20/store — enroll from Store admin → Crew when you want grounded Q&amp;A.</p>';
                 document.getElementById('planCard').innerHTML =
                     '<h2>' + money(b.monthlyUsdPerStore || 25) + ' per store</h2>' +
                     '<p>' + (b.status === 'trial' ? 'Trial' : esc(b.status)) +
                     ' · ' + esc(storesCount) + ' location' + (storesCount === 1 ? '' : 's') +
-                    ' · ' + money(b.monthlyUsd) + '/month after trial.</p>' +
+                    ' · base ' + money(b.baseUsd != null ? b.baseUsd : (storesCount * 25)) + '/month</p>' +
+                    booksLine +
+                    '<p style="margin-top:8px;"><strong>' + money(b.monthlyUsd) + '/month</strong> after trial.</p>' +
                     (b.trialEndsAt ? '<p class="muted" style="margin-top:8px;">Trial ends ' + esc(new Date(b.trialEndsAt).toLocaleString()) + '</p>' : '');
                 const actions = document.getElementById('payActions');
                 if (!pay.ready) {
                     actions.innerHTML = '<p class="muted">Card checkout turns on after Stripe keys are set. Until then email support@opsai.us.</p>';
                 } else if (pay.hasSubscription) {
-                    actions.innerHTML = '<button type="button" class="btn secondary" id="portalBtn">Manage card and invoices</button>';
+                    const warn = pay.pastDue
+                        ? '<p class="error" style="margin-bottom:8px;">Last payment failed — open the portal to update your card.</p>'
+                        : '';
+                    actions.innerHTML = warn + '<button type="button" class="btn secondary" id="portalBtn">Manage card and invoices</button>';
                     document.getElementById('portalBtn').onclick = function () {
                         billingAction('portal').catch(function (err) { alert(err.message); });
                     };
                 } else {
-                    actions.innerHTML = '<button type="button" class="btn" id="checkoutBtn">Add card · $' +
+                    actions.innerHTML = '<button type="button" class="btn" id="checkoutBtn">Subscribe · $' +
                         Number(b.monthlyUsd || 25).toFixed(0) + '/month</button>';
                     document.getElementById('checkoutBtn').onclick = function () {
                         billingAction('checkout').catch(function (err) { alert(err.message); });

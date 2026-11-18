@@ -14,28 +14,33 @@
     <link rel="icon" type="image/png" href="/icon-192.png">
     <link rel="stylesheet" href="/app-shell.css?v=3">
     <script src="/app-shell.js?v=2"></script>
-    <title>opsAi · Crew</title>
+    <title>opsAi · Ask agents</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
-            --bg: #f4f5f7; --card: #fff; --text: #141414; --muted: #6b7280;
-            --border: #e5e7eb; --accent: #111; --ok: #059669;
+            --bg: #f3f4f6; --card: #fff; --text: #111827; --muted: #6b7280;
+            --border: #e5e7eb; --accent: #111827; --ok: #059669; --soft: #f9fafb;
         }
         html { -webkit-text-size-adjust: 100%; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: var(--bg); color: var(--text); min-height: 100dvh;
+            font-family: "Segoe UI", ui-sans-serif, system-ui, -apple-system, sans-serif;
+            background:
+                radial-gradient(1200px 420px at 10% -10%, #e8f8ef 0%, transparent 55%),
+                radial-gradient(900px 360px at 100% 0%, #eef2ff 0%, transparent 50%),
+                var(--bg);
+            color: var(--text); min-height: 100dvh;
         }
         header {
-            background: #111; color: #fff; padding: 14px 20px;
+            background: rgba(17,24,39,.96); color: #fff; padding: 14px 20px;
             padding-top: max(14px, env(safe-area-inset-top));
             display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+            backdrop-filter: blur(8px);
         }
         header a { color: #fff; text-decoration: none; opacity: .85; font-size: 14px; }
         header .brand-logo { line-height: 0; opacity: 1; background: #fff; border-radius: 8px; padding: 4px 8px; }
         header .brand-logo img { display: block; height: 28px; width: auto; }
-        header h1 { font-size: 18px; flex: 1; min-width: 6rem; }
-        header select { padding: 8px 10px; border-radius: 6px; border: none; font-size: 16px; flex: 1; max-width: 100%; font-family: inherit; }
+        header h1 { font-size: 17px; font-weight: 650; letter-spacing: -0.02em; flex: 1; min-width: 6rem; }
+        header select { padding: 8px 10px; border-radius: 8px; border: none; font-size: 15px; flex: 1; max-width: 100%; font-family: inherit; }
         button { cursor: pointer; font-size: 14px; border-radius: 8px; padding: 8px 14px; border: 1px solid var(--border); background: #fff; font-family: inherit; }
         button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
         button.small { padding: 4px 10px; font-size: 12px; }
@@ -44,77 +49,98 @@
         .notice.err { background: #fee2e2; color: #991b1b; }
         .notice.ok { background: #d1fae5; color: #065f46; }
         .shell {
-            display: grid; grid-template-columns: 260px 1fr; gap: 0;
-            max-width: 1100px; margin: 0 auto; min-height: calc(100dvh - 72px);
-            border-left: 1px solid var(--border); border-right: 1px solid var(--border);
-            background: var(--card);
+            display: grid; grid-template-columns: 280px 1fr; gap: 0;
+            max-width: 1120px; margin: 16px auto 24px; min-height: calc(100dvh - 110px);
+            border: 1px solid var(--border); border-radius: 16px; overflow: hidden;
+            background: var(--card); box-shadow: 0 12px 40px rgba(17,24,39,.06);
         }
         .agent-list {
-            border-right: 1px solid var(--border); padding: 16px 12px 24px;
-            background: #fafafa;
+            border-right: 1px solid var(--border); padding: 18px 12px 24px;
+            background: linear-gradient(180deg, #fafafa 0%, #f5f5f5 100%);
         }
         .agent-list h2 {
-            font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
-            color: var(--muted); font-weight: 700; padding: 0 8px 10px;
+            font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+            color: var(--muted); font-weight: 700; padding: 0 10px 12px;
         }
         .agent-btn {
             width: 100%; text-align: left; border: none; background: transparent;
-            padding: 12px 12px; border-radius: 10px; margin-bottom: 4px;
+            padding: 10px 10px; border-radius: 12px; margin-bottom: 4px;
+            display: flex; gap: 10px; align-items: flex-start;
         }
-        .agent-btn:hover { background: #eee; }
-        .agent-btn.active { background: #fff; box-shadow: inset 0 0 0 1px var(--border); }
-        .agent-btn .name { font-weight: 650; font-size: 15px; display: block; }
+        .agent-btn:hover { background: rgba(255,255,255,.8); }
+        .agent-btn.active { background: #fff; box-shadow: 0 0 0 1px var(--border), 0 4px 12px rgba(17,24,39,.04); }
+        .avatar {
+            width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+            display: grid; place-items: center; font-size: 13px; font-weight: 700; color: #fff;
+        }
+        .agent-btn .meta { min-width: 0; flex: 1; }
+        .agent-btn .name { font-weight: 650; font-size: 14px; display: block; color: var(--text); }
+        .agent-btn .role {
+            display: inline-block; margin-left: 4px; font-size: 11px; font-weight: 600;
+            color: var(--muted); letter-spacing: .01em;
+        }
         .agent-btn .job { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.35; }
         .agent-btn .badge {
-            display: inline-block; margin-top: 6px; font-size: 11px; font-weight: 650;
-            color: var(--ok);
+            display: inline-block; margin-top: 6px; font-size: 10px; font-weight: 700;
+            color: var(--ok); text-transform: uppercase; letter-spacing: .04em;
         }
         .agent-btn .badge.off { color: var(--muted); }
-        .thread {
-            display: flex; flex-direction: column; min-height: calc(100dvh - 72px);
-        }
+        .thread { display: flex; flex-direction: column; min-height: calc(100dvh - 110px); background: #fff; }
         .thread-head {
-            padding: 18px 20px 14px; border-bottom: 1px solid var(--border);
+            padding: 20px 22px 16px; border-bottom: 1px solid var(--border);
+            background: linear-gradient(180deg, #fff 0%, var(--soft) 100%);
         }
+        .thread-head .who { display: flex; gap: 12px; align-items: center; }
         .thread-head h2 { font-size: 20px; font-weight: 650; letter-spacing: -0.02em; }
-        .thread-head p { color: var(--muted); font-size: 14px; margin-top: 4px; line-height: 1.4; max-width: 36rem; }
+        .thread-head .role-pill {
+            display: inline-block; margin-left: 8px; font-size: 11px; font-weight: 700;
+            color: #374151; background: #e5e7eb; padding: 2px 8px; border-radius: 999px;
+            vertical-align: middle;
+        }
+        .thread-head p { color: var(--muted); font-size: 14px; margin-top: 6px; line-height: 1.45; max-width: 38rem; }
         .messages {
-            flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px;
+            flex: 1; overflow-y: auto; padding: 22px; display: flex; flex-direction: column; gap: 12px;
+            background:
+                linear-gradient(180deg, transparent, transparent),
+                repeating-linear-gradient(0deg, transparent, transparent 23px, rgba(0,0,0,.015) 24px);
         }
         .bubble {
-            max-width: min(520px, 92%); padding: 12px 14px; border-radius: 14px;
-            font-size: 14px; line-height: 1.45; white-space: pre-wrap;
+            max-width: min(540px, 92%); padding: 12px 14px; border-radius: 14px;
+            font-size: 14px; line-height: 1.5; white-space: pre-wrap;
         }
         .bubble.agent { background: #f3f4f6; align-self: flex-start; border-bottom-left-radius: 4px; }
-        .bubble.you { background: #111; color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
-        .bubble.system { align-self: center; background: transparent; color: var(--muted); font-size: 13px; text-align: center; max-width: 28rem; }
+        .bubble.you { background: var(--accent); color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
+        .bubble.system { align-self: center; background: transparent; color: var(--muted); font-size: 13px; text-align: center; max-width: 30rem; }
         .chip {
             display: inline-block; margin-bottom: 6px; padding: 2px 8px; border-radius: 999px;
             background: #e8e8e8; color: #333; font-size: 11px; font-weight: 650;
         }
         .composer {
-            border-top: 1px solid var(--border); padding: 12px 16px 16px;
+            border-top: 1px solid var(--border); padding: 14px 16px 16px;
             padding-bottom: max(16px, env(safe-area-inset-bottom));
             display: flex; gap: 8px; align-items: flex-end; background: #fff;
         }
         .composer textarea {
-            flex: 1; min-height: 44px; max-height: 120px; resize: vertical;
-            padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px;
-            font-size: 16px; font-family: inherit;
+            flex: 1; min-height: 46px; max-height: 120px; resize: vertical;
+            padding: 11px 12px; border: 1px solid var(--border); border-radius: 12px;
+            font-size: 16px; font-family: inherit; background: var(--soft);
         }
-        .empty-state { padding: 40px 24px; text-align: center; color: var(--muted); }
-        .admin-links { padding: 8px 12px 0; font-size: 13px; }
-        .admin-links a { color: var(--muted); }
+        .composer textarea:focus { outline: none; border-color: #9ca3af; background: #fff; }
+        .empty-state { padding: 48px 24px; text-align: center; color: var(--muted); }
+        .admin-links { padding: 12px 10px 0; font-size: 13px; }
+        .admin-links a { color: var(--muted); text-decoration: none; }
+        .admin-links a:hover { color: var(--text); }
         @media (max-width: 720px) {
-            .shell { grid-template-columns: 1fr; min-height: auto; }
+            .shell { grid-template-columns: 1fr; margin: 0; border-radius: 0; border-left: none; border-right: none; min-height: auto; }
             .agent-list {
                 border-right: none; border-bottom: 1px solid var(--border);
                 display: flex; gap: 6px; overflow-x: auto; padding: 12px;
                 -webkit-overflow-scrolling: touch;
             }
             .agent-list h2 { display: none; }
-            .agent-btn { min-width: 140px; flex-shrink: 0; }
-            .thread { min-height: 70dvh; }
+            .agent-btn { min-width: 168px; flex-shrink: 0; }
+            .thread { min-height: 68dvh; }
+            .admin-links { display: none; }
         }
     </style>
 </head>
@@ -123,7 +149,7 @@
 <header>
     <a href="/dashboard" class="brand-logo" aria-label="Operation Intelligence"><img src="/logo.jpg" alt="Operation Intelligence"></a>
     <a href="/dashboard">&larr; Dashboard</a>
-    <h1>Crew</h1>
+    <h1>Ask agents</h1>
     <select id="storeSelect" aria-label="Store"></select>
     <button type="button" class="small" id="logoutBtn">Log out</button>
 </header>
@@ -136,6 +162,14 @@
     let board = null;
     let activeAgent = 'supervisor';
     const threads = {};
+    const AVATAR_COLORS = {
+        supervisor: '#0f766e',
+        close: '#2563eb',
+        finance: '#7c3aed',
+        followup: '#d97706',
+        staff: '#0891b2',
+        books: '#059669'
+    };
 
     if (window.opsai) {
         window.opsai.me().then(function (d) { if (!d) location.href = '/login'; });
@@ -145,6 +179,10 @@
         return String(value === null || value === undefined ? '' : value)
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function initials(name) {
+        return String(name || '?').trim().slice(0, 1).toUpperCase();
     }
 
     function note(kind, text) {
@@ -169,14 +207,14 @@
     function catalog() {
         const agents = (board && board.agents) || {};
         const rows = agents.catalog || [];
-        return [
-            {
-                id: 'supervisor',
-                name: 'Supervisor',
-                job: 'Open chat — routes to the right agent and tool',
-                enabled: true,
-            },
-        ].concat(rows);
+        const supervisor = agents.supervisor || {
+            id: 'supervisor',
+            name: 'Riley',
+            role: 'Ops lead',
+            job: 'Routes your question to the right agent and tool',
+            enabled: true,
+        };
+        return [supervisor].concat(rows);
     }
 
     function ensureThread(id) {
@@ -200,26 +238,26 @@
     function welcomeFor(agent) {
         if (!agent) return 'Pick an agent to start.';
         if (agent.id === 'supervisor') {
-            if (!booksOn()) return 'Enable Books under Tasks → Store admin → Crew to ask about standing and invoices.';
-            return 'Ask anything about confirmed books — standing, open bills, invoice counts. Short follow-ups like “paid ones” work here.';
+            if (!booksOn()) return 'Enable Quinn (Books) under Store admin → Agents to ask about standing and invoices.';
+            return 'Ask Riley about confirmed books — standing, open bills, invoice counts. Short follow-ups like “paid ones” work here.';
         }
         if (agent.id === 'books') {
-            if (!agent.enabled) return 'Books is off. Enable it under Store admin → Crew.';
-            return 'Direct Books chat. Same tools as Supervisor, pinned to Books.';
+            if (!agent.enabled) return 'Quinn is off. Enable Books under Store admin → Agents.';
+            return 'Direct chat with Quinn. Same tools as Riley, pinned to Books.';
         }
         if (agent.id === 'close') {
-            return 'Close captures daily sales and deposits on WhatsApp (OK/FIX). Field capture stays there for now.';
+            return 'Mira captures daily sales and deposits on WhatsApp (OK/FIX). Field capture stays there for now.';
         }
         if (agent.id === 'finance') {
-            return 'Finance captures invoices on WhatsApp. Ask Supervisor or Books for open bills and invoice counts.';
+            return 'Jules captures invoices on WhatsApp. Ask Riley or Quinn for open bills and invoice counts.';
         }
         if (agent.id === 'staff') {
             return agent.enabled
-                ? 'Staff runs shift tasks on WhatsApp.'
-                : 'Staff is off. Turn it on under Store admin → Crew.';
+                ? 'Sam runs shift tasks on WhatsApp.'
+                : 'Sam is off. Turn Staff on under Store admin → Agents.';
         }
         if (agent.id === 'followup') {
-            return 'Follow-up runs reminders in the background.';
+            return 'Avery runs reminders in the background.';
         }
         return agent.job;
     }
@@ -232,6 +270,13 @@
             .map(function (m) {
                 return { role: m.role === 'you' ? 'user' : 'assistant', text: m.text };
             });
+    }
+
+    function avatarHtml(agent, size) {
+        const color = AVATAR_COLORS[agent.id] || '#374151';
+        const dim = size || 36;
+        return '<div class="avatar" style="background:' + color + ';width:' + dim + 'px;height:' + dim + 'px;font-size:' +
+            Math.round(dim * 0.36) + 'px;">' + esc(initials(agent.name)) + '</div>';
     }
 
     function renderMessages() {
@@ -263,27 +308,33 @@
         const chatOk = canOwnerChat() && booksOn() &&
             (activeAgent === 'supervisor' || activeAgent === 'books');
 
-        let html = '<div class="shell"><aside class="agent-list"><h2>Crew</h2>';
+        let html = '<div class="shell"><aside class="agent-list"><h2>Agents</h2>';
         list.forEach(function (a) {
+            const role = a.role || '';
             html += '<button type="button" class="agent-btn' + (a.id === activeAgent ? ' active' : '') +
-                '" data-agent="' + esc(a.id) + '"><span class="name">' + esc(a.name) + '</span>' +
+                '" data-agent="' + esc(a.id) + '">' + avatarHtml(a) +
+                '<div class="meta"><span class="name">' + esc(a.name) +
+                (role ? '<span class="role">' + esc(role) + '</span>' : '') + '</span>' +
                 '<span class="job">' + esc(a.job) + '</span>' +
-                '<span class="badge' + (a.enabled ? '' : ' off') + '">' + (a.enabled ? 'On' : 'Off') + '</span></button>';
+                '<span class="badge' + (a.enabled ? '' : ' off') + '">' + (a.enabled ? 'On' : 'Off') + '</span></div></button>';
         });
-        html += '<div class="admin-links"><a href="/tasks?storeId=' + encodeURIComponent(storeId) + '">Store admin →</a></div>';
-        html += '</aside><section class="thread"><div class="thread-head"><h2>' + esc(agent ? agent.name : 'Crew') + '</h2>' +
-            '<p>' + esc(agent ? agent.job : '') + '</p></div>' +
+        html += '<div class="admin-links"><a href="/tasks?storeId=' + encodeURIComponent(storeId) + '">Manage agents →</a></div>';
+        html += '</aside><section class="thread"><div class="thread-head"><div class="who">' +
+            avatarHtml(agent || { id: 'supervisor', name: 'Riley' }, 44) +
+            '<div><h2>' + esc(agent ? agent.name : 'Riley') +
+            (agent && agent.role ? '<span class="role-pill">' + esc(agent.role) + '</span>' : '') +
+            '</h2><p>' + esc(agent ? agent.job : '') + '</p></div></div></div>' +
             '<div class="messages" id="messages"></div>';
         if (chatOk) {
             html += '<form class="composer" id="crewForm">' +
                 '<textarea name="question" rows="1" maxlength="500" required placeholder="' +
-                (activeAgent === 'supervisor' ? 'Ask the crew…' : 'Ask Books…') +
+                (activeAgent === 'supervisor' ? 'Ask Riley…' : 'Ask Quinn…') +
                 '"></textarea>' +
                 '<button type="submit" class="primary" id="crewSend">Send</button></form>';
         } else if (!booksOn() && (activeAgent === 'supervisor' || activeAgent === 'books')) {
-            html += '<div class="composer"><p class="bubble system" style="margin:0;width:100%;">Enable Books in Store admin to chat here.</p></div>';
+            html += '<div class="composer"><p class="bubble system" style="margin:0;width:100%;">Enable Quinn (Books) in Store admin to chat here.</p></div>';
         } else {
-            html += '<div class="composer"><p class="bubble system" style="margin:0;width:100%;">Field work for this agent stays on WhatsApp 1:1 for now.</p></div>';
+            html += '<div class="composer"><p class="bubble system" style="margin:0;width:100%;">Field work for this agent stays on WhatsApp for now.</p></div>';
         }
         html += '</section></div>';
         document.getElementById('app').innerHTML = html;
@@ -330,7 +381,7 @@
         try {
             const data = await askCrew(question, threadId);
             thread.pop();
-            const chip = (data.agent || 'Books') + (data.toolId ? ' · ' + data.toolId : '');
+            const chip = (data.agent || 'Quinn') + (data.toolId ? ' · ' + data.toolId : '');
             thread.push({ role: 'agent', text: data.answer || 'No answer.', chip: chip });
         } catch (err) {
             thread.pop();
@@ -364,6 +415,7 @@
             });
             if (!stores.some(function (s) { return s.storeId === storeId; })) storeId = stores[0].storeId;
             select.value = storeId;
+            history.replaceState(null, '', '/crew?storeId=' + encodeURIComponent(storeId));
             select.addEventListener('change', async function () {
                 storeId = select.value;
                 history.replaceState(null, '', '/crew?storeId=' + encodeURIComponent(storeId));
@@ -374,7 +426,7 @@
             board = await loadBoard();
             render();
         } catch (e) {
-            note('err', 'Could not load crew. ' + e.message);
+            note('err', 'Could not load agents. ' + e.message);
             document.getElementById('app').innerHTML = '';
         }
     })();

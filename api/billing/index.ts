@@ -2,7 +2,14 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
 import { requireAuthUser } from '../../lib/apiAuth';
 import { readJsonBody } from '../../lib/authCredentials';
-import { PLANS, describeBilling, utcMonthRange } from '../../lib/billing/plans';
+import { isAiChatEnrolled } from '../../lib/aiChatAccess';
+import {
+  ASK_DATA_USD_PER_STORE_PER_MONTH,
+  PLANS,
+  USD_PER_STORE_PER_MONTH,
+  describeBilling,
+  utcMonthRange,
+} from '../../lib/billing/plans';
 import {
   EMPTY_COUNTS,
   addCount,
@@ -11,12 +18,13 @@ import {
   summarizeSavings,
   type SavingsCounts,
 } from '../../lib/billing/savings';
-import { stripeConfig } from '../../lib/billing/stripe';
+import { estimateMonthlyUsd, stripeConfig } from '../../lib/billing/stripe';
 import {
   applyCheckoutSessionId,
   createCheckoutUrl,
   createPortalUrl,
   loadBillingUser,
+  subscriptionPastDue,
 } from '../../lib/billing/stripeActions';
 import { logAppError, loggedHandler, serializeError } from '../../lib/requestLog';
 
@@ -68,14 +76,27 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
 
     const user = await prisma.user.findUnique({
       where: { id: auth.userId },
-      include: { stores: { include: { store: { select: { storeId: true, storeName: true } } } } },
+      include: {
+        stores: {
+          include: { store: { select: { storeId: true, storeName: true, profileJson: true } } },
+        },
+      },
     });
     if (!user || !user.isActive) {
       res.status(401).json({ error: 'User not found or inactive' });
       return;
     }
 
-    const billing = describeBilling(user, user.stores.length);
+    const booksStoreCount = user.stores.filter((row) => isAiChatEnrolled(row.store.profileJson)).length;
+    const estimate = estimateMonthlyUsd(user.stores.length, booksStoreCount);
+    const billing = {
+      ...describeBilling(user, user.stores.length),
+      booksStoreCount,
+      booksUsdPerStore: ASK_DATA_USD_PER_STORE_PER_MONTH,
+      booksUsd: estimate.booksUsd,
+      monthlyUsd: estimate.totalUsd,
+      baseUsd: estimate.baseUsd,
+    };
     const { from, to, month } = utcMonthRange();
     const storeIds = user.stores.map((row) => row.store.storeId);
     const countsByStore = new Map<string, SavingsCounts>();
@@ -127,6 +148,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       };
     });
     const payments = stripeConfig();
+    const pastDue = await subscriptionPastDue(user);
 
     res.json({
       success: true,
@@ -135,8 +157,12 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       trial: { days: 14, cardRequired: false },
       payments: {
         ready: payments.ready,
+        booksReady: payments.booksReady,
         hasCustomer: Boolean(user.stripeCustomerId),
         hasSubscription: Boolean(user.stripeSubscriptionId),
+        pastDue,
+        unitUsd: USD_PER_STORE_PER_MONTH,
+        booksUnitUsd: ASK_DATA_USD_PER_STORE_PER_MONTH,
       },
       month,
       savings,

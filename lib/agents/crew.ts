@@ -29,7 +29,10 @@ export type StoreAgentsConfig = {
 
 export type AgentCatalogEntry = {
   id: StoreAgentId;
+  /** Person-style display name shown in product UI. */
   name: string;
+  /** Specialty label (Close, Finance, …). */
+  role: string;
   job: string;
   /** Included in base $25/store vs paid add-on. */
   pricing: 'included' | 'addon';
@@ -42,8 +45,9 @@ export type AgentCatalogEntry = {
 export const C_STORE_GAS_CATALOG: AgentCatalogEntry[] = [
   {
     id: 'close',
-    name: 'Close',
-    job: 'Daily sales / DMR / deposit capture — draft then OK/FIX',
+    name: 'Mira',
+    role: 'Close',
+    job: 'Daily sales, DMR, and deposits — draft then OK/FIX on WhatsApp',
     pricing: 'included',
     monthlyUsd: 0,
     core: true,
@@ -51,8 +55,9 @@ export const C_STORE_GAS_CATALOG: AgentCatalogEntry[] = [
   },
   {
     id: 'finance',
-    name: 'Finance',
-    job: 'Invoices, remaining balances, vendor bills',
+    name: 'Jules',
+    role: 'Finance',
+    job: 'Invoices, remaining balances, and vendor bills',
     pricing: 'included',
     monthlyUsd: 0,
     core: true,
@@ -60,8 +65,9 @@ export const C_STORE_GAS_CATALOG: AgentCatalogEntry[] = [
   },
   {
     id: 'followup',
-    name: 'Follow-up',
-    job: 'Reminders, missing closes, overdue bills',
+    name: 'Avery',
+    role: 'Follow-up',
+    job: 'Reminders for missing closes and overdue bills',
     pricing: 'included',
     monthlyUsd: 0,
     core: true,
@@ -69,8 +75,9 @@ export const C_STORE_GAS_CATALOG: AgentCatalogEntry[] = [
   },
   {
     id: 'staff',
-    name: 'Staff',
-    job: 'Shift tasks, photo proof, escalate',
+    name: 'Sam',
+    role: 'Staff',
+    job: 'Shift tasks, photo proof, and escalations',
     pricing: 'included',
     monthlyUsd: 0,
     core: false,
@@ -78,8 +85,9 @@ export const C_STORE_GAS_CATALOG: AgentCatalogEntry[] = [
   },
   {
     id: 'books',
-    name: 'Books',
-    job: 'Owner/manager ask on confirmed store data (web + WhatsApp 1:1)',
+    name: 'Quinn',
+    role: 'Books',
+    job: 'Ask on confirmed store data — web and WhatsApp 1:1',
     pricing: 'addon',
     monthlyUsd: AI_CHAT_USD_PER_STORE_PER_MONTH,
     core: false,
@@ -87,8 +95,25 @@ export const C_STORE_GAS_CATALOG: AgentCatalogEntry[] = [
   },
 ];
 
+/** Main chat router — always present, not a toggleable store agent. */
+export const SUPERVISOR_AGENT = {
+  id: 'supervisor' as const,
+  name: 'Riley',
+  role: 'Ops lead',
+  job: 'Routes your question to the right agent and tool',
+};
+
 export const AGENT_DISPLAY: Record<AgentId, string> = {
-  supervisor: 'Supervisor',
+  supervisor: SUPERVISOR_AGENT.name,
+  close: 'Mira',
+  finance: 'Jules',
+  staff: 'Sam',
+  books: 'Quinn',
+  followup: 'Avery',
+};
+
+export const AGENT_ROLE: Record<AgentId, string> = {
+  supervisor: SUPERVISOR_AGENT.role,
   close: 'Close',
   finance: 'Finance',
   staff: 'Staff',
@@ -270,12 +295,13 @@ export function agentsBoardPayload(profileJson: unknown) {
     autonomy: config.autonomy,
     enabled: config.enabled,
     baseMonthlyUsd: USD_PER_STORE_PER_MONTH,
+    supervisor: { ...SUPERVISOR_AGENT, enabled: true },
     catalog: C_STORE_GAS_CATALOG.map((entry) => ({
       ...entry,
       enabled: config.enabled[entry.id],
       canToggle: !entry.core && (entry.id !== 'books' || true),
     })),
-    marketingLine: 'Your store’s AI crew — you confirm.',
+    marketingLine: 'Your store agents — you confirm every money post.',
   };
 }
 

@@ -1200,7 +1200,7 @@
                 </a>
                 <a href="/crew" class="menu-item" id="crewMenuItem">
                     <span class="menu-item-icon">💬</span>
-                    <span>Crew chat</span>
+                    <span>Ask agents</span>
                 </a>
             </div>
             
@@ -3464,6 +3464,10 @@
                 e.preventDefault();
                 if (item.id === 'tasksMenuItem') {
                     location.href = '/tasks' + (currentStoreId ? '?storeId=' + encodeURIComponent(currentStoreId) : '');
+                    return;
+                }
+                if (item.id === 'crewMenuItem') {
+                    location.href = '/crew' + (currentStoreId ? '?storeId=' + encodeURIComponent(currentStoreId) : '');
                     return;
                 }
                 const page = item.dataset.page;

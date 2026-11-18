@@ -104,9 +104,43 @@
             display: inline-block; background: #e8f8ef; color: #065f46; padding: 4px 10px;
             border-radius: 6px; font-weight: 600; font-size: 14px;
         }
-        .auth-container.wide { max-width: 680px; }
+        .auth-container.wide { max-width: 720px; }
         .type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px; }
         @media (min-width: 640px) { .type-grid { grid-template-columns: 1fr 1fr 1fr; } }
+        .tools-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 12px;
+            margin: 8px 0 18px;
+        }
+        @media (min-width: 560px) { .tools-grid { grid-template-columns: 1fr 1fr; } }
+        .tool-tile {
+            display: flex; align-items: flex-start; gap: 12px;
+            padding: 14px; border: 2px solid var(--border); border-radius: 14px;
+            background: #fff; cursor: pointer; text-align: left; width: 100%;
+            transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+        }
+        .tool-tile:hover { border-color: #b7e4c7; box-shadow: 0 4px 14px rgba(18,140,126,.08); }
+        .tool-tile.selected { border-color: var(--primary); background: #e8f8ef; }
+        .tool-tile img {
+            width: 44px; height: 44px; border-radius: 10px; flex-shrink: 0;
+        }
+        .tool-tile .tool-copy { min-width: 0; flex: 1; }
+        .tool-tile strong { display: block; font-size: 15px; font-weight: 700; color: var(--text); }
+        .tool-tile span { display: block; font-size: 12px; color: var(--text-light); line-height: 1.4; margin-top: 3px; }
+        .tool-tile .tool-check {
+            width: 22px; height: 22px; border-radius: 999px; border: 2px solid #cfd8d3;
+            flex-shrink: 0; margin-top: 10px; display: grid; place-items: center;
+            color: transparent; font-size: 12px; font-weight: 700;
+        }
+        .tool-tile.selected .tool-check {
+            background: var(--primary); border-color: var(--primary); color: #fff;
+        }
+        .tool-tile.locked { opacity: .92; }
+        .tool-tile .badge {
+            display: inline-block; margin-top: 6px; font-size: 11px; font-weight: 600;
+            color: #0f766e; background: #ccfbf1; padding: 2px 8px; border-radius: 999px;
+        }
         .family-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text-light); margin: 14px 0 8px; }
         .family-label:first-child { margin-top: 0; }
         .type-btn {
@@ -258,6 +292,21 @@
             </div>
         </div>
 
+        <div id="toolsPanel" class="step-panel">
+            <div class="auth-header">
+                <h1>Which tools do you want?</h1>
+                <p>Pick where this business connects. You can finish linking Sheets or Slack later in Store admin — this just turns them on for the store.</p>
+            </div>
+            <div class="error-message" id="toolsError"></div>
+            <div class="tools-grid" id="toolsGrid" role="group" aria-label="Business tools"></div>
+            <div class="help-text" style="margin-bottom: 12px;">WhatsApp stays on for floor capture. Email and Slack are for owners and managers.</div>
+            <div class="back-row">
+                <button type="button" class="btn-secondary" id="toolsBackBtn">Back</button>
+                <button type="button" class="btn-secondary" id="toolsSkipBtn">Skip for now</button>
+                <button type="button" class="btn-primary" id="toolsSaveBtn" style="margin-top: 10px;">Save and continue</button>
+            </div>
+        </div>
+
         <div id="successPanel" class="step-panel">
             <div class="success-icon">✅</div>
             <div class="auth-header">
@@ -338,7 +387,72 @@
 
         function showPanel(id) {
             document.querySelectorAll('.step-panel').forEach(function (p) { p.classList.toggle('active', p.id === id); });
-            document.querySelector('.auth-container').classList.toggle('wide', id === 'tasksPanel' || id === 'samplesPanel');
+            document.querySelector('.auth-container').classList.toggle(
+                'wide',
+                id === 'tasksPanel' || id === 'samplesPanel' || id === 'toolsPanel'
+            );
+        }
+
+        const TOOL_CATALOG = [
+            {
+                id: 'whatsapp',
+                name: 'WhatsApp',
+                blurb: 'Field closes, invoices, and OK/FIX from the floor.',
+                icon: '/integrations/whatsapp.svg',
+                defaultWanted: true,
+                locked: true,
+                badge: 'Required'
+            },
+            {
+                id: 'googleSheets',
+                name: 'Google Sheets',
+                blurb: 'Mirror confirmed entries into a spreadsheet you already use.',
+                icon: '/integrations/google-sheets.svg',
+                defaultWanted: false
+            },
+            {
+                id: 'slack',
+                name: 'Slack',
+                blurb: 'Manager ask + morning brief in a channel or DM.',
+                icon: '/integrations/slack.svg',
+                defaultWanted: false
+            },
+            {
+                id: 'email',
+                name: 'Email digest',
+                blurb: 'Morning standing, missing closes, and open invoices.',
+                icon: '/integrations/email.svg',
+                defaultWanted: false
+            },
+            {
+                id: 'books',
+                name: 'Books',
+                blurb: 'Ask standing and invoices in Crew ($20/store add-on).',
+                icon: '/integrations/books.svg',
+                defaultWanted: false,
+                badge: 'Add-on'
+            }
+        ];
+        const toolsWanted = {};
+        TOOL_CATALOG.forEach(function (t) { toolsWanted[t.id] = !!t.defaultWanted; });
+
+        function renderToolsGrid() {
+            const grid = document.getElementById('toolsGrid');
+            if (!grid) return;
+            grid.innerHTML = TOOL_CATALOG.map(function (t) {
+                const on = !!toolsWanted[t.id];
+                return '<button type="button" class="tool-tile' + (on ? ' selected' : '') +
+                    (t.locked ? ' locked' : '') + '" data-tool="' + t.id + '" aria-pressed="' + on + '">' +
+                    '<img src="' + t.icon + '" alt="" width="44" height="44">' +
+                    '<div class="tool-copy"><strong>' + t.name + '</strong><span>' + t.blurb + '</span>' +
+                    (t.badge ? '<div class="badge">' + t.badge + '</div>' : '') +
+                    '</div><div class="tool-check" aria-hidden="true">✓</div></button>';
+            }).join('');
+        }
+
+        function showToolsStep() {
+            renderToolsGrid();
+            showPanel('toolsPanel');
         }
 
         function showError(id, message) {
@@ -661,6 +775,17 @@
             showSuccessPanel(setupStoreId, setupStoreName, added);
         }
 
+        async function saveToolsWanted() {
+            const tools = {
+                whatsapp: true,
+                googleSheets: !!toolsWanted.googleSheets,
+                slack: !!toolsWanted.slack,
+                email: !!toolsWanted.email,
+                books: !!toolsWanted.books,
+            };
+            await setupApi('POST', { action: 'set_channels', tools: tools });
+        }
+
         document.getElementById('tasksSaveBtn').addEventListener('click', async function (e) {
             const btn = e.currentTarget;
             const ids = Array.prototype.map.call(document.querySelectorAll('#tasksBody input[data-preset]:checked'), function (i) { return i.dataset.preset; });
@@ -669,17 +794,13 @@
             try {
                 const data = await setupApi('POST', { action: 'setup_apply', setup: setupState, presetIds: ids });
                 window._tasksAdded = data.added;
-                if (isSetupMode) {
-                    finishSetup(data.added);
-                    return;
-                }
                 const mods = setupState ? modulesFor(setupState.storeType) : {};
-                if (!mods.vendors && !mods.samples) {
-                    finishSetup(data.added);
+                if (!isSetupMode && (mods.vendors || mods.samples)) {
+                    showSamplesStep(mods);
+                    showPanel('samplesPanel');
                     return;
                 }
-                showSamplesStep(mods);
-                showPanel('samplesPanel');
+                showToolsStep();
             } catch (err) {
                 showError('tasksError', err.message);
             } finally {
@@ -702,7 +823,35 @@
         });
 
         document.getElementById('samplesSkipBtn').addEventListener('click', function () {
+            showToolsStep();
+        });
+
+        document.getElementById('toolsGrid').addEventListener('click', function (e) {
+            const tile = e.target.closest('[data-tool]');
+            if (!tile) return;
+            const id = tile.getAttribute('data-tool');
+            const def = TOOL_CATALOG.find(function (t) { return t.id === id; });
+            if (!def || def.locked) return;
+            toolsWanted[id] = !toolsWanted[id];
+            renderToolsGrid();
+        });
+
+        document.getElementById('toolsSkipBtn').addEventListener('click', function () {
             finishSetup(window._tasksAdded);
+        });
+
+        document.getElementById('toolsSaveBtn').addEventListener('click', async function (e) {
+            const btn = e.currentTarget;
+            showError('toolsError', '');
+            btn.disabled = true;
+            try {
+                await saveToolsWanted();
+                finishSetup(window._tasksAdded);
+            } catch (err) {
+                showError('toolsError', err.message);
+            } finally {
+                btn.disabled = false;
+            }
         });
 
         function setPicMapStatus(text) {
@@ -913,13 +1062,20 @@
                         await setupApi('POST', { action: 'save_picture_template', template: picMap });
                     }
                 }
-                finishSetup(window._tasksAdded);
+                showToolsStep();
             } catch (err) {
                 showError('samplesError', err.message);
             } finally {
                 btn.textContent = original;
                 btn.disabled = false;
             }
+        });
+
+        document.getElementById('toolsBackBtn').addEventListener('click', function () {
+            showError('toolsError', '');
+            const mods = setupState ? modulesFor(setupState.storeType) : {};
+            if (mods.vendors || mods.samples) showPanel('samplesPanel');
+            else showPanel('tasksPanel');
         });
 
         document.getElementById('skipSetupBtn').addEventListener('click', function () {

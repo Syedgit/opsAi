@@ -1,4 +1,8 @@
-import type { PlanStatus } from './plans';
+import {
+  ASK_DATA_USD_PER_STORE_PER_MONTH,
+  USD_PER_STORE_PER_MONTH,
+  type PlanStatus,
+} from './plans';
 
 /** Stripe Checkout needs at least 48 hours of remaining trial to set trial_end. */
 export const STRIPE_MIN_TRIAL_MS = 48 * 60 * 60 * 1000;
@@ -7,23 +11,29 @@ export type StripeConfig = {
   secretKey: string;
   webhookSecret: string;
   priceId: string;
+  /** Optional Books add-on Price ID ($20/store/mo). */
+  booksPriceId: string;
   appUrl: string;
   ready: boolean;
   webhookReady: boolean;
+  booksReady: boolean;
 };
 
 export function stripeConfig(env: NodeJS.ProcessEnv = process.env): StripeConfig {
   const secretKey = env.STRIPE_SECRET_KEY?.trim() || '';
   const webhookSecret = env.STRIPE_WEBHOOK_SECRET?.trim() || '';
   const priceId = env.STRIPE_PRICE_ID?.trim() || '';
+  const booksPriceId = env.STRIPE_BOOKS_PRICE_ID?.trim() || '';
   const appUrl = (env.APP_URL?.trim() || 'http://localhost:3000').replace(/\/+$/, '');
   return {
     secretKey,
     webhookSecret,
     priceId,
+    booksPriceId,
     appUrl,
     ready: Boolean(secretKey && priceId),
     webhookReady: Boolean(secretKey && webhookSecret),
+    booksReady: Boolean(secretKey && booksPriceId),
   };
 }
 
@@ -107,6 +117,15 @@ export function patchFromStripeEvent(type: string, object: StripeObject): Stripe
       planStatus: 'active',
     };
   }
+  // Keep access while Stripe retries, but mark past_due via subscription.updated normally.
+  // Surface a soft warning: stay "active" so WhatsApp keeps working; billing UI reads pastDue from Stripe.
+  if (type === 'invoice.payment_failed') {
+    return {
+      stripeCustomerId: stripeId(object.customer),
+      stripeSubscriptionId: stripeId(object.subscription),
+      planStatus: 'active',
+    };
+  }
   return null;
 }
 
@@ -118,7 +137,7 @@ export type CheckoutSessionParams = {
   cancel_url: string;
   line_items: Array<{ price: string; quantity: number }>;
   subscription_data: { metadata: { userId: string }; trial_end?: number };
-  metadata: { userId: string };
+  metadata: { userId: string; booksQuantity?: string };
   allow_promotion_codes: true;
 };
 
@@ -129,19 +148,54 @@ export function checkoutSessionParams(input: {
   quantity: number;
   appUrl: string;
   trialEnd?: number;
+  booksPriceId?: string;
+  booksQuantity?: number;
 }): CheckoutSessionParams {
+  const line_items: Array<{ price: string; quantity: number }> = [
+    { price: input.priceId, quantity: input.quantity },
+  ];
+  const booksQty = Math.max(0, Math.floor(input.booksQuantity || 0));
+  if (input.booksPriceId && booksQty > 0) {
+    line_items.push({ price: input.booksPriceId, quantity: booksQty });
+  }
   return {
     mode: 'subscription',
     customer: input.customerId,
     client_reference_id: input.userId,
     success_url: `${input.appUrl}/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${input.appUrl}/billing?checkout=cancel`,
-    line_items: [{ price: input.priceId, quantity: input.quantity }],
+    line_items,
     subscription_data: {
       metadata: { userId: input.userId },
       ...(input.trialEnd ? { trial_end: input.trialEnd } : {}),
     },
-    metadata: { userId: input.userId },
+    metadata: {
+      userId: input.userId,
+      ...(booksQty > 0 ? { booksQuantity: String(booksQty) } : {}),
+    },
     allow_promotion_codes: true,
+  };
+}
+
+/** Monthly estimate: base stores + enrolled Books add-ons. */
+export function estimateMonthlyUsd(
+  storeCount: number,
+  booksStoreCount: number,
+  env: NodeJS.ProcessEnv = process.env
+): {
+  baseUsd: number;
+  booksUsd: number;
+  totalUsd: number;
+  booksPriceConfigured: boolean;
+} {
+  const stores = Math.max(0, Math.floor(storeCount));
+  const books = Math.max(0, Math.floor(booksStoreCount));
+  const baseUsd = stores * USD_PER_STORE_PER_MONTH;
+  const booksUsd = books * ASK_DATA_USD_PER_STORE_PER_MONTH;
+  return {
+    baseUsd,
+    booksUsd,
+    totalUsd: baseUsd + booksUsd,
+    booksPriceConfigured: Boolean(stripeConfig(env).booksPriceId),
   };
 }

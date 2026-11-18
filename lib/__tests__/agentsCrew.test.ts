@@ -63,6 +63,9 @@ describe('agents crew config', () => {
     ]);
     expect(board.catalog.find((c) => c.id === 'books')?.pricing).toBe('addon');
     expect(board.marketingLine).toMatch(/confirm/i);
+    expect(board.supervisor.name).toBe('Riley');
+    expect(board.catalog.find((c) => c.id === 'books')?.name).toBe('Quinn');
+    expect(board.catalog.find((c) => c.id === 'close')?.role).toBe('Close');
   });
 });
 
