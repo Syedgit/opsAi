@@ -23,11 +23,33 @@ export const PayoutSchema = z.object({
 });
 export type Payout = z.infer<typeof PayoutSchema>;
 
+/** Which close page this photo is — set first when staff send several pages in one go. */
+export const CLOSE_PAGE_ROLES = [
+  'fuel_pos',
+  'tender_cash',
+  'handwritten_sheet',
+  'mixed',
+  'unknown',
+] as const;
+export type ClosePageRole = (typeof CLOSE_PAGE_ROLES)[number];
+
 /** One store's end-of-day report. A single message can contain several. */
 export const DailyCloseReportSchema = z.object({
   /** Store name as written (may be misspelled). */
   storeHint: z.string().nullable(),
   reportDate: isoDate.nullable(),
+  /**
+   * Preferred page identity: id of this business’s picture map that matches the photo.
+   * Scale path — every vertical teaches maps; do not rely on c-store-only pageRole.
+   */
+  pageTemplateId: z.string().trim().min(1).max(40).nullable().optional(),
+  /** Human title of the matched map (for replies). */
+  pageTemplateTitle: z.string().trim().min(1).max(80).nullable().optional(),
+  /**
+   * Legacy / fallback page class when no map matched.
+   * Prefer pageTemplateId. fuel_pos / tender_cash / handwritten_sheet are c-store heuristics.
+   */
+  pageRole: z.enum(CLOSE_PAGE_ROLES).nullable().optional(),
   /** Inside (non-fuel) card/credit sales. */
   cardSales: optionalAmount,
   /** Inside (non-fuel) cash sales. */

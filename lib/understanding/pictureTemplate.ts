@@ -1,9 +1,12 @@
 /**
- * Owner-taught document maps: what to take (and ignore) on a store's paperwork.
- * Each store's close / invoice / schedule can look different. Onboarding can save one
- * starter map; Store admin can add more anytime. The photo is not kept — labels drive later reads.
+ * Owner-taught document maps: what to take (and ignore) on a business's paperwork.
+ * Each location’s close / invoice / schedule can look different. Onboarding can save one
+ * starter map; Business admin can add more anytime. The photo is not kept — labels drive later reads.
+ *
+ * Scale model: packs offer default presets; each business’s saved maps are the source of truth.
  */
 import { z } from 'zod';
+import type { VerticalPack } from '../agents/packs';
 
 export const PICTURE_TEMPLATE_KINDS = ['daily_close', 'invoice', 'deposit_receipt', 'order', 'work_schedule'] as const;
 export type PictureTemplateKind = (typeof PICTURE_TEMPLATE_KINDS)[number];
@@ -47,7 +50,7 @@ export type PictureTemplate = z.infer<typeof PictureTemplateSchema>;
 export type PictureField = z.infer<typeof PictureFieldSchema>;
 
 export const PICTURE_KIND_LABEL: Record<PictureTemplateKind, string> = {
-  daily_close: 'Close / store sales',
+  daily_close: 'Close / day sales',
   invoice: 'Invoice',
   work_schedule: 'Shift schedule',
   deposit_receipt: 'Bank deposit',
@@ -111,14 +114,17 @@ export interface PictureTemplatePreset {
   kind: PictureTemplateKind;
   note: string;
   fields: PictureField[];
+  /** Which vertical packs offer this starter. Empty = all packs. */
+  packs?: VerticalPack[];
 }
 
-/** Known layouts the owner can start from, then tweak. */
+/** Known layouts the owner can start from, then tweak. C-store fuel/tender live only on c_store_gas. */
 export const PICTURE_TEMPLATE_PRESETS: PictureTemplatePreset[] = [
   {
     id: 'exxon_store_close',
     title: 'Exxon Store Close (fuel page)',
     kind: 'daily_close',
+    packs: ['c_store_gas'],
     note: 'Fuel is Total Fuel Sales. Non-fuel, if any, is store credit. Ignore the register reading.',
     fields: [
       { label: 'Total Fuel Sales', purpose: 'fuel' },
@@ -131,6 +137,7 @@ export const PICTURE_TEMPLATE_PRESETS: PictureTemplatePreset[] = [
     id: 'exxon_tender',
     title: 'Exxon tender page (cash)',
     kind: 'daily_close',
+    packs: ['c_store_gas'],
     note: 'Cash is Cash Acceptor Cash, not the Cash row. Pump CRIND stays in fuel. Paid-outs come off this cash.',
     fields: [
       { label: 'Cash Acceptor Cash', purpose: 'cash' },
@@ -142,6 +149,7 @@ export const PICTURE_TEMPLATE_PRESETS: PictureTemplatePreset[] = [
     id: 'notebook_store_sales',
     title: 'Handwritten store sales',
     kind: 'daily_close',
+    packs: ['c_store_gas'],
     note: 'Gas site: inside shop (cigs, drinks) plus gas. Read footer totals only. Product lines are today’s inside sales, not an order.',
     fields: [
       { label: 'Store Credit', purpose: 'store_credit' },
@@ -151,6 +159,19 @@ export const PICTURE_TEMPLATE_PRESETS: PictureTemplatePreset[] = [
       { label: 'Total', purpose: 'inside_total' },
       { label: 'Net cash', purpose: 'day_total' },
       { label: 'product lines (Marlboro, Lava, …)', purpose: 'ignore' },
+    ],
+  },
+  {
+    id: 'day_till_close',
+    title: 'Day / till close',
+    kind: 'daily_close',
+    packs: ['appointments', 'desk', 'real_estate', 'personal', 'generic'],
+    note: 'End-of-day cash or till total for non-fuel businesses. Teach labels to match your sheet.',
+    fields: [
+      { label: 'Cash / till', purpose: 'cash' },
+      { label: 'Card / credit', purpose: 'store_credit' },
+      { label: 'Day total', purpose: 'day_total' },
+      { label: 'Deposit', purpose: 'deposit' },
     ],
   },
   {
@@ -179,14 +200,46 @@ export const PICTURE_TEMPLATE_PRESETS: PictureTemplatePreset[] = [
   },
 ];
 
+export function presetsForPack(pack: VerticalPack | null | undefined): PictureTemplatePreset[] {
+  return PICTURE_TEMPLATE_PRESETS.filter((p) => {
+    if (!p.packs || p.packs.length === 0) return true;
+    if (!pack) return p.packs.includes('c_store_gas') || p.packs.includes('generic');
+    return p.packs.includes(pack);
+  });
+}
+
+/** Merge hints from a map’s field purposes — pack-agnostic. */
+export function mergeHintsFromPurposes(purposes: Iterable<PictureFieldPurpose>): {
+  fuelish: boolean;
+  tenderish: boolean;
+  sheetish: boolean;
+} {
+  const set = new Set(purposes);
+  const fuelish = set.has('fuel') || set.has('gallons');
+  const sheetish = set.has('store_credit') || set.has('inside_total');
+  const tenderish = set.has('cash') && !fuelish;
+  return { fuelish, tenderish, sheetish };
+}
+
+export function findPictureTemplate(
+  templates: PictureTemplate[],
+  id: string | null | undefined
+): PictureTemplate | null {
+  if (!id) return null;
+  return templates.find((t) => t.id === id) ?? null;
+}
+
 export function purposesForKind(kind: PictureTemplateKind): PictureFieldPurpose[] {
   return PICTURE_FIELD_PURPOSES.filter((p) => PURPOSE_KINDS[p].includes(kind));
 }
 
-export function pictureMapsBoard(templates: PictureTemplate[]) {
+export function pictureMapsBoard(
+  templates: PictureTemplate[],
+  pack?: VerticalPack | null
+) {
   return {
     pictureTemplates: templates,
-    pictureTemplatePresets: PICTURE_TEMPLATE_PRESETS,
+    pictureTemplatePresets: presetsForPack(pack),
     pictureTemplateKinds: Object.entries(PICTURE_KIND_LABEL).map(([id, label]) => ({ id, label })),
     picturePurposes: PICTURE_FIELD_PURPOSES.map((id) => ({
       id,
@@ -250,9 +303,16 @@ export function describePictureTemplate(template: PictureTemplate): string {
   return parts.join(' · ');
 }
 
-/** Vocabulary injected into the extraction prompt for this store. */
+/** Vocabulary injected into the extraction prompt for this business. */
 export function pictureMapsForPrompt(templates: PictureTemplate[]): string[] {
-  return templates.slice(0, MAX_PICTURE_TEMPLATES).map((t) => {
+  if (templates.length === 0) {
+    return [
+      'No picture maps taught yet for this business. Identify the document kind, fill only fields visible on this page, and leave others null. Multi-page bursts merge later by business and date.',
+    ];
+  }
+  const header =
+    'Match this photo to exactly one picture map below when it fits. Set pageTemplateId to that map’s id and pageTemplateTitle to its title. Only fill fields that map covers; leave other amounts null so other pages in the burst can supply them.';
+  const lines = templates.slice(0, MAX_PICTURE_TEMPLATES).map((t) => {
     const fields = t.fields
       .map((f) => {
         const extra = f.note ? ` (${f.note})` : '';
@@ -261,6 +321,7 @@ export function pictureMapsForPrompt(templates: PictureTemplate[]): string[] {
       })
       .join('; ');
     const note = t.note ? ` Owner note: ${t.note.slice(0, 240)}` : '';
-    return `picture map "${t.title}" (${t.kind}): ${fields}.${note} Follow this map when the photo looks like that page. Copy printed numbers; do not invent.`;
+    return `picture map id="${t.id}" title="${t.title}" (${t.kind}): ${fields}.${note}`;
   });
+  return [header, ...lines];
 }

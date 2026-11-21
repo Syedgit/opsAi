@@ -11,7 +11,13 @@ import { runTaskTick } from '../../lib/tasks/tick';
 import { predictInspection } from '../../lib/tasks/inspection';
 import { customTemplate, parseInspectorReport, presetTemplate, proposeFromReport, type ParsedReport } from '../../lib/tasks/inspectorReport';
 import { extractPdfText, NotAPdfError } from '../../lib/tasks/pdfText';
-import { StoreSetupSchema, readStoredSetup, storeTypeOptions, suggestTasks } from '../../lib/tasks/storeSetup';
+import {
+  StoreSetupSchema,
+  readStoredSetup,
+  storeTypeOptions,
+  suggestTasks,
+  type StoreType,
+} from '../../lib/tasks/storeSetup';
 import { dashboardModules } from '../../lib/businessProfile';
 import {
   applyStoredProfile,
@@ -33,6 +39,7 @@ import { sampleFromInvoicePhoto } from '../../lib/understanding/invoiceSample';
 import { proposePictureMapFromPhoto } from '../../lib/understanding/proposePictureMap';
 import { buildDefaultProfile } from '../../lib/understanding/profile';
 import { StoreVendorsSchema, VENDOR_CATEGORIES, VENDOR_CATEGORY_LABEL } from '../../lib/understanding/vendors';
+import { resolveAgentPack } from '../../lib/agents/crew';
 import {
   addDashboardMember,
   addWhatsAppPerson,
@@ -214,8 +221,9 @@ function vendorCatalog(profileJson: unknown) {
   };
 }
 
-function pictureMaps(profileJson: unknown) {
-  return pictureMapsBoard(parseStoredProfile(profileJson).pictureTemplates);
+function pictureMaps(profileJson: unknown, storeType?: StoreType | null) {
+  const pack = resolveAgentPack(profileJson, storeType ?? null);
+  return pictureMapsBoard(parseStoredProfile(profileJson).pictureTemplates, pack);
 }
 
 function templateView(t: {
@@ -298,7 +306,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
           storeFeatures: Object.entries(STORE_FEATURE_LABEL).map(([id, label]) => ({ id, label })),
           messageSamples: parseStoredProfile(store.profileJson).messageSamples,
         ...vendorCatalog(store.profileJson),
-        ...pictureMaps(store.profileJson),
+        ...pictureMaps(store.profileJson, setup?.storeType ?? null),
         googleSheets,
         aiChat,
         agents,
@@ -380,7 +388,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         modules: dashboardModules(setup?.storeType ?? null, setup?.fuel),
         messageSamples: parseStoredProfile(store.profileJson).messageSamples,
         ...vendorCatalog(store.profileJson),
-        ...pictureMaps(store.profileJson),
+        ...pictureMaps(store.profileJson, setup?.storeType ?? null),
         googleSheets,
         aiChat,
         agents,

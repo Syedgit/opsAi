@@ -1,9 +1,20 @@
-import { applyStoreCredit, matchOpenClose, mergeCloseReports, mergeDailyCloseReports, openCloseFromAction } from '../closeMerge';
+import {
+  applyStoreCredit,
+  closePageLabel,
+  collectClosePageLabels,
+  collectClosePageRoles,
+  inferClosePageRole,
+  matchOpenClose,
+  mergeCloseReports,
+  mergeDailyCloseReports,
+  openCloseFromAction,
+} from '../closeMerge';
 import type { DailyCloseReport } from '../schema';
 
 const fuelPage: DailyCloseReport = {
   storeHint: 'Denville Exxon',
   reportDate: '2026-11-07',
+  pageRole: 'fuel_pos',
   cardSales: null,
   cashSales: null,
   storeSalesTotal: 0,
@@ -19,6 +30,7 @@ const fuelPage: DailyCloseReport = {
 const cashPage: DailyCloseReport = {
   storeHint: 'Denville Exxon',
   reportDate: '2026-11-07',
+  pageRole: 'tender_cash',
   cardSales: null,
   cashSales: 765.14,
   storeSalesTotal: null,
@@ -30,6 +42,50 @@ const cashPage: DailyCloseReport = {
   reportedDayTotal: null,
   periodClosed: null,
 };
+
+const sheetPage: DailyCloseReport = {
+  storeHint: 'Denville Exxon',
+  reportDate: '2026-11-07',
+  pageRole: 'handwritten_sheet',
+  cardSales: 253,
+  cashSales: 105,
+  storeSalesTotal: 358,
+  fuelSales: null,
+  fuelGallons: null,
+  fuelDiscounts: null,
+  payouts: [],
+  reportedDeposit: null,
+  reportedDayTotal: 1834,
+  periodClosed: null,
+};
+
+describe('inferClosePageRole', () => {
+  it('keeps explicit page roles and infers when missing', () => {
+    expect(inferClosePageRole(fuelPage)).toBe('fuel_pos');
+    expect(inferClosePageRole(cashPage)).toBe('tender_cash');
+    expect(inferClosePageRole(sheetPage)).toBe('handwritten_sheet');
+    expect(inferClosePageRole({ ...fuelPage, pageRole: null })).toBe('fuel_pos');
+  });
+
+  it('lists roles across a multi-page burst', () => {
+    expect(collectClosePageRoles(fuelPage, cashPage, sheetPage)).toEqual([
+      'fuel_pos',
+      'tender_cash',
+      'handwritten_sheet',
+    ]);
+  });
+
+  it('prefers business map titles on replies', () => {
+    const mapped: DailyCloseReport = {
+      ...cashPage,
+      pageTemplateId: 'day_till_close',
+      pageTemplateTitle: 'Day / till close',
+    };
+    expect(closePageLabel(mapped)).toBe('Day / till close');
+    expect(closePageLabel(fuelPage)).toBe('fuel / gallons');
+    expect(collectClosePageLabels(fuelPage, mapped)).toEqual(['fuel / gallons', 'Day / till close']);
+  });
+});
 
 describe('applyStoreCredit', () => {
   it('copies Total Non Fuel Sales onto card when card was not its own line', () => {
@@ -49,6 +105,17 @@ describe('mergeDailyCloseReports', () => {
     expect(merged.cashSales).toBe(765.14);
     expect(merged.cardSales).toBe(0);
     expect(merged.storeSalesTotal).toBe(0);
+    expect(merged.pageRole).toBe('mixed');
+  });
+
+  it('merges fuel + tender + handwritten sheet into one close', () => {
+    const afterTender = mergeDailyCloseReports(fuelPage, cashPage);
+    const merged = mergeDailyCloseReports(afterTender, sheetPage);
+    expect(merged.fuelSales).toBe(6086.32);
+    expect(merged.fuelGallons).toBe(1455.226);
+    expect(merged.cashSales).toBe(765.14);
+    expect(merged.cardSales).toBe(253);
+    expect(merged.storeSalesTotal).toBe(358);
   });
 
   it('does not drop existing payouts when the later page has none', () => {

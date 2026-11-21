@@ -25,12 +25,12 @@ export type StoreType = (typeof STORE_TYPES)[number];
 
 export const STORE_TYPE_LABEL: Record<StoreType, string> = {
   seven_eleven: '7-Eleven',
-  convenience: 'Convenience store',
-  gas_station: 'Gas station',
-  office: 'Office',
+  convenience: 'Convenience / c-store (no pumps)',
+  gas_station: 'Gas station (with or without a shop)',
+  office: 'Office / agency',
   shipping: 'Shipping / UPS-style',
   real_estate: 'Real estate',
-  appointments: 'Appointments / salon / clinic',
+  appointments: 'Salon / clinic / studio',
   personal: 'Personal / solo',
   other: 'Other business',
 };
@@ -48,26 +48,36 @@ export const STORE_TYPE_FAMILY: Record<StoreType, 'shop' | 'desk' | 'appointment
   other: 'other',
 };
 
-export const STORE_FAMILY_LABEL: Record<typeof STORE_TYPE_FAMILY[StoreType], string> = {
-  shop: 'Shop and fuel',
-  desk: 'Office and team',
-  appointments: 'Appointments',
+export type StoreTypeFamily = (typeof STORE_TYPE_FAMILY)[StoreType];
+
+export const STORE_FAMILY_LABEL: Record<StoreTypeFamily, string> = {
+  shop: 'Gas, c-store & 7-Eleven',
+  desk: 'Office, shipping & real estate',
+  appointments: 'Appointments & services',
   solo: 'Just you',
   other: 'Something else',
 };
 
-export const STORE_FAMILY_ORDER: Array<typeof STORE_TYPE_FAMILY[StoreType]> = ['shop', 'desk', 'appointments', 'solo', 'other'];
+export const STORE_FAMILY_BLURB: Record<StoreTypeFamily, string> = {
+  shop: 'Fuel sites and convenience shops — closes, invoices, and shift checks.',
+  desk: 'Teams at a desk or counter — who is in, lock-up, light follow-ups.',
+  appointments: 'Booked days — salon, clinic, studio, or similar.',
+  solo: 'One person running the day in WhatsApp.',
+  other: 'Restaurant, gym, contractor, or anything that does not fit above.',
+};
+
+export const STORE_FAMILY_ORDER: StoreTypeFamily[] = ['shop', 'desk', 'appointments', 'solo', 'other'];
 
 export const STORE_TYPE_BLURB: Record<StoreType, string> = {
-  seven_eleven: 'Franchise store. Shift checks plus 7Clean inspection tasks on a schedule.',
-  convenience: 'Shop without pumps. Simple cleaning, coffee, and restock reminders.',
-  gas_station: 'Fuel and a shop. Adds pump and spill-kit reminders when you sell fuel.',
-  office: 'Desk team, agency, insurance. Who is in, meetings, lock-up. Mail later.',
-  shipping: 'UPS / pack-and-ship counter. Who is on, held packages, last drop-off. Tick cooler or shelves if this counter has them.',
-  real_estate: 'Agency or team. Showings, keys, lock-up. Open house later.',
-  appointments: 'Salon, barber, clinic, studio. Today’s book, rooms, till close. Tick cooler or shelves if you restock product.',
-  personal: 'Just you. Daily plan and wrap-up in WhatsApp — works in a 1:1 chat.',
-  other: 'Other business — restaurant, gym, auto, contractor. Not UPS (pick Shipping) and not a salon (pick Appointments). Open and lock-up first; tick cooler, shelves, or a till if you have them.',
+  seven_eleven: 'Franchise. Shift checks plus 7Clean inspection tasks.',
+  convenience: 'Shop without pumps. Cleaning, coffee, restock reminders.',
+  gas_station: 'Pumps (and often a shop). Pump and spill-kit reminders when you sell fuel.',
+  office: 'Desk team. Who is in, meetings, lock-up.',
+  shipping: 'Pack-and-ship counter. Held packages, last drop-off.',
+  real_estate: 'Agency. Showings, keys, lock-up.',
+  appointments: 'Booked clients. Rooms, till close, light restock if you sell product.',
+  personal: 'Solo plan and wrap-up in a 1:1 WhatsApp chat.',
+  other: 'Does not fit above. Start with open/lock-up; tick cooler, shelves, or till if you have them.',
 };
 
 export const MAX_SHIFTS = 4;
@@ -221,7 +231,22 @@ export function storeTypeOptions() {
     blurb: STORE_TYPE_BLURB[id],
     family: STORE_TYPE_FAMILY[id],
     familyLabel: STORE_FAMILY_LABEL[STORE_TYPE_FAMILY[id]],
+    familyBlurb: STORE_FAMILY_BLURB[STORE_TYPE_FAMILY[id]],
     defaults: defaultSetup(id),
+  }));
+}
+
+/** Category cards for onboarding: family → types in that family. */
+export function storeTypeFamilyOptions() {
+  return STORE_FAMILY_ORDER.map((family) => ({
+    id: family,
+    label: STORE_FAMILY_LABEL[family],
+    blurb: STORE_FAMILY_BLURB[family],
+    types: STORE_TYPES.filter((id) => STORE_TYPE_FAMILY[id] === family).map((id) => ({
+      id,
+      label: STORE_TYPE_LABEL[id],
+      blurb: STORE_TYPE_BLURB[id],
+    })),
   }));
 }
 

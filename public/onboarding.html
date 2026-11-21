@@ -105,8 +105,6 @@
             border-radius: 6px; font-weight: 600; font-size: 14px;
         }
         .auth-container.wide { max-width: 720px; }
-        .type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px; }
-        @media (min-width: 640px) { .type-grid { grid-template-columns: 1fr 1fr 1fr; } }
         .tools-grid {
             display: grid;
             grid-template-columns: 1fr;
@@ -143,15 +141,26 @@
         }
         .family-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text-light); margin: 14px 0 8px; }
         .family-label:first-child { margin-top: 0; }
-        .type-btn {
-            padding: 12px; border: 2px solid var(--border); border-radius: 10px; background: white;
-            text-align: left; cursor: pointer; color: var(--text);
-        }
-        .type-btn strong { display: block; font-size: 15px; font-weight: 700; margin-bottom: 4px; }
-        .type-btn span { display: block; font-size: 12px; font-weight: 400; color: var(--text-light); line-height: 1.35; }
-        .type-btn.selected { border-color: var(--primary); background: #e8f8ef; }
-        .type-btn.selected strong { color: #065f46; }
+        .type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px; }
+        @media (min-width: 640px) { .type-grid { grid-template-columns: 1fr 1fr 1fr; } }
         @media (max-width: 560px) { .type-grid { grid-template-columns: 1fr; } }
+        .type-btn, .family-btn {
+            padding: 14px; border: 2px solid var(--border); border-radius: 12px; background: white;
+            text-align: left; cursor: pointer; color: var(--text); width: 100%;
+        }
+        .type-btn strong, .family-btn strong { display: block; font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+        .type-btn span, .family-btn span { display: block; font-size: 12px; font-weight: 400; color: var(--text-light); line-height: 1.35; }
+        .type-btn.selected, .family-btn.selected { border-color: var(--primary); background: #e8f8ef; }
+        .type-btn.selected strong, .family-btn.selected strong { color: #065f46; }
+        .picked-chip {
+            display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;
+            font-size: 13px; color: var(--text); background: #f3f4f6; border-radius: 999px;
+            padding: 6px 12px; margin: 0 0 12px;
+        }
+        .picked-chip button {
+            background: none; border: none; color: var(--primary-dark); font-size: 12px; font-weight: 650;
+            cursor: pointer; text-decoration: underline; padding: 0;
+        }
         .check-row { display: flex; align-items: center; gap: 8px; font-size: 14px; margin-bottom: 12px; color: var(--text); }
         .check-row input { width: auto; }
         .time-row { display: flex; gap: 12px; }
@@ -230,7 +239,7 @@
         <div id="profilePanel" class="step-panel">
             <div class="auth-header">
                 <h1>What kind of business is this?</h1>
-                <p>Pick the closest match. 7-Eleven and gas keep the full shop pack. Everything else starts with a few reminders — add more later from Business admin.</p>
+                <p>First pick a category, then the closest match. Gas and c-store share one shop pack; other categories start lighter — you can add more later in Business admin.</p>
             </div>
             <div class="error-message" id="profileError"></div>
             <div id="profileBody"><div class="loading show">Loading…</div></div>
@@ -466,6 +475,8 @@
         let setupStoreId = null;
         let setupStoreName = '';
         let storeTypes = [];
+        /** Category step before picking a concrete storeType (shop → 7-Eleven / gas / c-store). */
+        let selectedFamily = null;
         let setupState = null; // what the form holds
         let suggestions = [];
         const VENDOR_CATEGORIES = [
@@ -577,25 +588,72 @@
             return (t && t.modules) || {};
         }
 
-        function renderProfile() {
+        function familyMeta() {
             const FAMILY_ORDER = ['shop', 'desk', 'appointments', 'solo', 'other'];
-            const FAMILY_LABEL = { shop: 'Shop and fuel', desk: 'Office and team', appointments: 'Appointments', solo: 'Just you', other: 'Something else' };
+            const FALLBACK_LABEL = {
+                shop: 'Gas, c-store & 7-Eleven',
+                desk: 'Office, shipping & real estate',
+                appointments: 'Appointments & services',
+                solo: 'Just you',
+                other: 'Something else',
+            };
+            const FALLBACK_BLURB = {
+                shop: 'Fuel sites and convenience shops.',
+                desk: 'Desk or counter teams.',
+                appointments: 'Booked days — salon, clinic, studio.',
+                solo: 'One person running the day.',
+                other: 'Anything that does not fit above.',
+            };
             const families = {};
             storeTypes.forEach(function (t) {
                 const fam = t.family || 'other';
                 (families[fam] = families[fam] || []).push(t);
             });
-            let html = '<div class="form-group"><label>Closest match</label>';
-            FAMILY_ORDER.forEach(function (fam) {
-                const items = families[fam];
-                if (!items || !items.length) return;
-                html += '<div class="family-label">' + esc(FAMILY_LABEL[fam] || fam) + '</div><div class="type-grid">' +
-                    items.map(function (t) {
-                        return '<button type="button" class="type-btn' + (setupState && setupState.storeType === t.id ? ' selected' : '') + '" data-type="' + esc(t.id) + '"><strong>' +
-                            esc(t.label) + '</strong><span>' + esc(t.blurb || '') + '</span></button>';
-                    }).join('') + '</div>';
-            });
-            html += '</div>';
+            return FAMILY_ORDER.map(function (fam) {
+                const items = families[fam] || [];
+                if (!items.length) return null;
+                const sample = items[0];
+                return {
+                    id: fam,
+                    label: (sample && sample.familyLabel) || FALLBACK_LABEL[fam] || fam,
+                    blurb: (sample && sample.familyBlurb) || FALLBACK_BLURB[fam] || '',
+                    types: items,
+                };
+            }).filter(Boolean);
+        }
+
+        function renderProfile() {
+            if (setupState && setupState.storeType) {
+                const cur = storeTypes.find(function (x) { return x.id === setupState.storeType; });
+                if (cur && cur.family) selectedFamily = cur.family;
+            }
+            const families = familyMeta();
+            let html = '';
+
+            if (!selectedFamily) {
+                html += '<div class="form-group"><label>Category</label>' +
+                    '<div class="help-text" style="margin-bottom:10px;">Start broad — you will pick the exact match next.</div>' +
+                    '<div class="type-grid">' +
+                    families.map(function (f) {
+                        return '<button type="button" class="family-btn" data-family="' + esc(f.id) + '"><strong>' +
+                            esc(f.label) + '</strong><span>' + esc(f.blurb) + '</span></button>';
+                    }).join('') + '</div></div>';
+                document.getElementById('profileBody').innerHTML = html;
+                return;
+            }
+
+            const fam = families.find(function (f) { return f.id === selectedFamily; }) || families[0];
+            const famLabel = fam ? fam.label : selectedFamily;
+            html += '<div class="picked-chip"><span>Category: <strong>' + esc(famLabel) + '</strong></span>' +
+                '<button type="button" data-change-family="1">Change</button></div>';
+            html += '<div class="form-group"><label>Closest match</label>' +
+                '<div class="type-grid">' +
+                (fam ? fam.types : []).map(function (t) {
+                    return '<button type="button" class="type-btn' + (setupState && setupState.storeType === t.id ? ' selected' : '') +
+                        '" data-type="' + esc(t.id) + '"><strong>' + esc(t.label) + '</strong><span>' +
+                        esc(t.blurb || '') + '</span></button>';
+                }).join('') + '</div></div>';
+
             if (setupState) {
                 const st = setupState;
                 html += '<div class="form-group"><label class="check-row"><input type="checkbox" id="open24" ' + (st.open24h ? 'checked' : '') + '> Open 24 hours</label>' +
@@ -645,10 +703,30 @@
 
         document.getElementById('profileBody').addEventListener('click', async function (e) {
             const t = e.target;
+            const changeFam = t.closest && t.closest('[data-change-family]');
+            if (changeFam) {
+                selectedFamily = null;
+                setupState = null;
+                renderProfile();
+                return;
+            }
+            const famBtn = t.closest && t.closest('[data-family]');
+            if (famBtn && famBtn.dataset.family) {
+                selectedFamily = famBtn.dataset.family;
+                setupState = null;
+                const famTypes = storeTypes.filter(function (x) { return x.family === selectedFamily; });
+                // Single-type categories (appointments, solo, other) select immediately.
+                if (famTypes.length === 1) {
+                    setupState = JSON.parse(JSON.stringify(famTypes[0].defaults));
+                }
+                renderProfile();
+                return;
+            }
             const typeBtn = t.closest && t.closest('[data-type]');
             if (typeBtn && typeBtn.dataset.type) {
                 const chosen = storeTypes.find(function (x) { return x.id === typeBtn.dataset.type; });
                 if (chosen && (!setupState || setupState.storeType !== chosen.id)) {
+                    selectedFamily = chosen.family || selectedFamily;
                     setupState = JSON.parse(JSON.stringify(chosen.defaults));
                     renderProfile();
                 }

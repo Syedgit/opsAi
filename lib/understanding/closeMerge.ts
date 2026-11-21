@@ -1,8 +1,102 @@
 import type { PrismaClient } from '@prisma/client';
-import { DailyCloseReportSchema, type DailyCloseReport } from './schema';
+import {
+  DailyCloseReportSchema,
+  type ClosePageRole,
+  type DailyCloseReport,
+} from './schema';
 import { reportFromClosePayload } from './depositDue';
 import { sameAmount, type Check } from './checks';
 import { localDateString } from '../tasks/time';
+
+export function closePageRoleLabel(role: ClosePageRole): string {
+  switch (role) {
+    case 'fuel_pos':
+      return 'fuel / gallons';
+    case 'tender_cash':
+      return 'cash tender';
+    case 'handwritten_sheet':
+      return 'handwritten sales';
+    case 'mixed':
+      return 'mixed close page';
+    default:
+      return 'close page';
+  }
+}
+
+/** Prefer business map title; fall back to legacy role label. */
+export function closePageLabel(report: DailyCloseReport): string {
+  const title = report.pageTemplateTitle?.trim();
+  if (title) return title;
+  return closePageRoleLabel(inferClosePageRole(report));
+}
+
+/** Prefer model pageRole; otherwise infer from which fields were filled. */
+export function inferClosePageRole(report: DailyCloseReport): ClosePageRole {
+  if (
+    report.pageRole === 'fuel_pos' ||
+    report.pageRole === 'tender_cash' ||
+    report.pageRole === 'handwritten_sheet' ||
+    report.pageRole === 'mixed'
+  ) {
+    return report.pageRole;
+  }
+  // Known c-store preset ids → roles (only when maps used those starters).
+  const presetRole: Record<string, ClosePageRole> = {
+    exxon_store_close: 'fuel_pos',
+    exxon_tender: 'tender_cash',
+    notebook_store_sales: 'handwritten_sheet',
+    day_till_close: 'tender_cash',
+  };
+  if (report.pageTemplateId && presetRole[report.pageTemplateId]) {
+    return presetRole[report.pageTemplateId];
+  }
+  const fuelish =
+    report.fuelGallons != null ||
+    report.fuelDiscounts != null ||
+    (report.fuelSales != null && (report.periodClosed != null || report.reportedDayTotal != null));
+  const sheetish =
+    ((report.cardSales ?? 0) > 0 || (report.storeSalesTotal ?? 0) > 0) &&
+    report.fuelGallons == null &&
+    report.periodClosed == null;
+  const tenderish =
+    report.cashSales != null &&
+    report.fuelSales == null &&
+    report.fuelGallons == null &&
+    report.storeSalesTotal == null &&
+    !sheetish;
+  if (fuelish && (tenderish || sheetish)) return 'mixed';
+  if (fuelish) return 'fuel_pos';
+  if (tenderish) return 'tender_cash';
+  if (sheetish) return 'handwritten_sheet';
+  return 'unknown';
+}
+
+export function collectClosePageRoles(
+  ...reports: Array<DailyCloseReport | null | undefined>
+): ClosePageRole[] {
+  const out: ClosePageRole[] = [];
+  for (const report of reports) {
+    if (!report) continue;
+    const role = inferClosePageRole(report);
+    if (role === 'unknown') continue;
+    if (!out.includes(role)) out.push(role);
+  }
+  return out;
+}
+
+/** Unique page labels for multi-photo replies (map titles when present). */
+export function collectClosePageLabels(
+  ...reports: Array<DailyCloseReport | null | undefined>
+): string[] {
+  const out: string[] = [];
+  for (const report of reports) {
+    if (!report) continue;
+    const label = closePageLabel(report);
+    if (label === 'close page') continue;
+    if (!out.includes(label)) out.push(label);
+  }
+  return out;
+}
 
 export type OpenClose = {
   actionId: string;
@@ -113,11 +207,29 @@ export function mergeCloseReports(
 ): CloseMerge {
   const next = applyStoreCredit(incoming);
   const base = applyStoreCredit(existing);
-  const nextPos = looksLikePosScreen(next);
-  const basePos = looksLikePosScreen(base);
+  const nextRole = inferClosePageRole(next);
+  const baseRole = inferClosePageRole(base);
+  const nextPos = looksLikePosScreen(next) || nextRole === 'fuel_pos';
+  const basePos = looksLikePosScreen(base) || baseRole === 'fuel_pos';
+  const nextSheet = nextRole === 'handwritten_sheet';
+  const baseSheet = baseRole === 'handwritten_sheet';
   const keepIncomingScreen = nextPos && !basePos;
-  const sheet = keepIncomingScreen ? base : basePos && !nextPos ? next : null;
-  const pos = keepIncomingScreen ? next : basePos && !nextPos ? base : nextPos && basePos ? next : null;
+  const sheet = nextSheet
+    ? next
+    : baseSheet
+      ? base
+      : keepIncomingScreen
+        ? base
+        : basePos && !nextPos
+          ? next
+          : null;
+  const pos = keepIncomingScreen
+    ? next
+    : basePos && !nextPos
+      ? base
+      : nextPos && basePos
+        ? next
+        : null;
   const sheetHasInside = sheet != null && hasInsideSales(sheet);
   const posRingsInside = pos != null && (pos.storeSalesTotal ?? 0) > 0;
   const insideFromSheet = !posRingsInside && (sheetHasInside || options.insideFromSheet === true);
@@ -126,11 +238,23 @@ export function mergeCloseReports(
     mismatches.push(writtenCreditCheck(pos.storeSalesTotal as number, sheet.cardSales));
   }
   const inside = insideFromSheet ? sheet ?? base : posRingsInside ? pos : null;
+  // Tender / Cash Acceptor cash wins over handwritten "store cash" on a later sheet.
+  const cashSales =
+    nextRole === 'tender_cash'
+      ? next.cashSales ?? base.cashSales ?? null
+      : nextRole === 'handwritten_sheet' && base.cashSales != null
+        ? base.cashSales
+        : baseRole === 'tender_cash'
+          ? base.cashSales ?? next.cashSales ?? null
+          : pos?.cashSales ?? keep(next.cashSales, base.cashSales);
   const report: DailyCloseReport = {
     storeHint: keep(next.storeHint, base.storeHint),
     reportDate: keep(next.reportDate, base.reportDate),
+    pageRole: 'mixed',
+    pageTemplateId: keep(next.pageTemplateId, base.pageTemplateId),
+    pageTemplateTitle: keep(next.pageTemplateTitle, base.pageTemplateTitle),
     cardSales: inside ? inside.cardSales ?? null : keep(next.cardSales, base.cardSales),
-    cashSales: pos?.cashSales ?? keep(next.cashSales, base.cashSales),
+    cashSales,
     storeSalesTotal: inside ? inside.storeSalesTotal ?? null : keep(next.storeSalesTotal, base.storeSalesTotal),
     fuelSales: mergeScreenAmount(base.fuelSales, next.fuelSales, keepIncomingScreen, SCREEN_FIELDS[0], mismatches),
     fuelGallons: keep(next.fuelGallons, base.fuelGallons),

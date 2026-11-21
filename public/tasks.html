@@ -662,7 +662,17 @@
             '</form></div>';
     }
 
-    const STORE_TYPES = { seven_eleven: '7-Eleven', convenience: 'Convenience store', gas_station: 'Gas station', office: 'Office', shipping: 'Shipping / UPS-style', real_estate: 'Real estate', appointments: 'Appointments / salon / clinic', personal: 'Personal / solo', other: 'Other business' };
+    const STORE_TYPES = {
+        seven_eleven: '7-Eleven',
+        convenience: 'Convenience / c-store (no pumps)',
+        gas_station: 'Gas station (with or without a shop)',
+        office: 'Office / agency',
+        shipping: 'Shipping / UPS-style',
+        real_estate: 'Real estate',
+        appointments: 'Salon / clinic / studio',
+        personal: 'Personal / solo',
+        other: 'Other business',
+    };
 
     // The business's shifts and hours are what place the starter tasks. Until they are set, point the owner at the setup steps.
     const SUGGESTED_VENDORS = [{ name: 'HLA', category: 'cigarettes' }, { name: 'ABC', category: 'drinks' }, { name: 'RPS', category: 'auto' }];

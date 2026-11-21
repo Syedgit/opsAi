@@ -25,9 +25,27 @@ import {
 import type { DepositRule, StoreProfile } from './profile';
 import { formatHours, hoursLines, sheetLines, summarizeSchedule, type ScheduleSummary } from './schedule';
 import { WorkScheduleSchema } from './schema';
-import type { DailyCloseReport, DepositReceipt, EquipmentIssue, FuelPrices, Invoice, Order, OrderItem, Understanding, WorkSchedule } from './schema';
+import type {
+  DailyCloseReport,
+  DepositReceipt,
+  EquipmentIssue,
+  FuelPrices,
+  Invoice,
+  Order,
+  OrderItem,
+  Understanding,
+  WorkSchedule,
+} from './schema';
 import { extraTillForDay, type TillCashItem } from './daySummary';
-import { applyStoreCredit, looksLikePosScreen, matchOpenClose, mergeCloseReports, openCloseFromAction, type OpenClose } from './closeMerge';
+import {
+  applyStoreCredit,
+  collectClosePageLabels,
+  looksLikePosScreen,
+  matchOpenClose,
+  mergeCloseReports,
+  openCloseFromAction,
+  type OpenClose,
+} from './closeMerge';
 import { mergeTexts, proofChecks, splitSources, storeForSheet, textOverPhoto, type CloseSource } from './closeSources';
 import { describeVendorCatalog, matchOrderVendor, matchVendorName, VENDOR_CATEGORY_LABEL, type StoreVendor } from './vendors';
 import {
@@ -178,9 +196,14 @@ export function dailyClosePayload(
     textReport?: DailyCloseReport | null;
     photoReport?: DailyCloseReport | null;
     awaitingText?: boolean;
+    pageRoles?: string[];
   } = {}
 ): Record<string, unknown> {
   const credited = applyStoreCredit(report);
+  const pageRoles =
+    extra.pageRoles && extra.pageRoles.length > 0
+      ? extra.pageRoles
+      : collectClosePageLabels(credited, extra.textReport, extra.photoReport);
   return {
     _kind: 'daily_close',
     report: credited,
@@ -196,6 +219,7 @@ export function dailyClosePayload(
     fuel_sales: credited.fuelSales ?? 0,
     gallons: credited.fuelGallons ?? 0,
     deposit: credited.reportedDeposit ?? null,
+    ...(pageRoles.length ? { page_roles: pageRoles } : {}),
     ...(extra.insideFromSheet ? { inside_from_sheet: true } : {}),
     ...(extra.textReport ? { text_report: extra.textReport } : {}),
     ...(extra.photoReport ? { photo_report: extra.photoReport } : {}),
@@ -369,9 +393,17 @@ function dailyCloseLines(
   storeName: string,
   checks: Check[],
   extraTill: Array<{ label: string; amount: number }> = [],
-  view: CloseView = { fromText: false, posFuelSales: null }
+  view: CloseView = { fromText: false, posFuelSales: null },
+  pageRoles: string[] = []
 ): string[] {
   const lines = [`🧾 ${storeName} · ${dateLabel(report.reportDate)}`];
+  const pageLabels =
+    pageRoles.length > 0
+      ? pageRoles
+      : collectClosePageLabels(report);
+  if (pageLabels.length > 0) {
+    lines.push(`Pages: ${pageLabels.join(' · ')}`);
+  }
 
   if (view.fromText) {
     if (report.cardSales != null) lines.push(`Store credit: ${formatMoney(report.cardSales)}`);
@@ -703,9 +735,24 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
         ];
         const awaitingText = source === 'photo' && !textReport && (ctx.textStores ?? []).includes(store.storeId);
         const suggestedRule = awaitingText ? null : suggestDepositRule(merged, store.profile, checks, ctx.canTeachRules);
+        const pageRoles = collectClosePageLabels(
+          credited,
+          textReport,
+          photoReport,
+          existing?.report,
+          existing?.photoReport,
+          existing?.textReport
+        );
         const lines = awaitingText
           ? awaitingTextLines(merged, store.storeName, store.warning)
-          : dailyCloseLines(merged, store.storeName, checks, extraTill, closeView(textReport, photoReport));
+          : dailyCloseLines(
+              merged,
+              store.storeName,
+              checks,
+              extraTill,
+              closeView(textReport, photoReport),
+              pageRoles
+            );
         return {
           kind: 'daily_close',
           awaitingText,
@@ -718,6 +765,7 @@ export function planUnderstanding(understanding: Understanding, ctx: PlanContext
             textReport,
             photoReport,
             awaitingText,
+            pageRoles,
           }),
           confidence: understanding.confidence,
           lines: [
@@ -944,7 +992,21 @@ export function describeEntryPayload(payload: Record<string, unknown>, storeName
   switch (payload._kind) {
     case 'daily_close': {
       const open = openCloseFromAction({ actionId: '', storeId: '', status: 'PENDING', payloadJson: payload });
-      return dailyCloseLines(payload.report as DailyCloseReport, storeName, checks, [], closeView(open?.textReport, open?.photoReport));
+      const roles = Array.isArray(payload.page_roles)
+        ? (payload.page_roles as string[])
+        : collectClosePageLabels(
+            payload.report as DailyCloseReport,
+            open?.textReport,
+            open?.photoReport
+          );
+      return dailyCloseLines(
+        payload.report as DailyCloseReport,
+        storeName,
+        checks,
+        [],
+        closeView(open?.textReport, open?.photoReport),
+        roles
+      );
     }
     case 'invoice':
       return invoiceLines(payload.invoice as Invoice, storeName, checks, new Date().toISOString().slice(0, 10));
