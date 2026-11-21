@@ -173,7 +173,24 @@ export async function loadToolFacts(
     const filtered = nameHint
       ? mine.filter((row) => (row.invoice.vendorName || '').toLowerCase().includes(nameHint))
       : mine;
-    const list = (filtered.length ? filtered : mine).slice(0, 8).map((row) => {
+    // Never widen a named-vendor miss into all vendors — that misleads.
+    if (nameHint && filtered.length === 0) {
+      return {
+        toolId,
+        agentId: 'books',
+        storeId,
+        storeName,
+        question,
+        facts: {
+          store: storeName,
+          openInvoices: [],
+          vendorFilter: nameHint,
+          matchedVendorFilter: false,
+        },
+        fallback: `No open / due invoices on the books for vendor “${nameHint}” at ${storeName}.`,
+      };
+    }
+    const list = filtered.slice(0, 8).map((row) => {
       const inv = row.invoice;
       return {
         vendor: inv.vendorName || 'Vendor',
@@ -198,9 +215,14 @@ export async function loadToolFacts(
         store: storeName,
         openInvoices: list,
         vendorFilter: nameHint,
-        matchedVendorFilter: Boolean(nameHint && filtered.length > 0),
+        matchedVendorFilter: Boolean(nameHint),
       },
-      fallback: [`Open invoices for ${storeName}:`, ...lines].join('\n'),
+      fallback: [
+        nameHint
+          ? `Open / due invoices for “${nameHint}” at ${storeName}:`
+          : `Open invoices for ${storeName}:`,
+        ...lines,
+      ].join('\n'),
     };
   }
 
@@ -243,6 +265,7 @@ export async function loadToolFacts(
     take: 2000,
   });
 
+  const nameHint = slots.vendor?.trim().toLowerCase() || null;
   let openCount = 0;
   let paidCount = 0;
   let openDollars = 0;
@@ -259,6 +282,9 @@ export async function loadToolFacts(
     const parsed = InvoiceSchema.safeParse(obj);
     if (!parsed.success) continue;
     const inv = parsed.data;
+    const vendor = inv.vendorName || 'Vendor';
+    if (nameHint && !vendor.toLowerCase().includes(nameHint)) continue;
+
     const d = inv.invoiceDate || null;
     if (d) {
       if (d < report.from || d > report.to) continue;
@@ -272,7 +298,6 @@ export async function loadToolFacts(
     const remaining = remainingOf(inv);
     const paid = paidOf(inv);
     totalDollars += total;
-    const vendor = inv.vendorName || 'Vendor';
     vendors[vendor] = (vendors[vendor] || 0) + total;
 
     if (remaining > 0.005) {
@@ -296,25 +321,32 @@ export async function loadToolFacts(
     .slice(0, 5)
     .map(([vendor, amount]) => ({ vendor, amount: Math.round(amount * 100) / 100 }));
 
+  const vendorLabel = nameHint ? ` for “${nameHint}”` : '';
   const focus =
     status === 'paid'
-      ? `${paidCount} paid invoice(s) · ${money(Math.round(paidDollars * 100) / 100)} recorded paid`
+      ? `${paidCount} paid invoice(s)${vendorLabel} · ${money(Math.round(paidDollars * 100) / 100)} recorded paid`
       : status === 'open'
-        ? `${openCount} open invoice(s) · ${money(Math.round(openDollars * 100) / 100)} still owed`
-        : `${counted} invoice(s) · ${money(Math.round(totalDollars * 100) / 100)} billed · ${paidCount} paid · ${openCount} open (${money(Math.round(openDollars * 100) / 100)} owed)`;
+        ? `${openCount} open invoice(s)${vendorLabel} · ${money(Math.round(openDollars * 100) / 100)} still owed`
+        : `${counted} invoice(s)${vendorLabel} · ${money(Math.round(totalDollars * 100) / 100)} billed · ${paidCount} paid · ${openCount} open (${money(Math.round(openDollars * 100) / 100)} owed)`;
 
   const lastPaidLine = lastPaid
-    ? `Last paid vendor: ${lastPaid.vendor} · ${money(lastPaid.amount)} · ${lastPaid.date}`
-    : null;
+    ? `Last paid${vendorLabel}: ${lastPaid.vendor} · ${money(lastPaid.amount)} · ${lastPaid.date}`
+    : nameHint && status === 'paid'
+      ? `No fully paid invoice on the books for “${nameHint}” in ${report.label}.`
+      : null;
 
   const fallback = [
     `${storeName} · ${report.label} invoices (confirmed WhatsApp data)`,
     focus,
     status === 'paid' && lastPaidLine ? lastPaidLine : null,
-    topVendors.length
+    !nameHint && topVendors.length
       ? `Top vendors: ${topVendors.map((v) => `${v.vendor} ${money(v.amount)}`).join(', ')}`
-      : 'No vendor invoices in this window.',
-    `Report also shows buying ${money(report.totals.buying)} across ${report.totals.invoices} invoice line(s) in standing.`,
+      : null,
+    counted === 0
+      ? nameHint
+        ? `No vendor invoices matching “${nameHint}” in this window.`
+        : 'No vendor invoices in this window.'
+      : null,
   ]
     .filter(Boolean)
     .join('\n');
@@ -332,6 +364,7 @@ export async function loadToolFacts(
       to: report.to,
       timezone: timeZone,
       statusFilter: status,
+      vendorFilter: nameHint,
       invoiceCount: counted,
       paidCount,
       openCount,

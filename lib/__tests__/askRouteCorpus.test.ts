@@ -4,7 +4,10 @@
  */
 import {
   demoteNotAiChatForAskChannel,
+  extractVendorHint,
+  isConfidentAskPlan,
   isConfidentBooksRoute,
+  planFromKeywords,
   routeFromKeywords,
   runSupervisor,
   type SupervisorRoute,
@@ -95,5 +98,26 @@ describe('owner ask route corpus', () => {
       'whatsapp'
     );
     expect(kept.toolId).toBe('not_ai_chat');
+  });
+});
+
+describe('compound vendor asks', () => {
+  const q =
+    'when did we pay last invoice to vendor abc and is there any due invoice?';
+
+  it('extracts vendor abc not “last”', () => {
+    expect(extractVendorHint(q)?.toLowerCase()).toBe('abc');
+    expect(extractVendorHint('what do we still owe Pepsi')?.toLowerCase()).toBe('pepsi');
+  });
+
+  it('plans paid summary + open invoices for the same vendor', () => {
+    const plan = planFromKeywords(q);
+    expect(isConfidentAskPlan(plan)).toBe(true);
+    expect(plan.steps).toHaveLength(2);
+    expect(plan.steps[0].toolId).toBe('invoice_period_summary');
+    expect(plan.steps[0].slots.status).toBe('paid');
+    expect(plan.steps[0].slots.vendor?.toLowerCase()).toBe('abc');
+    expect(plan.steps[1].toolId).toBe('open_invoices');
+    expect(plan.steps[1].slots.vendor?.toLowerCase()).toBe('abc');
   });
 });

@@ -1,5 +1,6 @@
 /**
- * Entry Supervisor: route owner questions to one tool on one enrolled agent.
+ * Entry Supervisor: plan owner questions into one or more Books tools.
+ * Zar is the face; tools load confirmed facts; exit AI never invents numbers.
  */
 
 import { z } from 'zod';
@@ -12,6 +13,98 @@ import {
 } from './tools/catalog';
 
 export type ChatTurn = { role: 'user' | 'assistant'; text: string };
+
+/** One loader call in an ask plan (compound questions get multiple steps). */
+export type AskPlanStep = {
+  toolId: CrewToolId;
+  slots: ToolSlots;
+  /** Why this step exists — used in merged replies. */
+  purpose: string;
+};
+
+export type AskPlan = {
+  clarity: 'ok' | 'need_slot' | 'clarify' | 'unsupported' | 'not_ai_chat';
+  ask: string | null;
+  steps: AskPlanStep[];
+};
+
+const VENDOR_STOP = new Set([
+  'last',
+  'time',
+  'the',
+  'a',
+  'an',
+  'any',
+  'due',
+  'open',
+  'paid',
+  'pay',
+  'invoice',
+  'invoices',
+  'bill',
+  'bills',
+  'vendor',
+  'vendors',
+  'still',
+  'owe',
+  'owing',
+  'owed',
+  'pending',
+  'and',
+  'or',
+  'to',
+  'for',
+  'with',
+  'from',
+  'this',
+  'that',
+  'month',
+  'week',
+  'when',
+  'did',
+  'we',
+  'was',
+  'were',
+  'is',
+  'there',
+  'our',
+  'my',
+]);
+
+/** Pull a vendor name hint from free text without grabbing stop-words. */
+export function extractVendorHint(question: string): string | null {
+  const q = question.trim();
+  const patterns = [
+    /\bvendor\s+([a-z0-9][\w&'.-]{0,40})/i,
+    /\b(?:to|for)\s+([a-z0-9][\w&'.-]{0,40})(?:\s|$|\?|,|and)/i,
+    /\b(?:owe|owing|owed|pay|paid)\s+([a-z0-9][\w&'.-]{0,40})/i,
+  ];
+  for (const re of patterns) {
+    const m = q.match(re);
+    const raw = m?.[1]?.trim();
+    if (!raw) continue;
+    const token = raw.replace(/[?.!,]+$/g, '').trim();
+    if (!token || VENDOR_STOP.has(token.toLowerCase())) continue;
+    if (token.length < 2 || token.length > 40) continue;
+    return token;
+  }
+  return null;
+}
+
+export function wantsLastPaidAsk(q: string): boolean {
+  return (
+    /\bwhen\s+did\s+we\s+pay\b/.test(q) ||
+    /\blast\s+(paid\s+)?invoice\b/.test(q) ||
+    /\bpaid\s+last\b/.test(q) ||
+    /\blast\s+paid\b/.test(q) ||
+    /\b(who|which).{0,40}\bpaid\b/.test(q) ||
+    /\blast\s+vendor\b/.test(q)
+  );
+}
+
+export function wantsOpenDueAsk(q: string): boolean {
+  return /\b(open|due|unpaid|pending|still\s+owe|owing|owed)\b/.test(q);
+}
 
 export const SupervisorRouteSchema = z.object({
   agentId: z.enum(['books', 'close', 'finance', 'staff', 'followup']).default('books'),
@@ -54,18 +147,18 @@ function historyBlock(history: ChatTurn[]): string {
 
 export function buildSupervisorSystem(toolDigest: string): string {
   return [
-    'You are the opsAi Supervisor for a convenience / gas store owner chat.',
-    'Pick ONE tool from the catalog. Return JSON only matching:',
+    'You are the opsAi Supervisor for a small-business owner chat (any vertical).',
+    'Pick ONE primary tool from the catalog. Return JSON only matching:',
     '{"agentId":"books","toolId":"standing_report"|"open_invoices"|"invoice_period_summary"|"missing_closes"|"help_capabilities"|"clarify"|"unsupported"|"not_ai_chat","slots":{"period":"week"|"month"|null,"vendor":string|null,"status":"all"|"open"|"paid"|null},"clarity":"ok"|"need_slot"|"clarify"|"unsupported"|"not_ai_chat","ask":string|null}',
     'Use prior turns: short follow-ups like "total", "paid", "open ones" continue the last topic.',
     'standing_report = DMR / standing / sales vs buying.',
-    'open_invoices = still owed / unpaid remaining.',
-    'invoice_period_summary = how many invoices, paid vs open counts/dollars this period.',
+    'open_invoices = still owed / unpaid remaining / due invoices. Put vendor in slots.vendor when named.',
+    'invoice_period_summary = paid/open counts, last paid invoice. status paid for “when did we pay / last paid”. Put vendor in slots.vendor when named.',
     'missing_closes = days without a close.',
     'help_capabilities = what can you do.',
     'unsupported = forecast, payroll, profit, wages, utility due dates.',
     'not_ai_chat = ONLY posting a close, invoice photo, or OK/FIX with amounts — never a who/what/how question.',
-    'Questions like “who was the vendor paid last”, “last paid vendor”, “paid invoices this month” → invoice_period_summary with status paid.',
+    'If the message asks BOTH last-paid AND open/due, prefer invoice_period_summary with status paid and vendor set; code may also load open invoices.',
     'clarify / need_slot = set ask to one short question; do not invent numbers.',
     'Default period to month when unspecified. Default status to all for invoice_period_summary unless they say paid or open.',
     'Catalog:',
@@ -132,8 +225,8 @@ export function toolDigestForPrompt(
     .join('\n');
 }
 
-/** Keyword / history fallback when entry AI is off. */
-export function routeFromKeywords(question: string, history: ChatTurn[] = []): SupervisorRoute {
+/** Build a 1–N step plan from keywords (compound asks get multiple tools). */
+export function planFromKeywords(question: string, history: ChatTurn[] = []): AskPlan {
   const q = question.toLowerCase().trim();
   const prior = history
     .slice(-6)
@@ -141,56 +234,92 @@ export function routeFromKeywords(question: string, history: ChatTurn[] = []): S
     .join(' ');
 
   const period: 'week' | 'month' = /\bweek\b/.test(q) || /\bweek\b/.test(prior) ? 'week' : 'month';
+  const vendor = extractVendorHint(question);
 
   if (/forecast|utility|utilities|payroll|wage|profit|next\s+\d+\s+days/.test(q)) {
-    return { agentId: 'books', toolId: 'unsupported', clarity: 'unsupported', slots: {}, ask: null };
+    return {
+      clarity: 'unsupported',
+      ask: null,
+      steps: [{ toolId: 'unsupported', slots: {}, purpose: 'unsupported' }],
+    };
   }
   if (/\b(help|what can you)\b/.test(q)) {
-    return { agentId: 'books', toolId: 'help_capabilities', clarity: 'ok', slots: {}, ask: null };
+    return {
+      clarity: 'ok',
+      ask: null,
+      steps: [{ toolId: 'help_capabilities', slots: {}, purpose: 'help' }],
+    };
   }
 
   const aboutInvoices =
     /invoice|bill|vendor|owe|owing|owed|pending/.test(q) ||
-    /\b(who|which).{0,40}\bpaid\b|\blast\s+paid\b|\bpaid\s+last\b/.test(q) ||
+    wantsLastPaidAsk(q) ||
     (/invoice|bill|vendor|owe|pending/.test(prior) &&
       /^(total|paid|open|all|yes|those|them|how many)\b/.test(q));
 
   if (aboutInvoices) {
+    const lastPaid = wantsLastPaidAsk(q) || (/\bpaid\b/.test(q) && !wantsOpenDueAsk(q));
+    const openDue = wantsOpenDueAsk(q);
     const wantsCount =
       /how many|count|total|summary|so far|paid invoice|invoices we|invoices this|invoices made/.test(q) ||
       (/invoice|bill/.test(prior) && /^(total|paid|open|all|how many)\b/.test(q));
-    const wantsLastPaid = /\b(who|which).{0,40}\bpaid\b|\blast\s+paid\b|\bpaid\s+last\b|\blast\s+vendor\b/.test(q);
-    const status = /\bpaid\b/.test(q) || wantsLastPaid
-      ? 'paid'
-      : /\bopen\b|\bstill owe|\bpending\b|\bunpaid\b/.test(q)
-        ? 'open'
-        : 'all';
-    if (wantsCount || status === 'paid' || wantsLastPaid) {
+
+    // Compound: last paid + anything still due → two tools, same vendor.
+    if ((wantsLastPaidAsk(q) || (/\bpaid\b/.test(q) && openDue)) && openDue) {
       return {
-        agentId: 'books',
-        toolId: 'invoice_period_summary',
         clarity: 'ok',
-        slots: { period, vendor: null, status },
         ask: null,
+        steps: [
+          {
+            toolId: 'invoice_period_summary',
+            slots: { period, vendor, status: 'paid' },
+            purpose: vendor ? `last_paid:${vendor}` : 'last_paid',
+          },
+          {
+            toolId: 'open_invoices',
+            slots: { period: null, vendor, status: null },
+            purpose: vendor ? `open_due:${vendor}` : 'open_due',
+          },
+        ],
       };
     }
-    const vendorMatch = q.match(/(?:vendor|pay|owe|bill)\s+([a-z0-9][\w\s&'-]{0,40}?)(?:\s|$|\?)/i);
+
+    if (wantsCount || lastPaid) {
+      return {
+        clarity: 'ok',
+        ask: null,
+        steps: [
+          {
+            toolId: 'invoice_period_summary',
+            slots: {
+              period,
+              vendor,
+              status: /\bpaid\b/.test(q) || wantsLastPaidAsk(q) ? 'paid' : openDue ? 'open' : 'all',
+            },
+            purpose: wantsLastPaidAsk(q) ? 'last_paid' : 'invoice_summary',
+          },
+        ],
+      };
+    }
+
     return {
-      agentId: 'books',
-      toolId: 'open_invoices',
       clarity: 'ok',
-      slots: { period: null, vendor: vendorMatch?.[1]?.trim() || null, status: null },
       ask: null,
+      steps: [
+        {
+          toolId: 'open_invoices',
+          slots: { period: null, vendor, status: null },
+          purpose: vendor ? `open_due:${vendor}` : 'open_due',
+        },
+      ],
     };
   }
 
   if (/missing\s+(a\s+)?close|no close|forgot.*close|days?\s+missing/.test(q)) {
     return {
-      agentId: 'books',
-      toolId: 'missing_closes',
       clarity: 'ok',
-      slots: { period, vendor: null, status: null },
       ask: null,
+      steps: [{ toolId: 'missing_closes', slots: { period, vendor: null, status: null }, purpose: 'missing_closes' }],
     };
   }
 
@@ -199,32 +328,46 @@ export function routeFromKeywords(question: string, history: ChatTurn[] = []): S
     /\b(buying|expenses?|till)\b/.test(q)
   ) {
     return {
-      agentId: 'books',
-      toolId: 'standing_report',
       clarity: 'ok',
-      slots: { period, vendor: null, status: null },
       ask: null,
+      steps: [{ toolId: 'standing_report', slots: { period, vendor: null, status: null }, purpose: 'standing' }],
     };
   }
 
-  // Short follow-up after standing
   if (/standing|dmr|sales/.test(prior) && /^(total|more|and|this month|this week)\b/.test(q)) {
     return {
-      agentId: 'books',
-      toolId: 'standing_report',
       clarity: 'ok',
-      slots: { period, vendor: null, status: null },
       ask: null,
+      steps: [{ toolId: 'standing_report', slots: { period, vendor: null, status: null }, purpose: 'standing' }],
     };
   }
 
   return {
-    agentId: 'books',
-    toolId: 'clarify',
     clarity: 'clarify',
-    slots: {},
     ask: 'Do you want standing/DMR, open invoices still owed, or invoice counts (paid vs open) for this month?',
+    steps: [{ toolId: 'clarify', slots: {}, purpose: 'clarify' }],
   };
+}
+
+/** Single-tool view of the plan (tests + LLM fallback path). */
+export function routeFromKeywords(question: string, history: ChatTurn[] = []): SupervisorRoute {
+  const plan = planFromKeywords(question, history);
+  const step = plan.steps[0] || { toolId: 'clarify' as const, slots: {}, purpose: 'clarify' };
+  return {
+    agentId: 'books',
+    toolId: step.toolId,
+    clarity: plan.clarity,
+    slots: step.slots,
+    ask: plan.ask,
+  };
+}
+
+export function isConfidentAskPlan(plan: AskPlan): boolean {
+  return (
+    plan.clarity === 'ok' &&
+    plan.steps.length > 0 &&
+    plan.steps.every((s) => CONFIDENT_BOOKS_TOOLS.has(s.toolId))
+  );
 }
 
 export function parseSupervisorRoute(raw: string | null | undefined): SupervisorRoute | null {
@@ -336,6 +479,97 @@ async function defaultSupervisorRoute(
   } catch {
     return null;
   }
+}
+
+function normalizePlan(
+  plan: AskPlan,
+  booksEnrolled: boolean,
+  agentFilter?: StoreAgentId | 'supervisor' | null,
+  pack?: import('./packs').VerticalPack | null
+): AskPlan {
+  const steps = plan.steps
+    .map((step) => {
+      const route = normalizeRoute(
+        {
+          agentId: 'books',
+          toolId: step.toolId,
+          clarity: plan.clarity,
+          slots: step.slots,
+          ask: plan.ask,
+        },
+        booksEnrolled,
+        agentFilter,
+        pack
+      );
+      return {
+        toolId: route.toolId,
+        slots: route.slots || {},
+        purpose: step.purpose,
+      };
+    })
+    .filter((s, i, arr) => arr.findIndex((x) => x.toolId === s.toolId && JSON.stringify(x.slots) === JSON.stringify(s.slots)) === i);
+
+  const clarity =
+    steps[0]?.toolId === 'clarify'
+      ? 'clarify'
+      : steps[0]?.toolId === 'unsupported'
+        ? 'unsupported'
+        : steps[0]?.toolId === 'not_ai_chat'
+          ? 'not_ai_chat'
+          : 'ok';
+
+  return {
+    clarity,
+    ask: plan.ask,
+    steps: steps.length
+      ? steps
+      : [{ toolId: 'clarify', slots: {}, purpose: 'clarify' }],
+  };
+}
+
+/** Multi-step ask plan — preferred entry for web/WhatsApp Books answers. */
+export async function runAskPlan(
+  question: string,
+  options: {
+    history?: ChatTurn[];
+    booksEnrolled: boolean;
+    agentFilter?: StoreAgentId | 'supervisor' | null;
+    pack?: import('./packs').VerticalPack | null;
+    env?: NodeJS.ProcessEnv;
+    route?: SupervisorRouter;
+    channel?: 'web' | 'whatsapp';
+  }
+): Promise<AskPlan> {
+  const history = options.history ?? [];
+  const keywordPlan = planFromKeywords(question, history);
+
+  // Deterministic multi- or single-step plans skip the LLM.
+  if (isConfidentAskPlan(keywordPlan) && !options.route) {
+    return normalizePlan(keywordPlan, options.booksEnrolled, options.agentFilter, options.pack);
+  }
+
+  const route = await runSupervisor(question, options);
+  // If keywords already planned multiple tools, keep them even when LLM ran.
+  if (keywordPlan.steps.length > 1 && isConfidentAskPlan(keywordPlan)) {
+    return normalizePlan(keywordPlan, options.booksEnrolled, options.agentFilter, options.pack);
+  }
+
+  return normalizePlan(
+    {
+      clarity: route.clarity,
+      ask: route.ask ?? null,
+      steps: [
+        {
+          toolId: route.toolId,
+          slots: route.slots || {},
+          purpose: route.toolId,
+        },
+      ],
+    },
+    options.booksEnrolled,
+    options.agentFilter,
+    options.pack
+  );
 }
 
 export async function runSupervisor(

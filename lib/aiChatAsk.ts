@@ -6,8 +6,8 @@ import { loadOpenInvoices } from './tasks/invoiceReminder';
 import { paymentDueOn, remainingOf } from './understanding/invoiceBalance';
 import type { AgentId, StoreAgentId } from './agents/crew';
 import { AGENT_DISPLAY, resolveAgentPack } from './agents/crew';
-import { runSupervisor, type ChatTurn, type SupervisorRouter } from './agents/supervisor';
-import { loadToolFacts } from './agents/tools/loaders';
+import { runAskPlan, type ChatTurn, type SupervisorRouter } from './agents/supervisor';
+import { loadToolFacts, type ToolFactsResult } from './agents/tools/loaders';
 import { readStoredSetup } from './tasks/storeSetup';
 import { logApp, logAppError, serializeError } from './requestLog';
 
@@ -89,11 +89,13 @@ const INTENT_SYSTEM = [
 ].join(' ');
 
 const SUMMARY_SYSTEM = [
-  'You are the Books agent summarizing confirmed convenience-store bookkeeping for an owner or manager.',
+  'You are the Books agent summarizing confirmed bookkeeping for a small-business owner or manager.',
   'Use ONLY the JSON facts provided. Do not invent, estimate, or fetch more data.',
   'Never mention wages, payroll, hourly rates, or claim net profit.',
   'Write a clear, professional WhatsApp-ready reply in plain text (no markdown fences).',
-  'Keep every dollar amount exactly as given. 2–6 short sentences or tight bullets.',
+  'Keep every dollar amount exactly as given. 2–8 short sentences or tight bullets.',
+  'If facts.parts has multiple sections, answer each part the owner asked — do not drop a part.',
+  'If a part has no matching data, say so plainly for that part. Never borrow another vendor’s numbers.',
   'If facts are empty or an error is present, say you do not have that data yet.',
 ].join(' ');
 
@@ -472,7 +474,7 @@ export async function answerAiChatQuestion(
   const booksEnrolled = options.booksEnrolled !== false;
   const history = options.history ?? [];
   const channel = options.channel ?? 'web';
-  const route = await runSupervisor(question, {
+  const plan = await runAskPlan(question, {
     history,
     booksEnrolled,
     agentFilter: options.agentFilter ?? 'supervisor',
@@ -482,56 +484,101 @@ export async function answerAiChatQuestion(
     channel,
   });
 
-  const loaded = await loadToolFacts(
-    prisma,
-    storeId,
-    storeName,
-    question,
-    route.toolId,
-    route.slots || {},
-    route.ask
-  );
-  if ('kind' in loaded) {
-    if (loaded.kind === 'skip') {
-      // WhatsApp may leave real ops captures alone; web/crew always answers.
-      if (channel === 'web') {
-        return {
-          answer:
-            'What do you want to know — standing/DMR, open invoices, who was paid last, or invoice counts?',
-          agentId: 'books',
-          agent: AGENT_DISPLAY.books,
-          toolId: 'clarify',
-        };
-      }
+  const primaryTool = plan.steps[0]?.toolId || 'clarify';
+  if (primaryTool === 'not_ai_chat') {
+    if (channel === 'web') {
       return {
-        answer: '',
-        skipped: true,
-        agentId: 'supervisor',
-        agent: AGENT_DISPLAY.supervisor,
-        toolId: route.toolId,
+        answer:
+          'What do you want to know — standing/DMR, open invoices, who was paid last, or invoice counts?',
+        agentId: 'books',
+        agent: AGENT_DISPLAY.books,
+        toolId: 'clarify',
       };
     }
     return {
-      answer: loaded.message,
-      agentId: 'books',
-      agent: AGENT_DISPLAY.books,
-      toolId: 'clarify',
+      answer: '',
+      skipped: true,
+      agentId: 'supervisor',
+      agent: AGENT_DISPLAY.supervisor,
+      toolId: 'not_ai_chat',
     };
   }
 
-  const answer = await summarizeAiChatFacts(
-    {
-      topic:
-        route.toolId === 'standing_report' || route.toolId === 'missing_closes'
-          ? 'standing'
-          : route.toolId === 'open_invoices' || route.toolId === 'invoice_period_summary'
-            ? 'open_invoices'
-            : 'unsupported',
+  const parts: Array<{ purpose: string; toolId: string; facts: Record<string, unknown>; fallback: string }> = [];
+  const fallbackChunks: string[] = [];
+
+  for (const step of plan.steps) {
+    const loaded = await loadToolFacts(
+      prisma,
       storeId,
       storeName,
       question,
-      facts: { ...loaded.facts, toolId: route.toolId, agentId: route.agentId },
-      fallback: loaded.fallback,
+      step.toolId,
+      step.slots || {},
+      plan.ask
+    );
+    if ('kind' in loaded) {
+      if (loaded.kind === 'skip') continue;
+      return {
+        answer: loaded.message,
+        agentId: 'books',
+        agent: AGENT_DISPLAY.books,
+        toolId: 'clarify',
+      };
+    }
+    const factsLoaded = loaded as ToolFactsResult;
+    parts.push({
+      purpose: step.purpose,
+      toolId: step.toolId,
+      facts: factsLoaded.facts,
+      fallback: factsLoaded.fallback,
+    });
+    fallbackChunks.push(factsLoaded.fallback);
+  }
+
+  if (parts.length === 0) {
+    if (channel === 'web') {
+      return {
+        answer:
+          'What do you want to know — standing/DMR, open invoices, who was paid last, or invoice counts?',
+        agentId: 'books',
+        agent: AGENT_DISPLAY.books,
+        toolId: 'clarify',
+      };
+    }
+    return {
+      answer: '',
+      skipped: true,
+      agentId: 'supervisor',
+      agent: AGENT_DISPLAY.supervisor,
+      toolId: primaryTool,
+    };
+  }
+
+  const toolId =
+    parts.length === 1 ? parts[0].toolId : parts.map((p) => p.toolId).join('+');
+  const topic =
+    primaryTool === 'standing_report' || primaryTool === 'missing_closes'
+      ? 'standing'
+      : primaryTool === 'open_invoices' ||
+          primaryTool === 'invoice_period_summary' ||
+          toolId.includes('invoice')
+        ? 'open_invoices'
+        : 'unsupported';
+
+  const answer = await summarizeAiChatFacts(
+    {
+      topic,
+      storeId,
+      storeName,
+      question,
+      facts: {
+        agentId: 'books',
+        toolId,
+        plan: parts.map((p) => p.purpose),
+        parts: parts.map((p) => ({ purpose: p.purpose, toolId: p.toolId, ...p.facts })),
+      },
+      fallback: fallbackChunks.join('\n\n'),
     },
     options.env ?? process.env,
     options.summarize
@@ -539,9 +586,9 @@ export async function answerAiChatQuestion(
 
   return {
     answer,
-    agentId: route.agentId === 'books' ? 'books' : 'supervisor',
-    agent: AGENT_DISPLAY[route.agentId] || AGENT_DISPLAY.books,
-    toolId: route.toolId,
+    agentId: 'books',
+    agent: AGENT_DISPLAY.books,
+    toolId,
   };
 }
 
