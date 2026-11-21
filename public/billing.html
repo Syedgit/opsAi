@@ -68,7 +68,7 @@
     </header>
     <main>
         <h1>Plan and usage</h1>
-        <p class="muted">14-day trial, then $25 per store per month. Books add-on is $20 per enrolled store. Time saved is desk work you skipped vs typing the same close or invoice into a sheet.</p>
+        <p class="muted">14-day trial, then $25 per business per month. Books add-on is $20 per enrolled business. Time saved is desk work you skipped vs typing the same close or invoice into a sheet.</p>
         <div id="banner"></div>
         <div class="card" id="planCard">Loading…</div>
         <div id="payActions"></div>
@@ -143,11 +143,11 @@
                 const storesCount = b.storeCount || 0;
                 const booksCount = b.booksStoreCount || 0;
                 const booksLine = booksCount > 0
-                    ? '<p>Books add-on · ' + esc(booksCount) + ' store' + (booksCount === 1 ? '' : 's') +
-                      ' · ' + money(b.booksUsdPerStore || 20) + '/store · ' + money(b.booksUsd || 0) + '/month</p>'
-                    : '<p class="muted">Books add-on · $20/store — enroll from Store admin → Crew when you want grounded Q&amp;A.</p>';
+                    ? '<p>Books add-on · ' + esc(booksCount) + ' business' + (booksCount === 1 ? '' : 'es') +
+                      ' · ' + money(b.booksUsdPerStore || 20) + '/business · ' + money(b.booksUsd || 0) + '/month</p>'
+                    : '<p class="muted">Books add-on · $20/business — enroll from Business admin → Crew when you want grounded Q&amp;A.</p>';
                 document.getElementById('planCard').innerHTML =
-                    '<h2>' + money(b.monthlyUsdPerStore || 25) + ' per store</h2>' +
+                    '<h2>' + money(b.monthlyUsdPerStore || 25) + ' per business</h2>' +
                     '<p>' + (b.status === 'trial' ? 'Trial' : esc(b.status)) +
                     ' · ' + esc(storesCount) + ' location' + (storesCount === 1 ? '' : 's') +
                     ' · base ' + money(b.baseUsd != null ? b.baseUsd : (storesCount * 25)) + '/month</p>' +
@@ -203,10 +203,10 @@
                 }
                 const stores = data.stores || [];
                 if (stores.length === 0) {
-                    document.getElementById('stores').innerHTML = '<p class="muted" style="margin-top:16px;">No store yet. <a href="/onboarding">Set up a store</a>.</p>';
+                    document.getElementById('stores').innerHTML = '<p class="muted" style="margin-top:16px;">No business yet. <a href="/onboarding">Set up a business</a>.</p>';
                 } else {
                     document.getElementById('stores').innerHTML =
-                        '<table style="margin-top:16px;"><thead><tr><th>Store</th><th>Entries</th><th>Time skipped</th></tr></thead><tbody>' +
+                        '<table style="margin-top:16px;"><thead><tr><th>Business</th><th>Entries</th><th>Time skipped</th></tr></thead><tbody>' +
                         stores.map(function (s) {
                             return '<tr><td>' + esc(s.storeName) + ' (' + esc(s.storeId) + ')</td>' +
                                 '<td>' + esc(s.entries) + '</td>' +

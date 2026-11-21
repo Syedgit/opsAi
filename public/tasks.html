@@ -167,7 +167,7 @@
     <a href="/dashboard" class="brand-logo" aria-label="Operation Intelligence"><img src="/logo.jpg" alt="Operation Intelligence"></a>
     <a href="/dashboard">&larr; Dashboard</a>
     <h1>Tasks &amp; alerts</h1>
-    <select id="storeSelect" aria-label="Store"></select>
+    <select id="storeSelect" aria-label="Business"></select>
     <button type="button" class="small" id="logoutBtn">Log out</button>
 </header>
 <main>
@@ -175,7 +175,7 @@
     <div class="tabs">
         <div class="tab active" data-view="today">Due</div>
         <div class="tab" data-view="inspection">Inspection</div>
-        <div class="tab" data-view="setup">Store admin</div>
+        <div class="tab" data-view="setup">Business admin</div>
     </div>
     <div id="content"><div class="empty">Loading…</div></div>
 </main>
@@ -207,7 +207,7 @@
     let importing = null; // { pdf: base64, preview } while an inspector's report is being reviewed
     let editing = null; // template being edited, or {} for a new one
     const startPanel = pageParams.get('panel');
-    let adminPanel = startPanel && String(startPanel).indexOf('admin-') === 0 ? startPanel : null; // one Store admin section at a time
+    let adminPanel = startPanel && String(startPanel).indexOf('admin-') === 0 ? startPanel : null; // one Business admin section at a time
     const features = {}; // store-type switches for the starter list, e.g. { fuel: true }
 
     if (window.opsai) {
@@ -303,7 +303,7 @@
         const t = board.scoreToday;
         let html = '<div class="scores">' +
             scoreCard('Due score', t.total) +
-            '<div class="score"><div class="label">Store day</div><div class="big" style="font-size:18px;font-weight:650;">' +
+            '<div class="score"><div class="label">Business day</div><div class="big" style="font-size:18px;font-weight:650;">' +
             esc(board.today || '') + '</div><div class="muted" style="margin-top:6px;">' + esc(board.timeZone) + '</div></div></div>';
 
         if (!board.setup && board.templates.length === 0) html = setupCard() + html;
@@ -361,7 +361,7 @@
             '<p class="muted" style="margin:6px 0 0;">' +
             (alertsOn
                 ? 'Staff get due/remind messages. Admins get a brief daily summary (daily tasks) and weekly summary (weekly tasks) after 8pm store time. Tap <strong>Send alerts</strong> locally after a due time.'
-                : 'WhatsApp alerts are <strong>off</strong> for this store. Due times still track here; nothing is sent until you turn them on.') +
+                : 'WhatsApp alerts are <strong>off</strong> for this business. Due times still track here; nothing is sent until you turn them on.') +
             '</p></div>' +
             (board.canEdit
                 ? '<div class="row" style="gap:10px;align-items:center;">' +
@@ -380,7 +380,7 @@
             });
         });
         if (upcoming.length && !open.length) {
-            html += '<div class="card"><h2>Scheduled today</h2><p class="muted" style="margin-bottom:10px;">These are on the store. They appear above after Send alerts (or the cron) runs past their due time.</p><ul style="margin:0;padding-left:18px;font-size:14px;line-height:1.6;">';
+            html += '<div class="card"><h2>Scheduled today</h2><p class="muted" style="margin-bottom:10px;">These are on the business. They appear above after Send alerts (or the cron) runs past their due time.</p><ul style="margin:0;padding-left:18px;font-size:14px;line-height:1.6;">';
             upcoming.slice(0, 12).forEach(function (t) {
                 html += '<li><strong>' + esc(t.title) + '</strong> · ' + esc(t.scheduleText || '') + '</li>';
             });
@@ -664,7 +664,7 @@
 
     const STORE_TYPES = { seven_eleven: '7-Eleven', convenience: 'Convenience store', gas_station: 'Gas station', office: 'Office', shipping: 'Shipping / UPS-style', real_estate: 'Real estate', appointments: 'Appointments / salon / clinic', personal: 'Personal / solo', other: 'Other business' };
 
-    // The store's shifts and hours are what place the starter tasks. Until they are set, point the owner at the setup steps.
+    // The business's shifts and hours are what place the starter tasks. Until they are set, point the owner at the setup steps.
     const SUGGESTED_VENDORS = [{ name: 'HLA', category: 'cigarettes' }, { name: 'ABC', category: 'drinks' }, { name: 'RPS', category: 'auto' }];
     const DEFAULT_VENDOR_CATEGORIES = [
         { id: 'cigarettes', label: 'Cigarettes / tobacco' }, { id: 'drinks', label: 'Drinks' }, { id: 'snacks', label: 'Snacks' },
@@ -701,7 +701,7 @@
         if (board.modules && board.modules.samples === false) return '';
         const s = board.messageSamples || {};
         if (!board.canEdit && !s.dailyClose && !s.invoice) return '';
-        const storeLabel = esc(board.storeName || 'this store');
+        const storeLabel = esc(board.storeName || 'this business');
         const gasClose = board.modules && (board.modules.fuel || board.modules.fuelOption);
         const closeHelp = gasClose
             ? 'Attach a real close photo for ' + storeLabel + '. We list the lines; you say what fuel, store credit, and cash are. A second page (tender / cash) is another map. The file is not kept.'
@@ -713,7 +713,7 @@
                     (board.canEdit ? '<button type="button" class="small danger" data-delete-pic="' + esc(t.id) + '">Remove</button>' : '') +
                     '</div><div class="muted">' + esc(kindLabel(t.kind) + ' · ' + picSummary(t)) + '</div></div>';
             }).join('')
-            : '<p class="muted">No document map yet. Add one so WhatsApp photos use this store’s lines.</p>';
+            : '<p class="muted">No document map yet. Add one so WhatsApp photos use this business’s lines.</p>';
         const editor = board.canEdit ? pictureMapEditor() : '';
         return '<div class="card"><h2>Report samples</h2>' +
             '<p class="muted card-help">Teach how ' + storeLabel + ' reports look (map kept, not the photo file).</p>' +
@@ -727,7 +727,7 @@
                   '<div style="margin-top: 10px;"><button type="submit" class="primary">Save samples</button></div></form>'
                 : '<div class="muted">' + (s.dailyClose ? '<p>' + esc(s.dailyClose) + '</p>' : '') + (s.invoice ? '<p>' + esc(s.invoice) + '</p>' : '') + '</div>') +
             '<h3 style="font-size:15px;margin:18px 0 8px;">Document maps</h3>' +
-            '<p class="muted" style="margin-bottom:8px;">Each store’s paperwork looks different — a close, invoice, or schedule. Attach a photo and we list the lines — you confirm fuel vs store credit vs cash. Presets are only shortcuts. The photo is not stored; we keep the map, not the file.</p>' +
+            '<p class="muted" style="margin-bottom:8px;">Each business’s paperwork looks different — a close, invoice, or schedule. Attach a photo and we list the lines — you confirm fuel vs store credit vs cash. Presets are only shortcuts. The photo is not stored; we keep the map, not the file.</p>' +
             mapList + editor +
             '</div>';
     }
@@ -825,7 +825,7 @@
     function pictureMapEditor() {
         const presets = board.pictureTemplatePresets || [];
         const kinds = board.pictureTemplateKinds || [
-            { id: 'daily_close', label: 'Close / store sales' },
+            { id: 'daily_close', label: 'Close / sales' },
             { id: 'invoice', label: 'Invoice' },
             { id: 'work_schedule', label: 'Shift schedule' },
         ];
@@ -845,7 +845,7 @@
             '<label style="margin-top:10px;">What this page is</label>' +
             '<select id="picMapKind">' + kindOpts + '</select>' +
             '<label style="margin-top:10px;">Name of this page</label>' +
-            '<input type="text" id="picMapTitle" maxlength="80" placeholder="Handwritten store sales">' +
+            '<input type="text" id="picMapTitle" maxlength="80" placeholder="Handwritten sales sheet">' +
             '<label style="margin-top:8px;">Lines to read</label>' +
             '<div id="picFieldList">' + picFieldRow() + '</div>' +
             '<button type="button" class="small" id="addPicFieldBtn">+ Add line</button>' +
@@ -905,7 +905,7 @@
         const canOwners = board.canManageOwners;
         if (!board.canEdit && team.dashboard.length === 0) return '';
         let html = '<div class="card"><div class="row" style="justify-content: space-between; align-items: baseline; margin-bottom: 8px;"><h2 style="margin:0;">Dashboard login</h2>' + (team.dashboard.length ? '<span class="count">' + team.dashboard.length + '</span>' : '') + '</div>';
-        html += '<p class="muted card-help">Who can open this store on the website (after they sign up).</p>';
+        html += '<p class="muted card-help">Who can open this business on the website (after they sign up).</p>';
         if (team.dashboard.length === 0) html += '<div class="muted" style="margin-bottom: 8px;">No dashboard logins yet.</div>';
         else {
             html += '<table><thead><tr><th>Name</th><th>Email</th><th>Role</th>' + (board.canEdit ? '<th></th>' : '') + '</tr></thead><tbody>';
@@ -932,8 +932,8 @@
 
     function removeStoreCard() {
         if (!board.canManageOwners) return '';
-        return '<div class="card danger-card"><h2>Remove this store</h2><p class="muted card-help">Removes it from the dashboard. Past reports stay saved.</p>' +
-            '<button class="danger" data-deactivate-store>Remove store</button></div>';
+        return '<div class="card danger-card"><h2>Remove this business</h2><p class="muted card-help">Removes it from the dashboard. Past reports stay saved.</p>' +
+            '<button class="danger" data-deactivate-store>Remove business</button></div>';
     }
 
     function setupCard() {
@@ -953,7 +953,7 @@
         const gs = board.googleSheets || {};
         if (!board.canEdit && !gs.connected) return '';
         let html = '<div class="card"><h2>Google Sheets</h2>';
-        html += '<p class="muted card-help">One sheet per store. Share Editor access, then paste the link.</p>';
+        html += '<p class="muted card-help">One sheet per business. Share Editor access, then paste the link.</p>';
         if (!gs.credentialsReady) {
             html += '<div class="notice err">opsAi Sheets credentials are not on this server yet. Connecting a link still saves; rows will write once the server has Google set up.</div>';
         }
@@ -972,7 +972,7 @@
                 '<input type="text" name="sheet" required placeholder="https://docs.google.com/spreadsheets/d/…" maxlength="500"></div>' +
                 '<div><button type="submit" class="primary">Connect sheet</button></div></form>';
         } else {
-            html += '<p class="muted">No sheet connected for this store yet.</p>';
+            html += '<p class="muted">No sheet connected for this business yet.</p>';
         }
         return html + '</div>';
     }
@@ -989,7 +989,7 @@
         let html = '<div class="card">';
         html += '<p class="muted card-help">' +
             (agents.packLabel ? '<strong>' + esc(agents.packLabel) + '</strong> · ' : '') +
-            esc(agents.marketingLine || 'Your store agents — you confirm every money post.') + '</p>';
+            esc(agents.marketingLine || 'Your business agents — you confirm every money post.') + '</p>';
 
         if (catalog.length) {
             html += '<ul class="agent-rows">';
@@ -1056,7 +1056,7 @@
         if (!board.canEdit) return '';
         let html = '<div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border,#e0e0e0);">';
         html += '<h2 style="font-size:16px;margin:0 0 6px;">Tools</h2>';
-        html += '<p class="muted" style="margin-bottom:10px;">Subscribe this store to the channels you use. Connect Sheets under Store; Slack channel id below.</p>';
+        html += '<p class="muted" style="margin-bottom:10px;">Subscribe this business to the channels you use. Connect Sheets under Store; Slack channel id below.</p>';
         if (catalog.length) {
             html += '<div class="tools-grid" id="toolsWantedGrid">';
             catalog.forEach(function (t) {
@@ -1097,7 +1097,7 @@
     }
 
     function adminNav(items, activeId) {
-        return '<nav class="admin-nav" aria-label="Store admin sections">' + items.filter(Boolean).map(function (x) {
+        return '<nav class="admin-nav" aria-label="Business admin sections">' + items.filter(Boolean).map(function (x) {
             return '<button type="button" data-admin-panel="' + esc(x.id) + '"' + (x.id === activeId ? ' class="active"' : '') + '>' +
                 esc(x.label) + (x.count != null ? ' <span>' + esc(x.count) + '</span>' : '') + '</button>';
         }).join('') + '</nav>';
@@ -1154,7 +1154,7 @@
         const navItems = [
             crewCard ? { id: 'admin-crew', label: 'Agents' } : null,
             (waCard || dashCard) ? { id: 'admin-people', label: 'People', count: team.whatsapp.length + team.dashboard.length } : null,
-            { id: 'admin-store', label: 'Store' },
+            { id: 'admin-store', label: 'Business' },
             (vendorCard || sampleCard) ? { id: 'admin-vendors', label: 'Vendors', count: vendorCount || null } : null,
             { id: 'admin-tasks', label: 'Tasks', count: board.templates.length },
         ].filter(Boolean);
@@ -1175,7 +1175,7 @@
             html += adminSection(
                 'admin-crew',
                 'Agents',
-                'Named agents for this store. Field capture stays on WhatsApp; ask Zar or Quinn in chat.',
+                'Named agents for this business. Field capture stays on WhatsApp; ask Zar or Quinn in chat.',
                 crewCard,
                 adminPanel
             );
@@ -1190,7 +1190,7 @@
             storeBody += '<details class="more"><summary>Danger zone</summary><div class="admin-grid" style="margin-top:8px;">' +
                 addStoreCard() + removeStoreCard() + '</div></details>';
         }
-        html += adminSection('admin-store', 'Store', 'Hours, shifts, and the sheet for confirmed entries.', storeBody, adminPanel);
+        html += adminSection('admin-store', 'Business', 'Hours, shifts, and the sheet for confirmed entries.', storeBody, adminPanel);
 
         if (vendorCard || sampleCard) {
             let vendorsBody = vendorCard || '';
@@ -1353,7 +1353,7 @@
         if (!el || !el.hasAttribute || !el.hasAttribute('data-task-alerts')) return;
         const on = el.checked;
         el.disabled = true;
-        const ok = await act({ action: 'set_channels', taskAlertsEnabled: on }, on ? 'WhatsApp alerts on for this store.' : 'WhatsApp alerts off for this store.');
+        const ok = await act({ action: 'set_channels', taskAlertsEnabled: on }, on ? 'WhatsApp alerts on for this business.' : 'WhatsApp alerts off for this business.');
         if (!ok) el.checked = !on;
         el.disabled = false;
         if (ok) load();
@@ -1405,7 +1405,7 @@
             return;
         }
         if (el.dataset.removeWa) {
-            if (!confirm('Remove this WhatsApp number from the store? They will not be recognized until you add them again.')) return;
+            if (!confirm('Remove this WhatsApp number from the business? They will not be recognized until you add them again.')) return;
             if (await act({ action: 'remove_whatsapp_person', id: el.dataset.removeWa }, 'WhatsApp person removed.')) load();
             return;
         }
@@ -1425,12 +1425,12 @@
             return;
         }
         if (el.id === 'enrollAiChat') {
-            if (!confirm('Enable Quinn (Books) for this store? Add-on is about $' + ((board.aiChat && board.aiChat.monthlyUsd) || 20) + '/store/mo when billing is live.')) return;
-            if (await act({ action: 'set_agents', books: true }, 'Quinn (Books) enabled for this store.')) load();
+            if (!confirm('Enable Quinn (Books) for this business? Add-on is about $' + ((board.aiChat && board.aiChat.monthlyUsd) || 20) + '/business/mo when billing is live.')) return;
+            if (await act({ action: 'set_agents', books: true }, 'Quinn (Books) enabled for this business.')) load();
             return;
         }
         if (el.id === 'unenrollAiChat') {
-            if (!confirm('Turn off Quinn (Books) for this store?')) return;
+            if (!confirm('Turn off Quinn (Books) for this business?')) return;
             if (await act({ action: 'set_agents', books: false }, 'Quinn (Books) turned off.')) load();
             return;
         }
@@ -1471,23 +1471,23 @@
                 emailDigestTo: emailTo && emailTo.value.trim() ? emailTo.value.trim() : null,
                 slackEnabled: slackBox ? slackBox.checked : !!tools.slack,
                 slackChannelId: slackChannel && slackChannel.value.trim() ? slackChannel.value.trim() : null
-            }, 'Tools saved for this store.')) load();
+            }, 'Tools saved for this business.')) load();
             return;
         }
         if (el.getAttribute('data-agent-toggle') === 'staff') {
             const turnOn = el.getAttribute('data-agent-on') === '1';
-            if (!turnOn && !confirm('Turn off Staff? Shift task proof on WhatsApp will stop for this store until you turn it back on.')) return;
+            if (!turnOn && !confirm('Turn off Staff? Shift task proof on WhatsApp will stop for this business until you turn it back on.')) return;
             if (await act({ action: 'set_agents', staff: turnOn }, turnOn ? 'Staff agent on.' : 'Staff agent off.')) load();
             return;
         }
         if (el.dataset.removeDash) {
-            if (!confirm('Remove this person’s dashboard access to this store?')) return;
+            if (!confirm('Remove this person’s dashboard access to this business?')) return;
             if (await act({ action: 'remove_dashboard_member', userId: el.dataset.removeDash }, 'Dashboard access removed.')) load();
             return;
         }
         if (el.hasAttribute('data-deactivate-store')) {
-            if (!confirm('Remove this store from the dashboard? Past reports stay saved.')) return;
-            if (await act({ action: 'deactivate_store' }, 'Store removed from the dashboard.')) {
+            if (!confirm('Remove this business from the dashboard? Past reports stay saved.')) return;
+            if (await act({ action: 'deactivate_store' }, 'Business removed from the dashboard.')) {
                 location.href = '/dashboard';
             }
             return;
@@ -1496,7 +1496,7 @@
         if (el.dataset.applyReport) {
             const ids = Array.prototype.map.call(document.querySelectorAll('[data-report-pick]:checked'), function (c) { return c.dataset.reportPick; });
             const r = await act({ action: 'apply_report', pdf: importing.pdf, standardIds: ids }, function (res) {
-                return (res.added ? res.added + ' task(s) added. Set their times in Store admin.' : 'No tasks added.') + (res.saved ? ' Report saved.' : ' This report was already saved.');
+                return (res.added ? res.added + ' task(s) added. Set their times in Business admin.' : 'No tasks added.') + (res.saved ? ' Report saved.' : ' This report was already saved.');
             });
             if (r) { importing = null; loadInspection(); }
             return;
@@ -1535,7 +1535,7 @@
         }
         if (el.id === 'addVendorBtn') {
             const rows = readVendorRows();
-            if (rows.length >= 20) { note('err', 'A store can have up to 20 vendors.'); return; }
+            if (rows.length >= 20) { note('err', 'A business can have up to 20 vendors.'); return; }
             rows.push({ name: '', category: 'other' });
             board.vendors = rows;
             render();
@@ -1557,7 +1557,7 @@
             const preset = (board.pictureTemplatePresets || []).find(function (p) { return p.id === el.dataset.picPreset; });
             if (!preset) return;
             fillPictureMap(preset);
-            setPicMapStatus('Starter layout loaded. Rename the lines to match this store.');
+            setPicMapStatus('Starter layout loaded. Rename the lines to match this business.');
             return;
         }
         if (el.id === 'addPicFieldBtn') {
@@ -1579,9 +1579,9 @@
             if (await act({ action: 'import_presets', presetIds: ids }, function (r) {
                 const added = r.added || 0;
                 const skipped = r.skipped || 0;
-                if (added === 0 && skipped > 0) return 'Those reminders are already on this store. Edit their times in the list above.';
+                if (added === 0 && skipped > 0) return 'Those reminders are already on this business. Edit their times in the list above.';
                 if (added === 0) return 'No new reminders added.';
-                return added + ' reminder(s) saved for this store' + (skipped ? ' (' + skipped + ' already there)' : '') + '. Edit the times to fit your hours.';
+                return added + ' reminder(s) saved for this business' + (skipped ? ' (' + skipped + ' already there)' : '') + '. Edit the times to fit your hours.';
             })) load();
             return;
         }
@@ -1730,7 +1730,7 @@
                 action: 'save_picture_template',
                 template: { kind: kind, title: title, note: picNote, fields: fields },
             }, function (r) {
-                return r.summary ? 'Picture map saved. ' + r.summary : 'Picture map saved for this store.';
+                return r.summary ? 'Picture map saved. ' + r.summary : 'Picture map saved for this business.';
             })) load();
             return;
         }
@@ -1762,7 +1762,7 @@
                 return;
             }
             const saved = await act(body, function (r) {
-                if (r.dailyCloseSample) return 'Samples saved for this store. Close wording: ' + r.dailyCloseSample;
+                if (r.dailyCloseSample) return 'Samples saved for this business. Close wording: ' + r.dailyCloseSample;
                 if (r.invoiceSample) return 'Samples saved. Invoice wording: ' + r.invoiceSample;
                 return 'Samples saved. The next WhatsApp close is read against this wording.';
             });
@@ -1787,7 +1787,7 @@
             if (res.status === 401) { location.href = '/login'; return; }
             const data = await res.json();
             const stores = Array.isArray(data.stores) ? data.stores : [];
-            if (stores.length === 0) { document.getElementById('content').innerHTML = '<div class="empty">You do not have a store yet.</div>'; return; }
+            if (stores.length === 0) { document.getElementById('content').innerHTML = '<div class="empty">You do not have a business yet.</div>'; return; }
             stores.forEach(function (s) {
                 const o = document.createElement('option');
                 o.value = s.storeId;
@@ -1803,7 +1803,7 @@
             });
             load();
         } catch (e) {
-            note('err', 'Could not load your stores. ' + e.message);
+            note('err', 'Could not load your businesses. ' + e.message);
         }
     })();
 </script>

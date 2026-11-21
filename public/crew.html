@@ -156,7 +156,7 @@
     <a href="/dashboard" class="brand-logo" aria-label="Operation Intelligence"><img src="/logo.jpg" alt="Operation Intelligence"></a>
     <a href="/dashboard" class="desk-only">&larr; Dashboard</a>
     <h1>Chat</h1>
-    <select id="storeSelect" aria-label="Store"></select>
+    <select id="storeSelect" aria-label="Business"></select>
     <button type="button" class="small desk-only" id="logoutBtn">Log out</button>
 </header>
 <div id="notice"></div>
@@ -245,14 +245,14 @@
     function welcomeFor(agent) {
         if (!agent) return 'Pick an agent to start.';
         if (agent.id === 'supervisor') {
-            if (!booksOn()) return 'Enable Quinn (Books) under Store admin → Agents to ask about standing and invoices.';
+            if (!booksOn()) return 'Enable Quinn (Books) under Business admin → Agents to ask about standing and invoices.';
             if (mobileChat) {
                 return 'Chat with Zar. Mira, Jules, Avery, Sam, and Quinn handle the work behind the scenes — you stay in this thread.';
             }
             return 'Ask Zar about confirmed books — standing, open bills, invoice counts. Short follow-ups like “paid ones” work here.';
         }
         if (agent.id === 'books') {
-            if (!agent.enabled) return 'Quinn is off. Enable Books under Store admin → Agents.';
+            if (!agent.enabled) return 'Quinn is off. Enable Books under Business admin → Agents.';
             return 'Direct chat with Quinn. Same tools as Zar, pinned to Books.';
         }
         if (agent.id === 'close') {
@@ -264,7 +264,7 @@
         if (agent.id === 'staff') {
             return agent.enabled
                 ? 'Sam runs shift tasks on WhatsApp.'
-                : 'Sam is off. Turn Staff on under Store admin → Agents.';
+                : 'Sam is off. Turn Staff on under Business admin → Agents.';
         }
         if (agent.id === 'followup') {
             return 'Avery runs reminders in the background.';
@@ -309,8 +309,8 @@
         const list = catalog();
         if (list.length <= 1 && !(board && board.agents)) {
             document.getElementById('app').innerHTML =
-                '<div class="empty-state">No agents on this store yet. Open <a href="/tasks?storeId=' +
-                encodeURIComponent(storeId) + '&view=setup&panel=admin-crew">Store admin → Agents</a>.</div>';
+                '<div class="empty-state">No agents on this business yet. Open <a href="/tasks?storeId=' +
+                encodeURIComponent(storeId) + '&view=setup&panel=admin-crew">Business admin → Agents</a>.</div>';
             return;
         }
         // Phone: always Zar. Desktop can pick Quinn / others.
@@ -336,7 +336,7 @@
                 '&view=setup&panel=admin-crew">Manage agents →</a></div></aside>';
         }
         const jobLine = mobileChat
-            ? 'Ask anything about the store. The crew handles the rest behind the scenes.'
+            ? 'Ask anything about the business. The crew handles the rest behind the scenes.'
             : (agent.job || '');
         html += '<section class="thread"><div class="thread-head"><div class="who">' +
             avatarHtml(agent, 44) +
@@ -349,7 +349,7 @@
                 '<textarea name="question" rows="1" maxlength="500" required placeholder="Message Zar…"></textarea>' +
                 '<button type="submit" class="primary" id="crewSend">Send</button></form>';
         } else if (!booksOn() && (activeAgent === 'supervisor' || activeAgent === 'books')) {
-            html += '<div class="composer"><p class="bubble system" style="margin:0;width:100%;">Enable Quinn (Books) in Store admin → Agents to chat here.</p></div>';
+            html += '<div class="composer"><p class="bubble system" style="margin:0;width:100%;">Enable Quinn (Books) in Business admin → Agents to chat here.</p></div>';
         } else {
             html += '<div class="composer"><p class="bubble system" style="margin:0;width:100%;">Field work for this agent stays on WhatsApp for now.</p></div>';
         }
@@ -427,7 +427,7 @@
             const select = document.getElementById('storeSelect');
             select.innerHTML = '';
             if (!stores.length) {
-                document.getElementById('app').innerHTML = '<div class="empty-state">No stores yet.</div>';
+                document.getElementById('app').innerHTML = '<div class="empty-state">No businesses yet.</div>';
                 return;
             }
             stores.forEach(function (s) {

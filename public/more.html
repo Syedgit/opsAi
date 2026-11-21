@@ -67,7 +67,7 @@
     <header>
         <a href="/crew" class="brand-logo" aria-label="opsAi"><img src="/logo.jpg" alt=""></a>
         <h1>More</h1>
-        <select id="storeSelect" aria-label="Store"></select>
+        <select id="storeSelect" aria-label="Business"></select>
     </header>
     <main id="app"><div class="empty">Loading…</div></main>
 <script>
@@ -84,14 +84,14 @@
 
     function render() {
         var html = '<p class="desk-hint">On a phone, this is the slim menu. Full reports stay under Reports.</p>';
-        html += '<p class="lead">Store tools and account. Day-to-day chat is with Zar.</p>';
+        html += '<p class="lead">Business tools and account. Day-to-day chat is with Zar.</p>';
         html += '<div class="card">';
-        html += '<a href="/crew' + q() + '"><span class="ico">◎</span><div class="meta"><strong>Chat with Zar</strong><span>Ask about the store</span></div><span class="chev">›</span></a>';
+        html += '<a href="/crew' + q() + '"><span class="ico">◎</span><div class="meta"><strong>Chat with Zar</strong><span>Ask about the business</span></div><span class="chev">›</span></a>';
         html += '<a href="/tasks' + q() + '"><span class="ico">☰</span><div class="meta"><strong>Today</strong><span>Due tasks and alerts</span></div><span class="chev">›</span></a>';
         html += '<a href="/dashboard' + q() + '"><span class="ico">📈</span><div class="meta"><strong>Reports</strong><span>Closes, invoices, standing</span></div><span class="chev">›</span></a>';
         html += '</div><div class="card">';
         html += '<a href="/tasks' + q() + '&view=setup&panel=admin-crew"><span class="ico">👥</span><div class="meta"><strong>Agents</strong><span>Turn agents on or off</span></div><span class="chev">›</span></a>';
-        html += '<a href="/tasks' + q() + '&view=setup"><span class="ico">⚙️</span><div class="meta"><strong>Store admin</strong><span>People, hours, reminders</span></div><span class="chev">›</span></a>';
+        html += '<a href="/tasks' + q() + '&view=setup"><span class="ico">⚙️</span><div class="meta"><strong>Business admin</strong><span>People, hours, reminders</span></div><span class="chev">›</span></a>';
         html += '<a href="/billing"><span class="ico">💳</span><div class="meta"><strong>Billing</strong><span>Plan and usage</span></div><span class="chev">›</span></a>';
         html += '</div><div class="card">';
         html += '<button type="button" class="row" id="logoutBtn"><span class="ico">⎋</span><div class="meta"><strong>Log out</strong><span>Sign out of this device</span></div><span class="chev">›</span></button>';
@@ -112,7 +112,7 @@
             const select = document.getElementById('storeSelect');
             select.innerHTML = '';
             if (!stores.length) {
-                document.getElementById('app').innerHTML = '<div class="empty">No stores yet.</div>';
+                document.getElementById('app').innerHTML = '<div class="empty">No businesses yet.</div>';
                 return;
             }
             stores.forEach(function (s) {

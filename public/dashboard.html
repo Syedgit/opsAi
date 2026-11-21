@@ -1222,9 +1222,9 @@
         <div id="appBanner" role="status"></div>
         <div class="top-bar">
             <div class="store-selector">
-                <label for="storeSelect">Store:</label>
+                <label for="storeSelect">Business:</label>
                 <select id="storeSelect">
-                    <option value="">Select Store...</option>
+                    <option value="">Select business...</option>
                 </select>
                 <button class="add-store-btn" id="addStoreBtn">+ Add Business</button>
             </div>
@@ -1238,7 +1238,7 @@
             </div>
         </div>
 
-        <!-- Add Store Modal -->
+        <!-- Add Business Modal -->
         <div class="modal" id="addStoreModal">
             <div class="modal-content">
                 <div class="modal-header">
@@ -1254,7 +1254,7 @@
                 <div class="success-message" id="successMessage"></div>
                 <form id="addStoreForm">
                     <div class="form-group">
-                        <label for="storeIdInput">Store ID</label>
+                        <label for="storeIdInput">Business ID</label>
                         <input 
                             type="text" 
                             id="storeIdInput" 
@@ -1263,12 +1263,12 @@
                             required
                             style="text-transform: uppercase;"
                         />
-                        <div class="help-text">Enter the store ID (format: S001, S002, etc.)</div>
+                        <div class="help-text">Enter the business ID (format: S001, S002, etc.)</div>
                     </div>
                     <div class="form-group">
                         <label for="inviteCodeInput">Invite Code</label>
-                        <input type="text" id="inviteCodeInput" placeholder="From your store owner" required />
-                        <div class="help-text">Ask your store owner for the team invite code</div>
+                        <input type="text" id="inviteCodeInput" placeholder="From your business owner" required />
+                        <div class="help-text">Ask your business owner for the team invite code</div>
                     </div>
                     <div class="form-group">
                         <label for="roleSelect">Your Role</label>
@@ -1290,7 +1290,7 @@
             <!-- Dashboard Page -->
             <div id="dashboardPage" class="page">
                 <h1 class="page-title">Dashboard</h1>
-                <p class="page-subtitle">Overview of your store operations</p>
+                <p class="page-subtitle">Overview of your business operations</p>
                 
                 <div class="stats-grid">
                     <div class="stat-card" data-mod="money">
@@ -1342,7 +1342,7 @@
                             <div>
                                 <h3>AI readings this month</h3>
                                 <div class="value" id="aiReadingsCount">-</div>
-                                <div class="change" id="aiReadingsNote">This store · no cap</div>
+                                <div class="change" id="aiReadingsNote">This business · no cap</div>
                             </div>
                             <div class="stat-card-icon pending">🔎</div>
                         </div>
@@ -1351,10 +1351,10 @@
 
                 <div class="whatsapp-setup-card" id="whatsappSetupCard">
                     <h3>WhatsApp</h3>
-                    <p>Choose how this store talks to opsAi. You can switch anytime.</p>
+                    <p>Choose how this business talks to opsAi. You can switch anytime.</p>
                     <div id="whatsappOpsModePicker" class="whatsapp-mode-picker" style="display:none; margin: 12px 0; gap: 8px; flex-wrap: wrap;">
                         <button type="button" class="btn-mode" data-ops-mode="direct" id="opsModeDirect">Direct chat (1:1)</button>
-                        <button type="button" class="btn-mode" data-ops-mode="group" id="opsModeGroup">Store group (invite link)</button>
+                        <button type="button" class="btn-mode" data-ops-mode="group" id="opsModeGroup">Business group (invite link)</button>
                     </div>
                     <div id="whatsappProvisionStatus" class="whatsapp-status none">Checking…</div>
                     <div id="whatsappProvisionBody">
@@ -1371,7 +1371,7 @@
                 </div>
                 
                 <div class="content-area" id="contentArea">
-                    <div class="loading">Select a store to view data...</div>
+                    <div class="loading">Select a business to view data...</div>
                 </div>
             </div>
             
@@ -1420,7 +1420,7 @@
             
             <div id="summaryPage" class="page" style="display: none;" data-mod="money">
                 <h1 class="page-title">Reports &amp; AI analytics</h1>
-                <p class="page-subtitle">How this store stands: sales, buying, and till expenses from confirmed WhatsApp reports.</p>
+                <p class="page-subtitle">How this business stands: sales, buying, and till expenses from confirmed WhatsApp reports.</p>
                 <div class="rpt-toolbar">
                     <button type="button" class="on" data-range="week">This week</button>
                     <button type="button" data-range="month">This month</button>
@@ -1432,7 +1432,7 @@
                     </span>
                 </div>
                 <div id="summaryContent">
-                    <div class="loading">Select a store to load the report.</div>
+                    <div class="loading">Select a business to load the report.</div>
                 </div>
             </div>
             
@@ -1446,10 +1446,10 @@
             
             <div id="settingsPage" class="page" style="display: none;">
                 <h1 class="page-title">Settings</h1>
-                <p class="page-subtitle">Configure your store settings</p>
+                <p class="page-subtitle">Configure your business settings</p>
                 <div class="content-area">
-                    <p>Reminders, people (WhatsApp numbers, staff, a partner owner), and how this store sends reports are on <a href="/tasks">Tasks &amp; alerts → Store admin</a>. You can change the WhatsApp number you entered at signup there.</p>
-                    <p style="margin-top: 16px;">Plan, trial, and AI readings per store are on <a href="/billing">Plan and usage</a>.</p>
+                    <p>Reminders, people (WhatsApp numbers, staff, a partner owner), and how this business sends reports are on <a href="/tasks">Tasks &amp; alerts → Business admin</a>. You can change the WhatsApp number you entered at signup there.</p>
+                    <p style="margin-top: 16px;">Plan, trial, and AI readings per business are on <a href="/billing">Plan and usage</a>.</p>
                     <p style="margin-top: 16px;">To add another business or location you own, use <strong>+ Add Business</strong> at the top of the dashboard, or <a href="/onboarding?add=1">Add another business</a>. Each one keeps its own ID, name, sales, and reports.</p>
                 </div>
             </div>
@@ -1491,7 +1491,7 @@
                     const days = b.daysLeft;
                     const unit = days === 1 ? 'day' : 'days';
                     if (days <= 3) {
-                        showBanner('Trial ends in ' + days + ' ' + unit + '. Add a card on <a href="/billing">Plan and usage</a> so this store stays on after the trial.');
+                        showBanner('Trial ends in ' + days + ' ' + unit + '. Add a card on <a href="/billing">Plan and usage</a> so this business stays on after the trial.');
                     } else {
                         showBanner('14-day trial · ' + days + ' ' + unit + ' left. <a href="/billing">Plan and usage</a>');
                     }
@@ -1608,7 +1608,7 @@
             cardSales: 'card/credit', cashSales: 'cash', storeSalesTotal: 'non-fuel total',
             fuelSales: 'gas sales', fuelGallons: 'gallons', fuelDiscounts: 'fuel discounts',
             reportedDeposit: 'deposit', reportedDayTotal: 'day total', reportDate: 'date',
-            storeHint: 'store name', payouts: 'paid outs', invoiceNumber: 'invoice #',
+            storeHint: 'business name', payouts: 'paid outs', invoiceNumber: 'invoice #',
             invoiceDate: 'invoice date', dueDate: 'due date', vendor: 'vendor', vendorName: 'vendor',
             total: 'total', tax: 'tax', remaining: 'remaining', amount: 'amount', payments: 'payments',
             'payments.amount': 'payment amount', accountLast4: 'account last 4', depositDate: 'deposit date',
@@ -1692,7 +1692,7 @@
             const subtitle = document.querySelector('.page-subtitle');
             if (subtitle) {
                 subtitle.textContent = currentModules.money
-                    ? 'Overview of your store operations'
+                    ? 'Overview of your business operations'
                     : 'Staff hours and WhatsApp reminders for this location';
             }
             const moneyPage = currentPage === 'sales' || currentPage === 'invoices' || currentPage === 'expenses' || currentPage === 'paidouts' || currentPage === 'summary';
@@ -1750,7 +1750,7 @@
                 }
 
                 if (data.stores.length === 0) {
-                    showBanner('You do not have a store yet. <a href="/onboarding">Set up your store</a>.');
+                    showBanner('You do not have a business yet. <a href="/onboarding">Set up your business</a>.');
                     return;
                 }
 
@@ -1782,7 +1782,7 @@
                 }
             } catch (error) {
                 console.error('Error loading stores:', error);
-                showBanner('We could not load your stores. ' + (error && error.message ? error.message + '. ' : '') + '<a href="#" onclick="location.reload(); return false;">Try again</a>');
+                showBanner('We could not load your businesses. ' + (error && error.message ? error.message + '. ' : '') + '<a href="#" onclick="location.reload(); return false;">Try again</a>');
             }
         }
 
@@ -1888,7 +1888,7 @@
                     statusEl.textContent = 'Group preferred';
                     statusEl.className = 'whatsapp-status pending';
                     if (isAuto) {
-                        messageEl.textContent = 'Create an opsAi group for this store, then share the invite link (max 8 people).';
+                        messageEl.textContent = 'Create an opsAi group for this business, then share the invite link (max 8 people).';
                         if (canManage && !document.getElementById('createGroupBtn')) {
                             const btn = document.createElement('button');
                             btn.type = 'button';
@@ -1921,7 +1921,7 @@
                     stepsEl.innerHTML = [
                         '<li>Save the opsAi number' + (opsNumber ? ' <strong>' + esc(opsNumber) + '</strong>' : '') + ' in your phone as “opsAi”.</li>',
                         '<li>Send closes, invoices, paid outs, or photos to it in a direct chat from your registered WhatsApp.</li>',
-                        '<li>Add staff numbers on <a href="/tasks">Tasks &amp; alerts → Store admin</a>. They message the same number directly.</li>',
+                        '<li>Add staff numbers on <a href="/tasks">Tasks &amp; alerts → Business admin</a>. They message the same number directly.</li>',
                         '<li>opsAi replies with what it read. Reply OK to save it, or FIX to correct it.</li>',
                     ].join('');
                 }
@@ -1962,7 +1962,7 @@
                 const aiEl = document.getElementById('aiReadingsCount');
                 const aiNote = document.getElementById('aiReadingsNote');
                 if (aiEl) aiEl.textContent = String(used);
-                if (aiNote) aiNote.textContent = 'This store · no cap';
+                if (aiNote) aiNote.textContent = 'This business · no cap';
                 const reviewNote = document.getElementById('needsReviewNote');
                 if (reviewNote) {
                     const n = typeof data.needsReview === 'number' ? data.needsReview : 0;
@@ -1980,7 +1980,7 @@
                 ['todaySales', 'todayInvoices', 'todayOrders', 'pendingCount', 'aiReadingsCount'].forEach(id => {
                     document.getElementById(id).textContent = '–';
                 });
-                showBanner('We could not load this store\'s numbers. <a href="#" onclick="loadDashboard(currentStoreId); return false;">Try again</a>');
+                showBanner('We could not load this business\'s numbers. <a href="#" onclick="loadDashboard(currentStoreId); return false;">Try again</a>');
             }
         }
 
@@ -2300,7 +2300,7 @@
                     if (body.posted) {
                         if (status) status.textContent = body.via === 'direct' ? 'Sent the hours to your WhatsApp.' : "Posted this week's shifts to the WhatsApp group.";
                     } else {
-                        const msg = 'Saved on the dashboard. I could not send the hours on WhatsApp. They go to the store group when one is linked, or 1:1 to your registered number.';
+                        const msg = 'Saved on the dashboard. I could not send the hours on WhatsApp. They go to the business group when one is linked, or 1:1 to your registered number.';
                         if (status) status.textContent = msg;
                         showBanner(esc(msg));
                     }
@@ -2336,7 +2336,7 @@
                 }).catch(() => null);
                 
                 if (response && response.status === 403 && tab === 'schedules') {
-                    contentArea.innerHTML = '<div class="empty-state"><div class="empty-state-icon">\ud83d\udd12</div><h3>Schedules are for owners and managers</h3><p>Ask the store owner if you need to see staff hours.</p></div>';
+                    contentArea.innerHTML = '<div class="empty-state"><div class="empty-state-icon">\ud83d\udd12</div><h3>Schedules are for owners and managers</h3><p>Ask the business owner if you need to see staff hours.</p></div>';
                     return;
                 }
                 if (!response || !response.ok) {
@@ -2692,7 +2692,7 @@
             }).join('');
             return '<div class="entry-edit" id="entryEditPanel" data-action-id="' + esc(item.id) + '" data-entry-type="' + esc(type) + '">' +
                 '<h3>Edit confirmed data</h3>' +
-                '<p class="muted">Owners and managers can correct numbers here (same as WhatsApp FIX). Saving updates the store database' +
+                '<p class="muted">Owners and managers can correct numbers here (same as WhatsApp FIX). Saving updates the business database' +
                 (review.hasIssues ? ' and clears flags for fields you change.' : '.') + '</p>' +
                 '<div class="edit-grid">' + inputs + '</div>' +
                 '<div class="edit-actions">' +
@@ -2738,7 +2738,7 @@
                 if (res.status === 401) { location.href = '/login'; return; }
                 if (!res.ok) throw new Error(data.error || ('Server answered ' + res.status));
                 if (status) status.textContent = 'Saved.';
-                showBanner(clearFlags ? 'Flags cleared for that entry.' : 'Entry updated in the store database.');
+                showBanner(clearFlags ? 'Flags cleared for that entry.' : 'Entry updated in the business database.');
                 closeDetailModal();
                 const activeTab = document.querySelector('.nav-tab.active[data-tab]');
                 const tab = activeTab ? activeTab.getAttribute('data-tab') : type;
@@ -3014,7 +3014,7 @@
             const container = document.getElementById('summaryContent');
             if (!container) return;
             if (!currentStoreId) {
-                container.innerHTML = '<div class="empty-state"><h3>Select a store first</h3></div>';
+                container.innerHTML = '<div class="empty-state"><h3>Select a business first</h3></div>';
                 return;
             }
             container.innerHTML = '<div class="loading">Loading report…</div>';
@@ -3219,7 +3219,7 @@
                 if (storeSelect && storeSelect.value) {
                     currentStoreId = storeSelect.value;
                 } else {
-                    container.innerHTML = '<div class="empty-state"><h3>Select a store first</h3></div>';
+                    container.innerHTML = '<div class="empty-state"><h3>Select a business first</h3></div>';
                     return;
                 }
             }
@@ -3304,7 +3304,7 @@
                 }
                 logActivity('Store changed', `Switched to store ${currentStoreId}`);
             } else {
-                document.getElementById('contentArea').innerHTML = '<div class="loading">Select a store to view data...</div>';
+                document.getElementById('contentArea').innerHTML = '<div class="loading">Select a business to view data...</div>';
             }
         });
 
@@ -3356,7 +3356,7 @@
             const inviteCode = document.getElementById('inviteCodeInput').value.trim();
 
             if (!inviteCode) {
-                errorMessage.textContent = 'Invite code is required to join a store.';
+                errorMessage.textContent = 'Invite code is required to join a business.';
                 errorMessage.classList.add('active');
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Join team';
@@ -3365,7 +3365,7 @@
 
             // Validate store ID format
             if (!/^S\d{3}$/.test(storeId)) {
-                errorMessage.textContent = 'Invalid store ID format. Please use format: S001, S002, etc.';
+                errorMessage.textContent = 'Invalid business ID format. Please use format: S001, S002, etc.';
                 errorMessage.classList.add('active');
                 return;
             }
@@ -3405,7 +3405,7 @@
                         select.dispatchEvent(new Event('change'));
                     }, 1500);
                 } else {
-                    errorMessage.textContent = data.error || data.message || 'Failed to add store';
+                    errorMessage.textContent = data.error || data.message || 'Failed to add business';
                     errorMessage.classList.add('active');
                 }
             } catch (error) {

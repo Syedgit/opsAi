@@ -22,7 +22,7 @@
     <link rel="apple-touch-startup-image" href="/splash-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
     <link rel="stylesheet" href="/app-shell.css?v=3">
     <script src="/app-shell.js?v=2"></script>
-    <title>Set up your store - opsAi</title>
+    <title>Set up your business - opsAi</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -195,19 +195,19 @@
 
         <div id="setupPanel" class="step-panel active">
             <div class="auth-header">
-                <h1>Set up your store</h1>
+                <h1>Set up your business</h1>
                 <p>Name it, then pick what WhatsApp should nag this location about: daily reports, shift reminders, photo proofs, weekly checks. You can change every item later as owner.</p>
             </div>
             <div class="error-message" id="errorMessage"></div>
             <form id="onboardingForm">
                 <div class="form-group">
-                    <label for="storeName">Store name</label>
+                    <label for="storeName">Business name</label>
                     <input type="text" id="storeName" name="storeName" required maxlength="200" placeholder="e.g. Main Street Gas &amp; Shop" autocomplete="organization">
                 </div>
                 <div class="form-group">
                     <label for="ownerPhoneE164">Your WhatsApp number</label>
                     <input type="tel" id="ownerPhoneE164" name="ownerPhoneE164" required placeholder="+15551234567" autocomplete="tel">
-                    <div class="help-text">Your personal WhatsApp, with + and country code — not the opsAi business number. You can change it later, and add a partner or staff, on Tasks &amp; alerts → Store admin.</div>
+                    <div class="help-text">Your personal WhatsApp, with + and country code — not the opsAi business number. You can change it later, and add a partner or staff, on Tasks &amp; alerts → Business admin.</div>
                 </div>
                 <div class="form-group">
                     <label for="timezone">Timezone</label>
@@ -219,18 +219,18 @@
                         <option value="America/Phoenix">Arizona (America/Phoenix)</option>
                     </select>
                 </div>
-                <button type="submit" class="btn-primary" id="submitBtn">Create store</button>
+                <button type="submit" class="btn-primary" id="submitBtn">Create business</button>
             </form>
-            <div class="loading" id="loading">Creating your store…</div>
+            <div class="loading" id="loading">Creating your business…</div>
             <div class="auth-footer">
-                <a href="#" id="joinExisting">Joining an existing store?</a> Use the dashboard with your invite code.
+                <a href="#" id="joinExisting">Joining an existing business?</a> Use the dashboard with your invite code.
             </div>
         </div>
 
         <div id="profilePanel" class="step-panel">
             <div class="auth-header">
                 <h1>What kind of business is this?</h1>
-                <p>Pick the closest match. 7-Eleven and gas keep the full shop pack. Everything else starts with a few reminders — add more later from Store admin.</p>
+                <p>Pick the closest match. 7-Eleven and gas keep the full shop pack. Everything else starts with a few reminders — add more later from Business admin.</p>
             </div>
             <div class="error-message" id="profileError"></div>
             <div id="profileBody"><div class="loading show">Loading…</div></div>
@@ -240,7 +240,7 @@
         <div id="tasksPanel" class="step-panel">
             <div class="auth-header">
                 <h1>What should WhatsApp remind the team about?</h1>
-                <p id="tasksIntro">Tick every item you want an alert for. Each one fires at a time on a shift until someone sends proof. Untick the rest — you can add more later from Store admin.</p>
+                <p id="tasksIntro">Tick every item you want an alert for. Each one fires at a time on a shift until someone sends proof. Untick the rest — you can add more later from Business admin.</p>
             </div>
             <div class="error-message" id="tasksError"></div>
             <div id="tasksBody"></div>
@@ -265,7 +265,7 @@
             <div class="form-group" id="sampleCloseBlock">
                 <label for="sampleClose">Typical daily close</label>
                 <textarea id="sampleClose" maxlength="2000" rows="5" placeholder="Rockaway 10/12 cash 106 card 334 gas 1355 Lays 142 deposit 1653"></textarea>
-                <div class="help-text">Attach a real close photo for this store. We list the lines we see; you say what each one is (fuel, store credit, cash, ignore). A new POS does not need a code change — only this map. Add a second page later (cash / tender) from Tasks → Store admin. The photo is not stored.</div>
+                <div class="help-text">Attach a real close photo for this business. We list the lines we see; you say what each one is (fuel, store credit, cash, ignore). A new POS does not need a code change — only this map. Add a second page later (cash / tender) from Tasks → Business admin. The photo is not stored.</div>
                 <input type="file" id="sampleClosePhoto" accept="image/jpeg,image/png,image/webp,image/gif" style="margin-top: 8px;">
                 <img id="sampleClosePreview" alt="" style="display: none; max-width: 220px; margin-top: 8px; border-radius: 8px; border: 1px solid var(--border);">
                 <div id="pictureMapBlock" style="margin-top: 16px;">
@@ -295,7 +295,7 @@
         <div id="toolsPanel" class="step-panel">
             <div class="auth-header">
                 <h1>Which tools do you want?</h1>
-                <p>Pick where this business connects. You can finish linking Sheets or Slack later in Store admin — this just turns them on for the store.</p>
+                <p>Pick where this business connects. You can finish linking Sheets or Slack later in Business admin — this just turns them on for the business.</p>
             </div>
             <div class="error-message" id="toolsError"></div>
             <div class="tools-grid" id="toolsGrid" role="group" aria-label="Business tools"></div>
@@ -318,7 +318,7 @@
                     <div class="number-highlight" id="opsNumberDisplay">See dashboard for number</div>
                 </li>
                 <li>From <strong>your registered WhatsApp number</strong>, send opsAi a message in a direct chat (e.g. “hi” or “cash 100 card 200”).</li>
-                <li>Add your staff’s WhatsApp numbers on <strong>Tasks &amp; alerts → Store admin</strong>. They message the same opsAi number directly.</li>
+                <li>Add your staff’s WhatsApp numbers on <strong>Tasks &amp; alerts → Business admin</strong>. They message the same opsAi number directly.</li>
                 <li>opsAi replies with what it read. Reply <strong>OK</strong> to save it, or FIX to correct it.</li>
             </ol>
             <div class="number-highlight" id="tasksHint" style="font-size: 14px; font-weight: 600; display: none;"></div>
@@ -341,7 +341,7 @@
 
         let opsDisplayNumber = null;
 
-        // ?setup=S001: an existing store finishing (or redoing) its setup. No store to create, no redirect to the dashboard.
+        // ?setup=S001: an existing business finishing (or redoing) its setup. No business to create, no redirect to the dashboard.
         const setupStoreParam = new URLSearchParams(window.location.search).get('setup');
         const isSetupMode = Boolean(setupStoreParam);
 
@@ -427,7 +427,7 @@
             {
                 id: 'books',
                 name: 'Books',
-                blurb: 'Ask standing and invoices in Crew ($20/store add-on).',
+                blurb: 'Ask standing and invoices in Crew ($20/business add-on).',
                 icon: '/integrations/books.svg',
                 defaultWanted: false,
                 badge: 'Add-on'
@@ -514,10 +514,10 @@
                     ? 'Who do you order from?'
                     : 'How do you send the day’s numbers?';
             document.getElementById('samplesIntro').textContent = vendors && samples
-                ? 'Attach this store’s close photo. We list the lines; you say what fuel, store credit, and cash are. Set vendors so an order photo comes back as a list to confirm.'
+                ? 'Attach this business’s close photo. We list the lines; you say what fuel, store credit, and cash are. Set vendors so an order photo comes back as a list to confirm.'
                 : vendors
                     ? 'Set the vendors you order from so a photo or typed list comes back as a list to confirm.'
-                    : 'Attach this store’s close photo. We list the lines; you mark fuel, store credit, cash, or ignore.';
+                    : 'Attach this business’s close photo. We list the lines; you mark fuel, store credit, cash, or ignore.';
             if (vendors) renderVendors();
             renderPictureMapEditor();
         }
@@ -721,11 +721,11 @@
         function renderTasks() {
             const kind = setupState && setupState.storeType;
             document.getElementById('tasksIntro').textContent = kind === 'personal'
-                ? 'A few daily nags are ticked. They come on WhatsApp even in a 1:1 chat. Tick more now, or add them later from Store admin.'
+                ? 'A few daily nags are ticked. They come on WhatsApp even in a 1:1 chat. Tick more now, or add them later from Business admin.'
                 : kind === 'seven_eleven' || kind === 'convenience' || kind === 'gas_station'
                 ? (kind === 'seven_eleven'
-                    ? '7-Eleven: daily close plus 7Clean photo checks are ticked. Untick what you do not need. Upload an inspection PDF later on Store admin if you want the failed standards added.'
-                    : 'The usual shop pack is ticked — close, open, cleaning, restock. Untick what you do not run. You can add lottery or invoices later from Store admin.')
+                    ? '7-Eleven: daily close plus 7Clean photo checks are ticked. Untick what you do not need. Upload an inspection PDF later on Business admin if you want the failed standards added.'
+                    : 'The usual shop pack is ticked — close, open, cleaning, restock. Untick what you do not run. You can add lottery or invoices later from Business admin.')
                 : kind === 'shipping'
                 ? 'UPS / pack-and-ship: who is on the counter, held packages, last drop-off. Cooler or shelves only appear if you ticked them on the last screen.'
                 : kind === 'appointments'
@@ -748,7 +748,7 @@
                             (s.standardId ? esc(s.standardId) + ' ' : '') + esc(s.title) + '</strong>' +
                             '<div class="when">' + esc(s.scheduleText) + (s.shift ? ' · ' + esc(s.shift) : '') + proof + '</div></span></label>';
                     }).join('');
-            }).join('') + '<div class="help-text" style="margin-top: 14px;">Need something that is not on this list? After setup, Store admin → + New task: name it, pick a category, shift, time, and daily / weekly / monthly.</div>' +
+            }).join('') + '<div class="help-text" style="margin-top: 14px;">Need something that is not on this list? After setup, Business admin → + New task: name it, pick a category, shift, time, and daily / weekly / monthly.</div>' +
                 (setupState && setupState.storeType === 'seven_eleven'
                 ? '<div class="help-text">Have your last 7-Eleven inspection report? Upload it later on Tasks &amp; alerts → Inspection, and it will add a task for everything the inspector found.</div>' : '');
         }
@@ -981,7 +981,7 @@
                 const preset = (window._picPresets || []).find(function (p) { return p.id === presetBtn.getAttribute('data-pic-preset'); });
                 if (!preset) return;
                 fillPictureMap(preset);
-                setPicMapStatus('Starter layout loaded. Rename the lines to match this store.');
+                setPicMapStatus('Starter layout loaded. Rename the lines to match this business.');
                 return;
             }
             if (e.target.id === 'addPicFieldBtn') {
@@ -1095,17 +1095,17 @@
                 const hint = document.getElementById('tasksHint');
                 hint.style.display = '';
                 hint.textContent = tasksAdded > 0
-                    ? tasksAdded + ' reminders are scheduled. They come to your team on WhatsApp at the times you chose. Owners and managers can edit any of them on Tasks & alerts → Store admin.'
-                    : 'Hours and shifts are saved. Add reminders on Tasks & alerts → Store admin when you are ready.';
+                    ? tasksAdded + ' reminders are scheduled. They come to your team on WhatsApp at the times you chose. Owners and managers can edit any of them on Tasks & alerts → Business admin.'
+                    : 'Hours and shifts are saved. Add reminders on Tasks & alerts → Business admin when you are ready.';
             }
             document.getElementById('successStoreId').textContent = storeId;
-            // The dashboard opens on the store that was just added.
+            // The dashboard opens on the business that was just added.
             sessionStorage.setItem('selectStoreId', storeId);
             if (isAddMode) {
                 document.querySelector('#successPanel h1').textContent = 'Business added';
                 document.querySelector('#successPanel .auth-header p').innerHTML =
-                    'Business <span class="store-badge">' + storeId + '</span> is ready. Keep messaging opsAi from the same WhatsApp number and include the store name, for example: <strong>' +
-                    (storeName || 'Store').replace(/[<>&"]/g, '') + ' cash 100 card 200 gas 500</strong>.';
+                    'Business <span class="store-badge">' + storeId + '</span> is ready. Keep messaging opsAi from the same WhatsApp number and include the business name, for example: <strong>' +
+                    (storeName || 'Business').replace(/[<>&"]/g, '') + ' cash 100 card 200 gas 500</strong>.';
                 document.querySelector('#successPanel .steps-list').style.display = 'none';
                 return;
             }

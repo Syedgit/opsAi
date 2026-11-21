@@ -40,7 +40,7 @@ export type AgentCatalogEntry = {
   /** Specialty label (Close, Finance, …). */
   role: string;
   job: string;
-  /** Included in base $25/store vs paid add-on. */
+  /** Included in base $25/business vs paid add-on. */
   pricing: 'included' | 'addon';
   monthlyUsd: number;
   /** Core agents cannot be turned off. */
@@ -288,7 +288,7 @@ export function agentsBoardPayload(profileJson: unknown, storeType?: StoreType |
       enabled: config.enabled[entry.id],
       canToggle: !entry.core && (entry.id !== 'books' || true),
     })),
-    marketingLine: 'Your store agents — you confirm every money post.',
+    marketingLine: 'Your business agents — you confirm every money post.',
   };
 }
 

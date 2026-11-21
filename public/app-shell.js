@@ -106,7 +106,7 @@
       '<div class="app-install-sheet" role="dialog" aria-labelledby="appInstallTitle">' +
         '<div class="app-install-handle"></div>' +
         '<h2 id="appInstallTitle">Open opsAi as an app</h2>' +
-        '<p>Add it to your Home Screen. It opens full screen — no browser bar, like a store app.</p>' +
+        '<p>Add it to your Home Screen. It opens full screen — no browser bar, like a business app.</p>' +
         (ios
           ? '<ol><li>Tap the Share button</li><li>Tap <strong>Add to Home Screen</strong></li><li>Open the opsAi icon</li></ol>'
           : '<p>Use the button below, or Chrome’s Install app menu.</p>') +

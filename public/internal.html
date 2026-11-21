@@ -107,33 +107,33 @@
                 if (!res.ok) throw new Error(data.error || 'Could not load usage');
                 const t = data.totals;
                 const b = data.billing || {};
-                lead.textContent = 'A store is live when a WhatsApp group is linked or a report has been saved. Billing is $' +
-                    (b.priceUsdPerStore || 25) + ' per store per month from your database, not a live Stripe pull. Generated ' +
+                lead.textContent = 'A business is live when a WhatsApp group is linked or a report has been saved. Billing is $' +
+                    (b.priceUsdPerStore || 25) + ' per business per month from your database, not a live Stripe pull. Generated ' +
                     when(data.generatedAt) + '.';
                 root.innerHTML =
                     '<div class="stats">' +
                         '<div class="stat"><b>' + t.users + '</b><small>Owner accounts</small></div>' +
                         '<div class="stat"><b>' + t.loggedIn7 + '</b><small>Logged in last 7 days</small></div>' +
-                        '<div class="stat"><b>' + t.storesActive + '</b><small>Active stores</small></div>' +
-                        '<div class="stat"><b>' + t.storesLive + '</b><small>Stores actually using it</small></div>' +
+                        '<div class="stat"><b>' + t.storesActive + '</b><small>Active businesses</small></div>' +
+                        '<div class="stat"><b>' + t.storesLive + '</b><small>Businesses actually using it</small></div>' +
                         '<div class="stat"><b>' + t.whatsappGroups + '</b><small>Linked WhatsApp groups</small></div>' +
                         '<div class="stat"><b>' + t.reports7 + '</b><small>Reports last 7 days</small></div>' +
                     '</div>' +
                     '<h2 class="table-title">Billing</h2>' +
-                    '<p class="lead">MRR is paying accounts only. Trial pipeline is what those stores would pay if they convert. Live run-rate is live stores × $25, whether or not they have a card.</p>' +
+                    '<p class="lead">MRR is paying accounts only. Trial pipeline is what those businesses would pay if they convert. Live run-rate is live businesses × $25, whether or not they have a card.</p>' +
                     '<div class="stats">' +
                         '<div class="stat"><b>' + money(b.mrrUsd) + '</b><small>MRR (paying)</small></div>' +
                         '<div class="stat"><b>' + money(b.arrUsd) + '</b><small>ARR</small></div>' +
                         '<div class="stat"><b>' + money(b.trialPipelineUsd) + '</b><small>Trial pipeline / mo</small></div>' +
-                        '<div class="stat"><b>' + money(b.liveRunRateUsd) + '</b><small>If every live store paid</small></div>' +
+                        '<div class="stat"><b>' + money(b.liveRunRateUsd) + '</b><small>If every live business paid</small></div>' +
                         '<div class="stat"><b>' + money(b.atRiskUsd) + '</b><small>Trials ending in 3 days</small></div>' +
-                        '<div class="stat"><b>' + (b.billedStores || 0) + '</b><small>Stores on a paid plan</small></div>' +
+                        '<div class="stat"><b>' + (b.billedStores || 0) + '</b><small>Businesses on a paid plan</small></div>' +
                         '<div class="stat"><b>' + (b.stripeSubscriptions || 0) + '</b><small>Stripe subscriptions</small></div>' +
                         '<div class="stat"><b>' + (b.stripeReady ? 'on' : 'off') + '</b><small>Stripe checkout</small></div>' +
                     '</div>' +
                     '<div class="charts">' +
                         '<div class="chart"><h2>Owner signups by week (UTC)</h2>' + bars(data.signupsByWeek) + '</div>' +
-                        '<div class="chart"><h2>Stores created by week (UTC)</h2>' + bars(data.storesByWeek) + '</div>' +
+                        '<div class="chart"><h2>Businesses created by week (UTC)</h2>' + bars(data.storesByWeek) + '</div>' +
                         '<div class="chart"><h2>Confirmed reports by week (UTC)</h2>' + bars(data.reportsByWeek) + '</div>' +
                         '<div class="chart"><h2>Plans</h2>' + bars(b.byStatus || [], 'status') + '</div>' +
                     '</div>' +
