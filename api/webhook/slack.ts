@@ -91,7 +91,8 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
     const result = await handleSlackAsk(prisma, event);
     logApp('slack.webhook', { handled: result.ok, reason: result.reason || null, eventId: payload.event_id || null });
-    res.status(200).json({ ok: true, ...result });
+    // Always ack Slack; surface ask outcome under handled (result also has ok).
+    res.status(200).json({ ok: true, handled: result.ok, reason: result.reason || null });
   } catch (error: unknown) {
     logAppError('slack.webhook', serializeError(error));
     res.status(200).json({ ok: true, handled: false });
