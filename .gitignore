@@ -50,3 +50,6 @@ samples/cases/
 
 # Inspector reports: confidential and contain names and emails
 Debrief_Report_*.pdf
+
+# Local competitive screenshots (not for deploy)
+zenzap/

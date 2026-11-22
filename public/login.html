@@ -14,23 +14,24 @@
     <link rel="apple-touch-icon" href="/icon-180.png">
     <link rel="icon" type="image/png" href="/icon-192.png">
     <link rel="stylesheet" href="/app-shell.css?v=3">
+    <link rel="stylesheet" href="/app-ui.css?v=2">
     <script src="/app-shell.js?v=2"></script>
     <title>Start — opsAi</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
+            /* Dark shell overrides shared light tokens from /app-ui.css */
             --bg: #0b1f17;
             --bg-card: #102820;
             --text: #f4faf6;
             --text-muted: #9bb5a8;
-            --primary: #25D366;
             --primary-dark: #1ebe57;
             --line: rgba(255,255,255,0.12);
             --error: #ff8a80;
             --email-link: #7dd3a7;
         }
         body {
-            font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+            font-family: var(--font);
             background:
                 radial-gradient(ellipse 80% 50% at 50% -10%, rgba(37, 211, 102, 0.22), transparent 55%),
                 var(--bg);

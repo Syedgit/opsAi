@@ -13,22 +13,22 @@
     <link rel="apple-touch-icon" href="/icon-180.png">
     <link rel="icon" type="image/png" href="/icon-192.png">
     <link rel="stylesheet" href="/app-shell.css?v=4">
+    <link rel="stylesheet" href="/app-ui.css?v=2">
     <script src="/app-shell.js?v=3"></script>
     <title>opsAi · Ask agents</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
-            --bg: #f3f4f6; --card: #fff; --text: #111827; --muted: #6b7280;
-            --border: #e5e7eb; --accent: #111827; --ok: #059669; --soft: #f9fafb;
+            --accent: #111827;
+            --soft: var(--bg-light);
         }
         html { -webkit-text-size-adjust: 100%; }
         body {
-            font-family: "Segoe UI", ui-sans-serif, system-ui, -apple-system, sans-serif;
+            font-family: var(--font);
             background:
-                radial-gradient(1200px 420px at 10% -10%, #e8f8ef 0%, transparent 55%),
-                radial-gradient(900px 360px at 100% 0%, #eef2ff 0%, transparent 50%),
+                radial-gradient(1200px 420px at 10% -10%, var(--primary-soft) 0%, transparent 55%),
                 var(--bg);
-            color: var(--text); min-height: 100dvh;
+            color: var(--text); min-height: 100dvh; font-size: var(--font-size);
         }
         header {
             background: rgba(17,24,39,.96); color: #fff; padding: 14px 20px;

@@ -14,25 +14,18 @@
     <link rel="apple-touch-icon" href="/icon-180.png">
     <link rel="icon" type="image/png" href="/icon-192.png">
     <link rel="stylesheet" href="/app-shell.css?v=3">
+    <link rel="stylesheet" href="/app-ui.css?v=2">
     <script src="/app-shell.js?v=2"></script>
     <title>Pricing - opsAi</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        :root {
-            --primary: #25D366;
-            --primary-dark: #128C7E;
-            --secondary: #075E54;
-            --text: #1a1a1a;
-            --text-light: #666;
-            --bg: #ffffff;
-            --bg-light: #f8f9fa;
-            --border: #e0e0e0;
-        }
+        /* Tokens from /app-ui.css */
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            font-family: var(--font);
             color: var(--text);
             background: #fff;
             line-height: 1.6;
+            font-size: var(--font-size);
         }
         nav {
             position: sticky; top: 0;
@@ -52,15 +45,16 @@
         .logo img { height: 42px; width: auto; max-width: min(240px, 52vw); }
         nav a { color: var(--text); text-decoration: none; font-weight: 500; }
         .btn-primary {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-            color: white; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600;
+            background: var(--primary);
+            color: white; padding: 12px 28px; border-radius: var(--radius); text-decoration: none; font-weight: 650;
         }
+        .btn-primary:hover { background: var(--primary-dark); }
         .hero { text-align: center; padding: 72px 24px 24px; }
-        .hero h1 { font-size: clamp(32px, 5vw, 44px); margin-bottom: 12px; }
+        .hero h1 { font-size: clamp(32px, 5vw, 44px); margin-bottom: 12px; letter-spacing: var(--title-tracking); }
         .hero p { color: var(--text-light); font-size: 18px; max-width: 640px; margin: 0 auto; }
-        .badge { display: inline-block; background: #e8f8ef; color: var(--primary-dark); font-weight: 600; padding: 6px 14px; border-radius: 999px; margin-bottom: 16px; font-size: 14px; }
+        .badge { display: inline-block; background: var(--primary-soft); color: var(--primary-dark); font-weight: 600; padding: 6px 14px; border-radius: var(--radius-pill); margin-bottom: 16px; font-size: 14px; }
         .plans { max-width: 880px; margin: 40px auto 24px; padding: 0 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }
-        .card { background: white; border: 2px solid var(--border); border-radius: 16px; padding: 32px; }
+        .card { background: white; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 32px; box-shadow: var(--shadow-sm); }
         .card.popular { border-color: var(--primary); box-shadow: 0 8px 30px rgba(37, 211, 102, 0.15); }
         .card h2 { font-size: 22px; margin-bottom: 4px; }
         .card .price { font-size: 40px; font-weight: 700; margin: 12px 0 4px; }

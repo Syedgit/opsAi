@@ -20,8 +20,9 @@
     <link rel="apple-touch-startup-image" href="/splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
     <link rel="apple-touch-startup-image" href="/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
     <link rel="apple-touch-startup-image" href="/splash-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
-    <link rel="stylesheet" href="/app-shell.css?v=3">
-    <script src="/app-shell.js?v=2"></script>
+    <link rel="stylesheet" href="/app-shell.css?v=4">
+    <link rel="stylesheet" href="/app-ui.css?v=2">
+    <script src="/app-shell.js?v=3"></script>
     <title>Sign Up - opsAi</title>
     <style>
         * {
@@ -29,36 +30,14 @@
             padding: 0;
             box-sizing: border-box;
         }
-        
-        :root {
-            --primary: #25D366;
-            --primary-dark: #128C7E;
-            --secondary: #075E54;
-            --text: #1a1a1a;
-            --text-light: #666;
-            --bg: #ffffff;
-            --bg-light: #f8f9fa;
-            --border: #e0e0e0;
-            --error: #e74c3c;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, var(--bg-light) 0%, #ffffff 100%);
-            min-height: 100vh;
-            min-height: 100dvh;
-            display: flex;
-            align-items: flex-start;
-            justify-content: center;
-            overflow-y: auto;
-            padding: max(20px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom));
-        }
+        /* Tokens from /app-ui.css */
         
         .auth-container {
-            background: white;
-            border-radius: 16px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
-            padding: 40px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-card);
+            padding: 36px 32px;
             width: 100%;
             max-width: 420px;
             margin-top: auto;
@@ -71,10 +50,12 @@
         }
         
         .auth-header h1 {
-            font-size: 32px;
+            font-size: clamp(1.5rem, 4vw, 1.85rem);
             font-weight: 700;
+            letter-spacing: var(--title-tracking);
             color: var(--text);
             margin-bottom: 8px;
+            line-height: 1.2;
         }
         
         .auth-header p {
@@ -101,49 +82,53 @@
         
         .form-group label {
             display: block;
-            margin-bottom: 8px;
-            color: var(--text);
+            margin-bottom: 6px;
+            color: var(--text-light);
             font-weight: 500;
-            font-size: 14px;
+            font-size: 13px;
         }
         
         .form-group input {
             width: 100%;
-            padding: 14px 16px;
-            border: 2px solid var(--border);
-            border-radius: 8px;
+            padding: 12px 14px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            background: var(--bg-light);
             font-size: 16px;
             min-height: 44px;
-            transition: border-color 0.3s;
+            font-family: inherit;
+            color: var(--text);
+            transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
         }
         
         .form-group input:focus {
             outline: none;
             border-color: var(--primary);
+            background: #fff;
+            box-shadow: var(--focus-ring);
         }
         
         .btn-primary {
             width: 100%;
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-            color: white;
-            padding: 14px;
+            background: var(--primary) !important;
+            background-image: none !important;
+            color: #fff;
+            padding: 14px 20px;
             border: none;
-            border-radius: 8px;
+            border-radius: var(--radius-pill);
             font-size: 16px;
-            font-weight: 600;
+            font-weight: 700;
             cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
+            min-height: 50px;
         }
         
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(37, 211, 102, 0.3);
+        .btn-primary:hover:not(:disabled) {
+            background: var(--primary-dark) !important;
         }
         
         .btn-primary:disabled {
-            opacity: 0.6;
+            opacity: 0.55;
             cursor: not-allowed;
-            transform: none;
         }
         
         .error-message {
@@ -197,7 +182,7 @@
         }
     </style>
 </head>
-<body>
+<body class="ops-auth-page">
     <div id="appSplash" aria-hidden="true"><img src="/icon-192.png" alt=""><span>opsAi</span></div>
     <div class="auth-container">
         <a href="/" class="logo-link"><img src="/logo.jpg" alt="Operation Intelligence"></a>

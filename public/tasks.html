@@ -21,29 +21,41 @@
     <link rel="apple-touch-startup-image" href="/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
     <link rel="apple-touch-startup-image" href="/splash-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
     <link rel="stylesheet" href="/app-shell.css?v=4">
+    <link rel="stylesheet" href="/app-ui.css?v=2">
     <script src="/app-shell.js?v=3"></script>
     <title>opsAi · Tasks &amp; alerts</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        :root {
-            --primary: #25D366; --primary-dark: #128C7E; --secondary: #075E54;
-            --bg: #f5f7fa; --card: #fff; --text: #1a1a1a; --light: #666; --border: #e0e0e0;
-            --ok: #10b981; --warn: #f59e0b; --bad: #ef4444;
-        }
+        /* Tokens from /app-ui.css */
         html { -webkit-text-size-adjust: 100%; overflow-x: clip; overflow-y: auto; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: var(--bg); color: var(--text); min-height: 100dvh; overflow-x: clip; overflow-y: auto; }
-        header { background: #111; color: #fff; padding: 14px 20px; padding-top: max(14px, env(safe-area-inset-top)); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-        header a { color: #fff; text-decoration: none; opacity: .85; font-size: 14px; }
-        header .brand-logo { line-height: 0; opacity: 1; background: #fff; border-radius: 8px; padding: 4px 8px; }
-        header .brand-logo img { display: block; height: 28px; width: auto; }
-        header h1 { font-size: 18px; flex: 1; min-width: 8rem; }
-        header select { padding: 8px 10px; border-radius: 6px; border: none; font-size: 16px; width: auto; min-width: 0; flex: 1; max-width: 100%; font-family: inherit; }
-        main { max-width: 1000px; margin: 0 auto; padding: 20px 16px 60px; }
-        .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
-        .tab { padding: 10px 18px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); cursor: pointer; font-size: 14px; }
-        .tab.active { background: var(--primary); color: #fff; border-color: var(--primary); font-weight: 600; }
-        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
-        .card h2 { font-size: 16px; margin-bottom: 10px; }
+        body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100dvh; overflow-x: clip; overflow-y: auto; font-size: var(--font-size); }
+        header {
+            background: #fff; color: var(--text); padding: 12px 20px;
+            padding-top: max(12px, env(safe-area-inset-top));
+            display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+            border-bottom: 1px solid var(--border); box-shadow: var(--shadow-sm);
+        }
+        header a { color: var(--text-light); text-decoration: none; font-size: 14px; font-weight: 550; }
+        header a:hover { color: var(--text); }
+        header .brand-logo { line-height: 0; background: transparent; border-radius: 8px; padding: 0; }
+        header .brand-logo img { display: block; height: 30px; width: auto; }
+        header h1 { font-size: 17px; font-weight: 700; letter-spacing: var(--title-tracking); flex: 1; min-width: 8rem; }
+        header select {
+            padding: 9px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+            background: var(--bg-light); font-size: 15px; width: auto; min-width: 0; flex: 1; max-width: 100%; font-family: inherit;
+        }
+        main { max-width: 1000px; margin: 0 auto; padding: 24px 16px 72px; }
+        .tabs { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+        .tab {
+            padding: 10px 18px; border-radius: var(--radius-pill); border: 1px solid var(--border);
+            background: var(--card); cursor: pointer; font-size: 14px; font-weight: 550;
+        }
+        .tab.active { background: var(--primary); color: #fff; border-color: var(--primary); font-weight: 700; }
+        .card {
+            background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+            padding: 20px; margin-bottom: 16px; box-shadow: var(--shadow-card);
+        }
+        .card h2 { font-size: 16px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 10px; }
         .muted { color: var(--light); font-size: 13px; }
         .scores { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
         .score { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
@@ -58,8 +70,9 @@
         .b-open { background: #fef3c7; color: #92400e; } .b-late { background: #fee2e2; color: #991b1b; }
         .b-done { background: #d1fae5; color: #065f46; } .b-missed { background: #fee2e2; color: #991b1b; }
         .b-off { background: #e5e7eb; color: #374151; }
-        button { cursor: pointer; font-size: 14px; border-radius: 8px; padding: 8px 14px; border: 1px solid var(--border); background: #fff; font-family: inherit; }
-        button.primary { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+        button { cursor: pointer; font-size: 14px; border-radius: var(--radius-pill); padding: 9px 16px; border: 1px solid var(--border); background: #fff; font-family: inherit; font-weight: 550; }
+        button.primary { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 700; }
+        button.primary:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
         button.danger { color: var(--bad); }
         button.small { padding: 4px 10px; font-size: 12px; }
         button:disabled { opacity: .5; cursor: default; }
