@@ -35,6 +35,37 @@ export const GREETING_REPLY = '👋 Hi! Send the day\'s numbers (like: Rockaway 
 export const NO_DATA_REPLY =
   "👍 Nothing to save from that. Send the day's numbers, an invoice, deposit or order photo, or describe an equipment problem. Reply HELP for commands.";
 
+/** Fallback when the caller cannot look up the store/sheet. Prefer whereSavedReply() with store context. */
+export const WHERE_SAVED_REPLY =
+  '📍 Confirmed entries go to your opsAi dashboard (Daily sales / Invoices for that store). If a Google Sheet is linked under Tools, they are written there too. Reply TODAY for what was saved today, or DASHBOARD for a sign-in link.';
+
+/** "Where did you save", "where is it saved", "saved where?", etc. */
+export function isWhereSavedQuestion(text: string): boolean {
+  const t = text.trim();
+  if (!t || t.length > 120) return false;
+  return (
+    /\bwhere\b[\s\S]{0,40}\b(save[ds]?|saving|stored?|wrote|written|put)\b/i.test(t) ||
+    /\b(save[ds]?|stored?|wrote|written)\b[\s\S]{0,40}\bwhere\b/i.test(t) ||
+    /\bwhere (is|are|did|does|was|were|do|can) (it|they|that|this|you|the)\b/i.test(t)
+  );
+}
+
+/** Store-aware answer after OK / when someone asks where an entry went. */
+export function whereSavedReply(input: {
+  storeName?: string | null;
+  sheetConnected?: boolean;
+}): string {
+  const name = (input.storeName || '').trim() || 'that store';
+  const sheet = input.sheetConnected
+    ? 'They are also written to the Google Sheet linked under Tools.'
+    : 'No Google Sheet is linked yet — connect one under Tools to mirror entries there.';
+  return [
+    `📍 Confirmed entries for ${name} are on your opsAi dashboard → Daily sales / Invoices.`,
+    sheet,
+    'Reply TODAY for what was saved today, or DASHBOARD for a sign-in link.',
+  ].join('\n');
+}
+
 export function decideAiUse(input: { text: string; hasMedia: boolean }): AiGate {
   if (input.hasMedia) return { useAi: true };
 
@@ -45,6 +76,7 @@ export function decideAiUse(input: { text: string; hasMedia: boolean }): AiGate 
 
   if (EMOJI_ONLY.test(text) || ACK.test(text)) return { useAi: false, reply: null, classification: 'CHATTER' };
   if (GREETING.test(text)) return { useAi: false, reply: GREETING_REPLY, classification: 'CHATTER' };
+  if (isWhereSavedQuestion(text)) return { useAi: false, reply: WHERE_SAVED_REPLY, classification: 'CHATTER' };
 
   // Words only, no numbers, no problem: there is nothing to extract.
   return { useAi: false, reply: NO_DATA_REPLY, classification: 'NO_DATA' };

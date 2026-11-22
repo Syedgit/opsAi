@@ -15,6 +15,8 @@ import { sendWhatsAppMessage } from './whatsappMessaging';
 import { createOpenAiUnderstander } from './understanding/extractor';
 import { understandAndRespond } from './understanding/service';
 import { routeIntent } from './understanding/intent';
+import { isWhereSavedQuestion, whereSavedReply } from './understanding/gate';
+import { isSheetConnected } from './googleSheetsRows';
 import { tryTaskEvidence } from './tasks/evidence';
 import { tryWhatsAppAiChat } from './aiChatAsk';
 import { checkAiBudget } from './understanding/budget';
@@ -25,6 +27,8 @@ import {
   isAgentEnabled,
   type WaAgentPath,
 } from './agents/crew';
+import { invoicePayload } from './understanding/plan';
+import type { Invoice } from './understanding/schema';
 
 function logWaPath(fields: {
   messageId: string;
@@ -294,7 +298,18 @@ async function handleInboundWhatsApp(
 
   if (intent.layer === 'execute' && (intent.action === 'chatter' || intent.action === 'no_data')) {
     logWaPath({ messageId, from, storeId, path: intent.action });
-    if (intent.reply) await sendWhatsAppMessage(prisma, phoneE164, intent.reply, storeId);
+    let reply = intent.reply;
+    if (reply && text && isWhereSavedQuestion(text)) {
+      const store = await prisma.storeConfig.findUnique({
+        where: { storeId },
+        select: { storeName: true, sheetId: true },
+      });
+      reply = whereSavedReply({
+        storeName: store?.storeName,
+        sheetConnected: isSheetConnected(store?.sheetId),
+      });
+    }
+    if (reply) await sendWhatsAppMessage(prisma, phoneE164, reply, storeId);
     await updateMessageLog(prisma, messageId, { classification: intent.classification, processed: true, storeId });
     return;
   }
@@ -411,7 +426,7 @@ async function executeRuleExtraction(
     return;
   }
 
-  const fields = args.fields ?? extractDataFromText(type, args.text || 'image').fields;
+  let fields = args.fields ?? extractDataFromText(type, args.text || 'image').fields;
   const confidence = args.confidence ?? 0.6;
   if (args.text) {
     const left = unusedNumbers(type, args.text, fields);
@@ -429,6 +444,23 @@ async function executeRuleExtraction(
       });
       return;
     }
+  }
+
+  // Rules invoices used to be flat {vendor,amount} — normalize so FIX/OK/Sheets match the AI path.
+  if (type === ClassificationType.INVOICE_EXPENSE && fields._kind !== 'invoice' && fields._kind !== 'invoice_payment') {
+    const total = typeof fields.amount === 'number' ? fields.amount : Number(fields.amount) || 0;
+    const vendorName = typeof fields.vendor === 'string' ? fields.vendor : 'Unknown';
+    const paid = fields.paid === 'Y' || fields.paid === true;
+    const invoice: Invoice = {
+      vendorName,
+      invoiceNumber: null,
+      invoiceDate: null,
+      lineItems: [],
+      total,
+      paymentStatus: paid ? 'paid_other' : 'unknown',
+      ...(paid ? { payments: [{ amount: total, method: 'other' as const }] } : {}),
+    };
+    fields = invoicePayload(invoice, []);
   }
 
   const actionId = await createPendingAction(

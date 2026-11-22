@@ -319,14 +319,23 @@ async function handleOK(prisma: PrismaClient, phoneE164: string, inboundGroupId?
   }
 
   const count = batch.length > 1 ? `${batch.length} entries` : 'entry';
+  const storeIds = [...new Set(batch.map((p) => p.storeId))];
+  const storeRows = await prisma.storeConfig.findMany({
+    where: { storeId: { in: storeIds } },
+    select: { storeId: true, storeName: true },
+  });
+  const nameById = new Map(storeRows.map((s) => [s.storeId, s.storeName || s.storeId]));
+  const storeNames = storeIds.map((id) => nameById.get(id) || id);
+  const where =
+    storeNames.length === 1 ? ` for ${storeNames[0]}` : storeNames.length > 1 ? ` for ${storeNames.join(' and ')}` : '';
   let message: string;
   if (sheetsFailed > 0) {
     // Never claim a sheet was updated when it was not.
-    message = `✅ Saved ${count} to your dashboard.\n⚠️ The Google Sheet could not be updated this time.`;
+    message = `✅ Saved ${count}${where} to your dashboard (Daily sales / Invoices).\n⚠️ The Google Sheet could not be updated this time.`;
   } else if (sheetsWritten > 0) {
-    message = `✅ Saved ${count} to your dashboard and Google Sheet.`;
+    message = `✅ Saved ${count}${where} to your dashboard (Daily sales / Invoices) and Google Sheet.`;
   } else {
-    message = `✅ Saved ${count} to your dashboard.`;
+    message = `✅ Saved ${count}${where} to your dashboard (Daily sales / Invoices).`;
   }
 
   if (softFlags.length > 0) message += `\n\n${softFlags.join('\n\n')}`;
@@ -636,14 +645,12 @@ async function handleFix(
     data: { payloadJson: payload as object },
   });
 
-  await sendWhatsAppMessage(
-    prisma,
-    phoneE164,
-    `🔧 Updated ${field}. Reply OK to confirm or FIX to change more.`,
-    pending.storeId
-  );
-
-  return { success: true, message: `Field "${field}" updated.`, storeId: pending.storeId };
+  // One reply only — processWhatsAppMessage sends result.message (do not sendWhatsApp here).
+  return {
+    success: true,
+    message: `🔧 Updated ${field}. Reply OK to confirm or FIX to change more.`,
+    storeId: pending.storeId,
+  };
 }
 
 async function handleStatus(prisma: PrismaClient, phoneE164: string): Promise<CommandResult> {

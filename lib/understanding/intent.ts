@@ -1,7 +1,7 @@
 import { ClassificationType } from '@prisma/client';
 import { classifyMessage } from '../messageClassifier';
 import { extractDataFromText, unusedNumbers } from '../messageExtraction';
-import { decideAiUse, GREETING_REPLY, NO_DATA_REPLY } from './gate';
+import { decideAiUse, GREETING_REPLY, NO_DATA_REPLY, WHERE_SAVED_REPLY } from './gate';
 
 /**
  * Intent → reason (optional) → execute.
@@ -91,4 +91,4 @@ export function routeIntent(input: {
   };
 }
 
-export { GREETING_REPLY, NO_DATA_REPLY };
+export { GREETING_REPLY, NO_DATA_REPLY, WHERE_SAVED_REPLY };

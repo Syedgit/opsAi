@@ -1082,20 +1082,33 @@
                 : '<span class="tool-status off">Not connected</span>';
             let actions = '';
             if (!gs.credentialsReady) {
-                actions += '<p class="muted" style="font-size:12px;margin:0 0 8px;">Server Sheets credentials missing — link still saves.</p>';
-            }
-            if (gs.shareWith) {
-                actions += '<p class="muted" style="font-size:12px;margin:0 0 8px;">Share Editor with <code id="sheetsShareEmail">' + esc(gs.shareWith) + '</code> ' +
-                    '<button type="button" class="small" id="copySheetsEmail">Copy</button></p>';
-            }
-            if (gs.connected) {
-                actions += '<p style="margin:0 0 8px;font-size:13px;">Sheet id <code>' + esc(gs.sheetId || '') + '</code></p>';
+                actions += '<p class="muted" style="font-size:12px;margin:0 0 8px;">opsAi Sheets is not set up on the server yet. Ask the host to add Sheets credentials.</p>';
+            } else if (gs.connected) {
+                actions += '<p style="margin:0 0 8px;font-size:13px;">Linked · id <code>' + esc(gs.sheetId || '') + '</code></p>';
+                if (gs.shareWith) {
+                    actions += '<p class="muted" style="font-size:12px;margin:0 0 8px;">Keep this address as <strong>Editor</strong> on the sheet: ' +
+                        '<code id="sheetsShareEmail">' + esc(gs.shareWith) + '</code> ' +
+                        '<button type="button" class="small" id="copySheetsEmail">Copy</button></p>';
+                }
                 actions += '<button type="button" class="small danger" id="clearGoogleSheet">Disconnect</button>';
             } else {
+                // Dynamic robot email from server env (GOOGLE_SHEETS_CLIENT_EMAIL).
+                if (gs.shareWith) {
+                    actions += '<div style="margin:0 0 12px;padding:10px 12px;background:#f8fafc;border:1px solid var(--border,#e0e0e0);border-radius:8px;">';
+                    actions += '<p style="margin:0 0 6px;font-size:13px;font-weight:650;">1 · Invite opsAi as Editor</p>';
+                    actions += '<ol style="margin:0 0 8px;padding-left:18px;font-size:12px;color:var(--light);line-height:1.45;">' +
+                        '<li>Open your Google Sheet → <strong>Share</strong></li>' +
+                        '<li>Paste this address → role <strong>Editor</strong> (uncheck Notify)</li>' +
+                        '<li>Then paste the sheet link in step 2</li></ol>';
+                    actions += '<p style="margin:0;font-size:12px;word-break:break-all;"><code id="sheetsShareEmail">' + esc(gs.shareWith) + '</code> ' +
+                        '<button type="button" class="small" id="copySheetsEmail">Copy email</button></p>';
+                    actions += '</div>';
+                }
+                actions += '<p style="margin:0 0 6px;font-size:13px;font-weight:650;">2 · Paste sheet link</p>';
                 actions += '<form id="googleSheetForm" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;">' +
-                    '<div style="flex:1;min-width:200px;"><label style="font-size:12px;">Sheet link or id</label>' +
+                    '<div style="flex:1;min-width:200px;"><label style="font-size:12px;">Sheet link</label>' +
                     '<input type="text" name="sheet" required placeholder="https://docs.google.com/spreadsheets/d/…" maxlength="500" style="width:100%;margin-top:4px;padding:8px;"></div>' +
-                    '<button type="submit" class="primary">Connect</button></form>';
+                    '<button type="submit" class="primary">Connect sheet</button></form>';
             }
             html += toolRow(t.icon, t.name, status, t.blurb, actions);
         })();

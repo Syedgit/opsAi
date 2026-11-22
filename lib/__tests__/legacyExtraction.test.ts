@@ -38,6 +38,23 @@ describe('rule-based extraction (fallback path)', () => {
   it('reads an invoice total and ignores the date', () => {
     const { fields } = extractDataFromText('INVOICE_EXPENSE', 'Invoice from Empire Snacks 10/12 total 136.08');
     expect(fields.amount).toBe(136.08);
+    expect(fields.vendor).toBe('Empire Snacks');
+  });
+
+  it('reads vendor from "paid to … for"', () => {
+    const { fields } = extractDataFromText('INVOICE_EXPENSE', 'Invoice paid to ABC for snacks $120');
+    expect(fields.vendor).toBe('ABC');
+    expect(fields.amount).toBe(120);
+    expect(fields.paid).toBe('Y');
+  });
+
+  it('reads vendor: label', () => {
+    const { fields } = extractDataFromText(
+      'INVOICE_EXPENSE',
+      'S002\n\nDate 12/22/26\nInvoice\nVendor : texture\nAmount : $300'
+    );
+    expect(String(fields.vendor).toLowerCase()).toBe('texture');
+    expect(fields.amount).toBe(300);
   });
 });
 

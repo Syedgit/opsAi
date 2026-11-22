@@ -53,9 +53,16 @@ export function extractDataFromText(
       break;
     }
     case 'INVOICE_EXPENSE': {
-      const vendorMatch = text.match(/\b(?:vendor|from)\s*[:-]?\s*([A-Za-z0-9 &]+)/i);
-      fields.vendor = vendorMatch?.[1]?.trim() || 'Unknown';
+      // "vendor: Emporium", "from HLA", "paid to ABC for snacks", "invoice to Texture $300"
+      const vendorMatch =
+        text.match(/\b(?:vendor|from)\s*[:-]?\s*([A-Za-z][A-Za-z0-9 &.'-]{0,60}?)(?=\s*(?:\d|\$|total|amount|invoice|,|$))/i) ||
+        text.match(/\b(?:paid\s+to|to)\s+([A-Za-z][A-Za-z0-9 &.'-]{0,60}?)\s+(?:for|invoice|\$|\d)/i) ||
+        text.match(/\binvoice\s+(?:paid\s+)?(?:to\s+)?([A-Za-z][A-Za-z0-9 &.'-]{0,60}?)\s+(?:for|\$|\d)/i);
+      let vendor = vendorMatch?.[1]?.trim() || 'Unknown';
+      vendor = vendor.replace(/\s+(?:invoice|total|amount|for)$/i, '').trim() || 'Unknown';
+      fields.vendor = vendor;
       fields.amount = amountAfter(text, ['total', 'amount', 'invoice']) ?? money[0] ?? 0;
+      if (/\bpaid\b/i.test(text) && !/\bunpaid\b/i.test(text)) fields.paid = 'Y';
       break;
     }
     case 'FUEL_SALES': {

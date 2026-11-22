@@ -1,4 +1,4 @@
-import { decideAiUse, GREETING_REPLY, NO_DATA_REPLY } from '../gate';
+import { decideAiUse, GREETING_REPLY, NO_DATA_REPLY, WHERE_SAVED_REPLY, isWhereSavedQuestion, whereSavedReply } from '../gate';
 
 const text = (t: string) => decideAiUse({ text: t, hasMedia: false });
 
@@ -44,6 +44,20 @@ describe('decideAiUse: what never reaches the AI', () => {
 
   it.each(['hi', 'Hello!', 'hey there', 'good morning', 'Good evening everyone'])('greets back for "%s"', (t) => {
     expect(text(t)).toEqual({ useAi: false, reply: GREETING_REPLY, classification: 'CHATTER' });
+  });
+
+  it.each(['Where did you save', 'where is it saved?', 'saved where', 'where did you put that'])(
+    'answers where entries go for "%s"',
+    (t) => {
+      expect(isWhereSavedQuestion(t)).toBe(true);
+      expect(text(t)).toEqual({ useAi: false, reply: WHERE_SAVED_REPLY, classification: 'CHATTER' });
+    }
+  );
+
+  it('names the store and sheet in whereSavedReply', () => {
+    expect(whereSavedReply({ storeName: 'Denville', sheetConnected: true })).toContain('Denville');
+    expect(whereSavedReply({ storeName: 'Denville', sheetConnected: true })).toContain('Google Sheet');
+    expect(whereSavedReply({ storeName: 'Rockaway', sheetConnected: false })).toContain('No Google Sheet');
   });
 
   it.each(['running late today, see you soon', 'can you call me when you get a chance', 'who is working tomorrow'])(
