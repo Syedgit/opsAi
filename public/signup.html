@@ -204,7 +204,7 @@
         
         <div class="auth-header">
             <h1>Create Account</h1>
-            <p>14 days free. No card. Then $25 per business per month.</p>
+            <p id="signupSub">14 days free. No card. Then $25 per business per month.</p>
         </div>
         
         <div class="error-message" id="errorMessage" role="alert"></div>
@@ -215,18 +215,18 @@
                 <input type="text" id="name" name="name" required autocomplete="name" placeholder="Your name">
             </div>
             
-            <div class="form-group">
+            <div class="form-group" id="emailGroup">
                 <label for="email">Email</label>
                 <input type="email" id="email" name="email" required autocomplete="email" placeholder="your@email.com">
             </div>
             
-            <div class="form-group">
+            <div class="form-group" id="passwordGroup">
                 <label for="password">Password</label>
                 <input type="password" id="password" name="password" required autocomplete="new-password" placeholder="••••••••" minlength="8">
                 <div class="password-hint">Must be at least 8 characters</div>
             </div>
 
-            <div class="form-group">
+            <div class="form-group" id="passwordConfirmGroup">
                 <label for="passwordConfirm">Confirm Password</label>
                 <input type="password" id="passwordConfirm" name="passwordConfirm" required autocomplete="new-password" placeholder="••••••••" minlength="8">
             </div>
@@ -238,6 +238,7 @@
         
         <div class="auth-footer">
             Already have an account? <a href="/login">Sign in</a>
+            <p style="margin-top:12px;font-size:13px;line-height:1.4;">Started with WhatsApp? Sign in with WhatsApp, then add email under <strong>More</strong> — don’t create a second account.</p>
         </div>
     </div>
     
@@ -246,6 +247,8 @@
         const errorMessage = document.getElementById('errorMessage');
         const submitBtn = document.getElementById('submitBtn');
         const loading = document.getElementById('loading');
+        const params = new URLSearchParams(window.location.search);
+        const waToken = params.get('wa');
 
         function showError(text) {
             errorMessage.style.background = '#fee';
@@ -253,26 +256,43 @@
             errorMessage.textContent = text;
             errorMessage.classList.add('show');
         }
+
+        if (waToken) {
+            document.getElementById('signupSub').textContent =
+                'WhatsApp verified. Add your name — no password needed.';
+            ['emailGroup', 'passwordGroup', 'passwordConfirmGroup'].forEach(function (id) {
+                const el = document.getElementById(id);
+                el.style.display = 'none';
+                el.querySelectorAll('input').forEach(function (input) { input.required = false; });
+            });
+            submitBtn.textContent = 'Create account';
+        }
         
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             
             const name = document.getElementById('name').value.trim();
-            const email = document.getElementById('email').value.trim();
-            const password = document.getElementById('password').value;
-            const passwordConfirm = document.getElementById('passwordConfirm').value;
-
             if (!name) {
                 showError('Name is required');
                 return;
             }
-            if (password.length < 8) {
-                showError('Password must be at least 8 characters');
-                return;
-            }
-            if (password !== passwordConfirm) {
-                showError('Passwords do not match');
-                return;
+
+            let body;
+            if (waToken) {
+                body = { wa: waToken, name };
+            } else {
+                const email = document.getElementById('email').value.trim();
+                const password = document.getElementById('password').value;
+                const passwordConfirm = document.getElementById('passwordConfirm').value;
+                if (password.length < 8) {
+                    showError('Password must be at least 8 characters');
+                    return;
+                }
+                if (password !== passwordConfirm) {
+                    showError('Passwords do not match');
+                    return;
+                }
+                body = { name, email, password, passwordConfirm };
             }
             
             errorMessage.classList.remove('show');
@@ -285,7 +305,7 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ name, email, password, passwordConfirm }),
+                    body: JSON.stringify(body),
                 });
                 
                 const data = await response.json();

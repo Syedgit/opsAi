@@ -304,6 +304,88 @@ describe('POST /api/auth/login', () => {
   });
 });
 
+describe('POST /api/auth/credentials', () => {
+  beforeEach(() => {
+    resetAuthLimits();
+    userFindUnique.mockReset();
+    userUpdate.mockReset();
+  });
+
+  it('adds email and password on a WhatsApp account', async () => {
+    const token = sign({ typ: 'session', userId: 'u1', email: 'wa.15551234567@phone.opsai.us' }, 'test-secret');
+    userFindUnique
+      .mockResolvedValueOnce({
+        id: 'u1',
+        email: 'wa.15551234567@phone.opsai.us',
+        name: 'Sam',
+        password: null,
+        provider: 'whatsapp',
+        providerId: '+15551234567',
+        isActive: true,
+        stores: [{ role: 'OWNER', store: { storeId: 'S001', storeName: 'Rockaway' } }],
+      })
+      .mockResolvedValueOnce(null);
+    userUpdate.mockResolvedValue({
+      id: 'u1',
+      email: 'sam@store.com',
+      name: 'Sam',
+      password: 'hashed',
+      provider: 'whatsapp',
+      providerId: '+15551234567',
+      isActive: true,
+      stores: [{ role: 'OWNER', store: { storeId: 'S001', storeName: 'Rockaway' } }],
+    });
+
+    const { status, body, headers } = await run({
+      method: 'POST',
+      url: '/api/auth/credentials',
+      headers: { cookie: `${SESSION_COOKIE}=${encodeURIComponent(token)}` },
+      body: { email: 'sam@store.com', password: 'secret123', passwordConfirm: 'secret123' },
+    });
+
+    expect(status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.user).toMatchObject({
+      email: 'sam@store.com',
+      hasPassword: true,
+      canAddDesktopLogin: false,
+      phoneE164: '+15551234567',
+    });
+    expectSessionCookie(headers);
+    expect(userUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'u1' },
+        data: expect.objectContaining({
+          email: 'sam@store.com',
+          provider: 'whatsapp',
+          providerId: '+15551234567',
+        }),
+      }),
+    );
+  });
+
+  it('rejects when desktop login is already set', async () => {
+    const token = sign({ typ: 'session', userId: 'u1', email: 'sam@store.com' }, 'test-secret');
+    userFindUnique.mockResolvedValue({
+      id: 'u1',
+      email: 'sam@store.com',
+      name: 'Sam',
+      password: 'hashed',
+      provider: 'email',
+      isActive: true,
+      stores: [],
+    });
+    const { status, body } = await run({
+      method: 'POST',
+      url: '/api/auth/credentials',
+      headers: { cookie: `${SESSION_COOKIE}=${encodeURIComponent(token)}` },
+      body: { email: 'other@store.com', password: 'secret123', passwordConfirm: 'secret123' },
+    });
+    expect(status).toBe(409);
+    expect(body.error).toMatch(/already set/i);
+  });
+});
+
 describe('GET /api/auth/me', () => {
   beforeEach(() => {
     resetAuthLimits();

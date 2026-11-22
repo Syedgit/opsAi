@@ -1,10 +1,10 @@
 /**
- * Business tools owners can opt into during setup / Store admin.
- * Wanted ≠ fully connected — WhatsApp people, Sheets sheetId, Slack channel
- * still need their own connect steps.
+ * Business tools shown in Agents → Tools.
+ * Each tool has an inline connect action in the Tasks admin UI
+ * (OAuth, sheet link, Slack channel, email digest, Books enroll, etc.).
  */
 
-export type ToolId = 'whatsapp' | 'googleSheets' | 'slack' | 'email' | 'books';
+export type ToolId = 'whatsapp' | 'googleSheets' | 'gmail' | 'slack' | 'email' | 'books';
 
 export type ToolDef = {
   id: ToolId;
@@ -37,6 +37,15 @@ export const BUSINESS_TOOLS: ToolDef[] = [
     defaultWanted: false,
     icon: '/integrations/google-sheets.svg',
     accent: '#0F9D58',
+  },
+  {
+    id: 'gmail',
+    name: 'Gmail',
+    blurb: 'Connect this business’s inbox. Read-only alerts to WhatsApp.',
+    audience: 'owner',
+    defaultWanted: false,
+    icon: '/integrations/gmail.svg',
+    accent: '#EA4335',
   },
   {
     id: 'slack',

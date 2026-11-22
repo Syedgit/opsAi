@@ -7,6 +7,11 @@ import { paymentDueOn, remainingOf } from './understanding/invoiceBalance';
 import type { AgentId, StoreAgentId } from './agents/crew';
 import { AGENT_DISPLAY, resolveAgentPack } from './agents/crew';
 import { runAskPlan, type ChatTurn, type SupervisorRouter } from './agents/supervisor';
+import {
+  REFINE_SYSTEM,
+  acceptPolishedAnswer,
+  verifyAndDraftAnswer,
+} from './agents/askVerify';
 import { loadToolFacts, type ToolFactsResult } from './agents/tools/loaders';
 import { readStoredSetup } from './tasks/storeSetup';
 import { logApp, logAppError, serializeError } from './requestLog';
@@ -92,11 +97,13 @@ const SUMMARY_SYSTEM = [
   'You are the Books agent summarizing confirmed bookkeeping for a small-business owner or manager.',
   'Use ONLY the JSON facts provided. Do not invent, estimate, or fetch more data.',
   'Never mention wages, payroll, hourly rates, or claim net profit.',
+  'Standing cash/card are REGISTER sales tender — never describe them as vendor payment method.',
   'Write a clear, professional WhatsApp-ready reply in plain text (no markdown fences).',
   'Keep every dollar amount exactly as given. 2–8 short sentences or tight bullets.',
   'If facts.parts has multiple sections, answer each part the owner asked — do not drop a part.',
   'If a part has no matching data, say so plainly for that part. Never borrow another vendor’s numbers.',
   'If facts are empty or an error is present, say you do not have that data yet.',
+  'No “feel free to ask” or similar fluff closers.',
 ].join(' ');
 
 export function looksLikeAiChatQuestion(text: string): boolean {
@@ -337,7 +344,7 @@ export async function loadAiChatFactsFromIntent(
   };
 }
 
-/** Exit AI: polish grounded facts only. */
+/** Exit AI: polish grounded facts only (legacy path / tests). */
 export async function summarizeAiChatFacts(
   collected: AiChatFacts,
   env: NodeJS.ProcessEnv = process.env,
@@ -349,7 +356,7 @@ export async function summarizeAiChatFacts(
       facts: collected.facts,
       fallback: collected.fallback,
     });
-    return (polished && polished.trim()) || collected.fallback;
+    return acceptPolishedAnswer(collected.fallback, polished);
   }
 
   const apiKey = env.OPENAI_API_KEY?.trim();
@@ -377,6 +384,7 @@ export async function summarizeAiChatFacts(
             question: collected.question,
             topic: collected.topic,
             facts: collected.facts,
+            verifiedDraft: collected.fallback,
           }),
         },
       ],
@@ -386,11 +394,68 @@ export async function summarizeAiChatFacts(
       logApp('books.exit.empty', { model });
       return collected.fallback;
     }
-    logApp('books.exit.ok', { model, chars: text.length });
-    return text;
+    const accepted = acceptPolishedAnswer(collected.fallback, text);
+    logApp('books.exit.ok', {
+      model,
+      chars: accepted.length,
+      usedDraft: accepted === collected.fallback,
+    });
+    return accepted;
   } catch (error) {
     logAppError('books.exit.fail', { model, ...serializeError(error) });
     return collected.fallback;
+  }
+}
+
+/** Refine a supervisor-verified draft for the end user (no new facts). */
+export async function refineVerifiedAnswer(
+  question: string,
+  draft: string,
+  env: NodeJS.ProcessEnv = process.env,
+  summarize?: AiChatSummarizer
+): Promise<string> {
+  if (summarize) {
+    const polished = await summarize({
+      question,
+      facts: { verifiedDraft: draft },
+      fallback: draft,
+    });
+    return acceptPolishedAnswer(draft, polished);
+  }
+
+  const apiKey = env.OPENAI_API_KEY?.trim();
+  const model =
+    env.OPENAI_TEXT_MODEL?.trim() ||
+    env.OPENAI_MODEL?.trim() ||
+    env.OPENAI_EXTRACTION_MODEL?.trim();
+  if (!apiKey || !model) return draft;
+
+  try {
+    const OpenAI = (await import('openai')).default;
+    const openai = new OpenAI({ apiKey });
+    const response = await openai.chat.completions.create({
+      model,
+      temperature: 0.1,
+      max_tokens: 400,
+      messages: [
+        { role: 'system', content: REFINE_SYSTEM },
+        {
+          role: 'user',
+          content: JSON.stringify({ question, verifiedDraft: draft }),
+        },
+      ],
+    });
+    const text = response.choices[0]?.message?.content?.trim();
+    const accepted = acceptPolishedAnswer(draft, text);
+    logApp('books.refine.ok', {
+      model,
+      chars: accepted.length,
+      usedDraft: accepted === draft,
+    });
+    return accepted;
+  } catch (error) {
+    logAppError('books.refine.fail', { model, ...serializeError(error) });
+    return draft;
   }
 }
 
@@ -403,7 +468,7 @@ export type CrewAnswer = {
 };
 
 /**
- * Supervisor → tool loader → exit AI.
+ * Supervisor → tool loader → verify facts vs ask → refine for user.
  * Optional agentFilter pins a subagent (Books shortcut). history enables follow-ups.
  * Legacy `classify` option still maps old topic intents when provided (tests).
  */
@@ -505,7 +570,6 @@ export async function answerAiChatQuestion(
   }
 
   const parts: Array<{ purpose: string; toolId: string; facts: Record<string, unknown>; fallback: string }> = [];
-  const fallbackChunks: string[] = [];
 
   for (const step of plan.steps) {
     const loaded = await loadToolFacts(
@@ -533,7 +597,6 @@ export async function answerAiChatQuestion(
       facts: factsLoaded.facts,
       fallback: factsLoaded.fallback,
     });
-    fallbackChunks.push(factsLoaded.fallback);
   }
 
   if (parts.length === 0) {
@@ -557,32 +620,42 @@ export async function answerAiChatQuestion(
 
   const toolId =
     parts.length === 1 ? parts[0].toolId : parts.map((p) => p.toolId).join('+');
-  const topic =
-    primaryTool === 'standing_report' || primaryTool === 'missing_closes'
-      ? 'standing'
-      : primaryTool === 'open_invoices' ||
-          primaryTool === 'invoice_period_summary' ||
-          toolId.includes('invoice')
-        ? 'open_invoices'
-        : 'unsupported';
 
-  const answer = await summarizeAiChatFacts(
-    {
-      topic,
-      storeId,
-      storeName,
-      question,
-      facts: {
-        agentId: 'books',
-        toolId,
-        plan: parts.map((p) => p.purpose),
-        parts: parts.map((p) => ({ purpose: p.purpose, toolId: p.toolId, ...p.facts })),
-      },
-      fallback: fallbackChunks.join('\n\n'),
-    },
-    options.env ?? process.env,
-    options.summarize
-  );
+  const verified = verifyAndDraftAnswer({
+    question,
+    history,
+    parts: parts.map((p) => ({
+      purpose: p.purpose,
+      toolId: p.toolId,
+      facts: p.facts,
+      fallback: p.fallback,
+    })),
+  });
+
+  if (verified.status === 'reject') {
+    logApp('books.verify.reject', { toolId, chars: verified.text.length });
+    return {
+      answer: verified.text,
+      agentId: 'supervisor',
+      agent: AGENT_DISPLAY.supervisor,
+      toolId,
+    };
+  }
+
+  logApp('books.verify.ok', {
+    toolId,
+    polish: verified.polish,
+    chars: verified.text.length,
+  });
+
+  const answer = verified.polish
+    ? await refineVerifiedAnswer(
+        question,
+        verified.text,
+        options.env ?? process.env,
+        options.summarize
+      )
+    : verified.text;
 
   return {
     answer,

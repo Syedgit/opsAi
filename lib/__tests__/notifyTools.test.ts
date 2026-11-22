@@ -9,6 +9,7 @@ describe('business tools prefs', () => {
     expect(readToolsWanted(null)).toEqual({
       whatsapp: true,
       googleSheets: false,
+      gmail: false,
       slack: false,
       email: false,
       books: false,
@@ -16,6 +17,7 @@ describe('business tools prefs', () => {
     expect(BUSINESS_TOOLS.map((t) => t.id)).toEqual([
       'whatsapp',
       'googleSheets',
+      'gmail',
       'slack',
       'email',
       'books',

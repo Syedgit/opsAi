@@ -54,6 +54,14 @@
       "destination": "/api/auth/index.ts"
     },
     {
+      "source": "/api/auth/whatsapp",
+      "destination": "/api/auth/index.ts"
+    },
+    {
+      "source": "/api/auth/credentials",
+      "destination": "/api/auth/index.ts"
+    },
+    {
       "source": "/api/stores/dashboard",
       "destination": "/api/stores/index.ts"
     },
@@ -104,6 +112,30 @@
     {
       "source": "/api/cron/digest",
       "destination": "/api/cron/digest.ts"
+    },
+    {
+      "source": "/api/cron/gmail",
+      "destination": "/api/cron/gmail.ts"
+    },
+    {
+      "source": "/api/connectors/gmail/start",
+      "destination": "/api/connectors/gmail.ts"
+    },
+    {
+      "source": "/api/connectors/gmail/callback",
+      "destination": "/api/connectors/gmail.ts"
+    },
+    {
+      "source": "/api/connectors/gmail/disconnect",
+      "destination": "/api/connectors/gmail.ts"
+    },
+    {
+      "source": "/api/connectors/gmail/rules",
+      "destination": "/api/connectors/gmail.ts"
+    },
+    {
+      "source": "/api/connectors/gmail",
+      "destination": "/api/connectors/gmail.ts"
     },
     {
       "source": "/tasks",

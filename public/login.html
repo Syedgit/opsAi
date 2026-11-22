@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <meta name="theme-color" content="#111111">
+    <meta name="theme-color" content="#0b1f17">
     <meta name="color-scheme" content="light">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
@@ -13,235 +13,275 @@
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="apple-touch-icon" href="/icon-180.png">
     <link rel="icon" type="image/png" href="/icon-192.png">
-    <link rel="apple-touch-startup-image" href="/splash-1320x2868.png" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3)">
-    <link rel="apple-touch-startup-image" href="/splash-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)">
-    <link rel="apple-touch-startup-image" href="/splash-1284x2778.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)">
-    <link rel="apple-touch-startup-image" href="/splash-1206x2622.png" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3)">
-    <link rel="apple-touch-startup-image" href="/splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
-    <link rel="apple-touch-startup-image" href="/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
-    <link rel="apple-touch-startup-image" href="/splash-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
     <link rel="stylesheet" href="/app-shell.css?v=3">
     <script src="/app-shell.js?v=2"></script>
-    <title>Login - opsAi</title>
+    <title>Start — opsAi</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
+            --bg: #0b1f17;
+            --bg-card: #102820;
+            --text: #f4faf6;
+            --text-muted: #9bb5a8;
             --primary: #25D366;
-            --primary-dark: #128C7E;
-            --secondary: #075E54;
-            --text: #1a1a1a;
-            --text-light: #666;
-            --bg: #ffffff;
-            --bg-light: #f8f9fa;
-            --border: #e0e0e0;
-            --error: #e74c3c;
+            --primary-dark: #1ebe57;
+            --line: rgba(255,255,255,0.12);
+            --error: #ff8a80;
+            --email-link: #7dd3a7;
         }
-        
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, var(--bg-light) 0%, #ffffff 100%);
+            font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+            background:
+                radial-gradient(ellipse 80% 50% at 50% -10%, rgba(37, 211, 102, 0.22), transparent 55%),
+                var(--bg);
+            color: var(--text);
             min-height: 100vh;
             min-height: 100dvh;
             display: flex;
-            align-items: flex-start;
-            justify-content: center;
-            overflow-y: auto;
-            padding: max(20px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom));
+            flex-direction: column;
+            padding: max(20px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom));
         }
-        
-        .auth-container {
-            background: white;
-            border-radius: 16px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
-            padding: 40px;
-            width: 100%;
-            max-width: 420px;
-            margin-top: auto;
-            margin-bottom: auto;
+        .top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 28px;
         }
-        
-        .auth-header {
-            text-align: center;
-            margin-bottom: 32px;
-        }
-        
-        .auth-header h1 {
-            font-size: 32px;
-            font-weight: 700;
-            color: var(--text);
-            margin-bottom: 8px;
-        }
-        
-        .auth-header p {
-            color: var(--text-light);
-            font-size: 16px;
-        }
-        
         .logo-link {
-            display: block;
-            width: fit-content;
-            margin: 0 auto 24px;
-            line-height: 0;
+            display: inline-flex;
+            align-items: center;
             text-decoration: none;
+            line-height: 0;
         }
         .logo-link img {
-            height: 52px;
+            height: 36px;
             width: auto;
-            max-width: 280px;
+            max-width: 180px;
+            border-radius: 6px;
         }
-        
-        .form-group {
-            margin-bottom: 24px;
+        .shell {
+            width: 100%;
+            max-width: 420px;
+            margin: auto;
         }
-        
-        .form-group label {
-            display: block;
+        .panel h1 {
+            font-size: clamp(1.75rem, 5vw, 2.15rem);
+            font-weight: 700;
+            letter-spacing: -0.02em;
             margin-bottom: 8px;
-            color: var(--text);
-            font-weight: 500;
-            font-size: 14px;
         }
-        
-        .form-group input {
-            width: 100%;
-            padding: 14px 16px;
-            border: 2px solid var(--border);
-            border-radius: 8px;
-            font-size: 16px;
-            min-height: 44px;
-            transition: border-color 0.3s;
+        .panel .sub {
+            color: var(--text-muted);
+            font-size: 1.02rem;
+            line-height: 1.45;
+            margin-bottom: 28px;
         }
-        
-        .form-group input:focus {
-            outline: none;
-            border-color: var(--primary);
-        }
-        
-        .btn-primary {
-            width: 100%;
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-            color: white;
-            padding: 14px;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-        
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(37, 211, 102, 0.3);
-        }
-        
-        .btn-primary:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-        
         .error-message {
-            background: #fee;
+            background: rgba(255, 138, 128, 0.12);
             color: var(--error);
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 20px;
+            padding: 12px 14px;
+            border-radius: 10px;
+            margin-bottom: 18px;
             font-size: 14px;
             display: none;
         }
-        
-        .error-message.show {
-            display: block;
+        .error-message.show { display: block; }
+        .btn-primary {
+            width: 100%;
+            border: none;
+            border-radius: 12px;
+            padding: 16px 18px;
+            font-size: 1.05rem;
+            font-weight: 700;
+            cursor: pointer;
+            background: var(--primary);
+            color: #062816;
+            transition: transform 0.15s, background 0.15s, opacity 0.15s;
         }
-        
-        .auth-footer {
-            text-align: center;
-            margin-top: 24px;
-            color: var(--text-light);
-            font-size: 14px;
+        .btn-primary:hover:not(:disabled) {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
         }
-        
-        .auth-footer a {
-            color: var(--primary);
-            text-decoration: none;
-            font-weight: 500;
+        .btn-primary:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+            transform: none;
         }
-        
-        .auth-footer a:hover {
+        .hint {
+            margin-top: 14px;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            line-height: 1.45;
+        }
+        .hint strong { color: var(--text); font-weight: 600; }
+        .divider {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin: 28px 0 18px;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+        .divider::before, .divider::after {
+            content: "";
+            flex: 1;
+            height: 1px;
+            background: var(--line);
+        }
+        .email-toggle {
+            color: var(--email-link);
+            background: none;
+            border: none;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
             text-decoration: underline;
+            text-underline-offset: 3px;
         }
-        
+        .email-note {
+            margin-top: 8px;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+        .email-form { display: none; margin-top: 8px; }
+        .email-form.show { display: block; }
+        .form-group { margin-bottom: 16px; }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+        .form-group input {
+            width: 100%;
+            padding: 14px 16px;
+            border-radius: 12px;
+            border: 1px solid var(--line);
+            background: var(--bg-card);
+            color: var(--text);
+            font-size: 16px;
+            min-height: 48px;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: rgba(37, 211, 102, 0.55);
+        }
         .loading {
             display: none;
             text-align: center;
             margin-top: 16px;
+            color: var(--text-muted);
+            font-size: 0.95rem;
         }
-        
-        .loading.show {
+        .loading.show { display: block; }
+        .auth-footer {
+            margin-top: 28px;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.92rem;
+        }
+        .auth-footer a {
+            color: var(--email-link);
+            font-weight: 600;
+            text-decoration: none;
+        }
+        .steps {
+            display: none;
+            margin-top: 8px;
+        }
+        .steps.show { display: block; }
+        .step-card {
+            background: var(--bg-card);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 16px 18px;
+            margin-bottom: 12px;
+        }
+        .step-card strong {
             display: block;
+            margin-bottom: 4px;
         }
-        @media (max-width: 480px) {
-            .auth-container { padding: 28px 20px; }
-        }
+        .step-card span { color: var(--text-muted); font-size: 0.92rem; }
     </style>
 </head>
 <body>
     <div id="appSplash" aria-hidden="true"><img src="/icon-192.png" alt=""><span>opsAi</span></div>
-    <div class="auth-container">
-        <a href="/" class="logo-link"><img src="/logo.jpg" alt="Operation Intelligence"></a>
-        
-        <div class="auth-header">
-            <h1>Welcome Back</h1>
-            <p>Sign in to access your dashboard</p>
+    <div class="top">
+        <a href="/" class="logo-link"><img src="/logo.jpg" alt="opsAi"></a>
+    </div>
+    <div class="shell">
+        <div class="panel" id="phonePanel">
+            <h1>What's your WhatsApp?</h1>
+            <p class="sub">We'll open chat so you can send <strong style="color:var(--text)">Login</strong> — then tap the link we reply with. No password.</p>
+            <div class="error-message" id="errorMessage" role="alert"></div>
+            <button type="button" class="btn-primary" id="waStartBtn">Continue with WhatsApp</button>
+            <p class="hint" id="waHint">Uses the same number you already use for closes and invoices.</p>
+
+            <div class="steps" id="waSteps">
+                <div class="step-card">
+                    <strong>1. WhatsApp opens</strong>
+                    <span>Send the pre-filled <em>Login</em> message to opsAi.</span>
+                </div>
+                <div class="step-card">
+                    <strong>2. Tap the reply link</strong>
+                    <span>We send a private dashboard link that expires in 20 minutes.</span>
+                </div>
+                <div class="step-card">
+                    <strong>New here?</strong>
+                    <span>Send <em>Start</em> instead — you'll get a create-account link.</span>
+                </div>
+                <button type="button" class="btn-primary" id="waOpenAgain" style="margin-top:8px;">Open WhatsApp again</button>
+            </div>
+
+            <div class="divider">or</div>
+            <button type="button" class="email-toggle" id="emailToggle">Sign in with email</button>
+            <p class="email-note">Existing email accounts only.</p>
         </div>
-        
-        <div class="error-message" id="errorMessage" role="alert"></div>
-        
-        <form id="loginForm">
-            <div class="form-group">
-                <label for="email">Email</label>
-                <input type="email" id="email" name="email" required autocomplete="email" placeholder="your@email.com">
-            </div>
-            
-            <div class="form-group">
-                <label for="password">Password</label>
-                <input type="password" id="password" name="password" required autocomplete="current-password" placeholder="••••••••">
-            </div>
-            
-            <button type="submit" class="btn-primary" id="submitBtn">Sign In</button>
-        </form>
-        
+
+        <div class="email-form" id="emailFormWrap">
+            <h1 style="font-size:1.6rem;margin-bottom:8px;">Sign in with email</h1>
+            <p class="sub" style="margin-bottom:20px;">Password accounts stay available.</p>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" required autocomplete="email" placeholder="your@email.com">
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required autocomplete="current-password" placeholder="••••••••">
+                </div>
+                <button type="submit" class="btn-primary" id="submitBtn">Sign In</button>
+            </form>
+            <p class="auth-footer"><button type="button" class="email-toggle" id="backPhone">← Back to WhatsApp</button></p>
+        </div>
+
         <div class="loading" id="loading">Signing in...</div>
-        
-        <div class="auth-footer">
-            Don't have an account? <a href="/signup">Sign up</a>
+        <div class="auth-footer" id="signupFooter">
+            Don't have an account? <a href="/signup">Sign up with email</a>
         </div>
     </div>
-    
+
     <script>
-        const form = document.getElementById('loginForm');
         const errorMessage = document.getElementById('errorMessage');
         const submitBtn = document.getElementById('submitBtn');
         const loading = document.getElementById('loading');
         const params = new URLSearchParams(window.location.search);
+        let waDeepLink = null;
+
+        function showError(msg) {
+            errorMessage.textContent = msg;
+            errorMessage.classList.add('show');
+        }
 
         async function enterApp(data) {
             if (data && data.user) {
                 try { localStorage.setItem('user', JSON.stringify(data.user)); } catch (e) {}
             }
-
             const next = params.get('next');
             if (next && next.startsWith('/') && !next.startsWith('//')) {
                 window.location.href = next;
                 return;
             }
-
             try {
                 const st = await fetch('/api/onboarding/status');
                 const od = await st.json();
@@ -250,7 +290,6 @@
                     return;
                 }
             } catch (_) {}
-
             window.location.href = '/dashboard';
         }
 
@@ -258,7 +297,7 @@
             errorMessage.classList.remove('show');
             submitBtn.disabled = true;
             loading.classList.add('show');
-            loading.textContent = body.link ? 'Opening your dashboard…' : 'Signing in...';
+            loading.textContent = body.link || body.phone ? 'Opening your dashboard…' : 'Signing in...';
             try {
                 const response = await fetch('/api/auth/login', {
                     method: 'POST',
@@ -270,18 +309,29 @@
                     await enterApp(data);
                     return;
                 }
-                errorMessage.textContent = data.error || 'Login failed. Please try again.';
-                errorMessage.classList.add('show');
+                showError(data.error || 'Login failed. Please try again.');
             } catch (error) {
-                errorMessage.textContent = 'Network error. Please check your connection and try again.';
-                errorMessage.classList.add('show');
+                showError('Network error. Please check your connection and try again.');
             } finally {
                 submitBtn.disabled = false;
                 loading.classList.remove('show');
             }
         }
 
-        form.addEventListener('submit', async (e) => {
+        function showEmail() {
+            document.getElementById('phonePanel').style.display = 'none';
+            document.getElementById('emailFormWrap').classList.add('show');
+            document.getElementById('signupFooter').style.display = 'block';
+        }
+        function showPhone() {
+            document.getElementById('phonePanel').style.display = 'block';
+            document.getElementById('emailFormWrap').classList.remove('show');
+        }
+
+        document.getElementById('emailToggle').addEventListener('click', showEmail);
+        document.getElementById('backPhone').addEventListener('click', showPhone);
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             await signIn({
                 email: document.getElementById('email').value.trim(),
@@ -289,14 +339,54 @@
             });
         });
 
+        function waUnavailable(msg) {
+            document.getElementById('waStartBtn').disabled = true;
+            document.getElementById('waHint').textContent = msg;
+            showEmail();
+        }
+
+        async function loadWhatsAppStart() {
+            try {
+                const res = await fetch('/api/auth/whatsapp');
+                let data = {};
+                try { data = await res.json(); } catch (_) {}
+                if (!res.ok || !data.deepLink) {
+                    waUnavailable(data.error || 'WhatsApp start is not available. Sign in with email.');
+                    return;
+                }
+                waDeepLink = data.deepLink;
+                document.getElementById('waHint').innerHTML =
+                    'opsAi WhatsApp: <strong>' + data.displayNumber + '</strong>';
+            } catch (_) {
+                waUnavailable('Could not reach WhatsApp start. Sign in with email.');
+            }
+        }
+
+        function openWhatsApp() {
+            if (!waDeepLink) return;
+            document.getElementById('waSteps').classList.add('show');
+            document.getElementById('waStartBtn').style.display = 'none';
+            window.location.href = waDeepLink;
+        }
+
+        document.getElementById('waStartBtn').addEventListener('click', openWhatsApp);
+        document.getElementById('waOpenAgain').addEventListener('click', openWhatsApp);
+
         const waLink = params.get('wa');
+        const phoneTok = params.get('phone');
         if (waLink) {
-            document.querySelector('.auth-header p').textContent = 'Opening your dashboard from WhatsApp…';
+            document.querySelector('#phonePanel .sub').textContent = 'Opening your dashboard from WhatsApp…';
+            document.getElementById('waStartBtn').style.display = 'none';
             signIn({ link: waLink });
+        } else if (phoneTok) {
+            document.querySelector('#phonePanel .sub').textContent = 'Opening your dashboard from WhatsApp…';
+            document.getElementById('waStartBtn').style.display = 'none';
+            signIn({ phone: phoneTok });
         } else {
             fetch('/api/auth/me').then((res) => {
                 if (res.ok) window.location.href = '/dashboard';
             }).catch(function () {});
+            loadWhatsAppStart();
         }
     </script>
 </body>

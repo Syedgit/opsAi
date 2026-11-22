@@ -58,6 +58,7 @@ import {
   sheetsCredentialsConfigured,
   sheetsServiceAccountEmail,
 } from '../../lib/googleSheetsRows';
+import { emptyGmailStatus, getGmailPublicStatus } from '../../lib/gmail/connection';
 import {
   AI_CHAT_USD_PER_STORE_PER_MONTH,
   aiChatSelfEnrollAllowed,
@@ -275,6 +276,9 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       credentialsReady: sheetsCredentialsConfigured(),
       shareWith: sheetsServiceAccountEmail(),
     };
+    const gmail = canManageOwners
+      ? await getGmailPublicStatus(prisma, storeId)
+      : emptyGmailStatus();
     const aiChat = {
       ...readAiChatState(store.profileJson),
       selfEnroll: aiChatSelfEnrollAllowed(),
@@ -301,13 +305,14 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       const now = new Date();
       if (one(req.query.view) === 'setup') {
         res.status(200).json({
-          success: true, storeName: store.storeName, canEdit, setup,
+          success: true, storeName: store.storeName, canEdit, canManageOwners, setup,
           storeTypes: storeTypeOptions().map((t) => ({ ...t, modules: dashboardModules(t.id, t.defaults.fuel) })),
           storeFeatures: Object.entries(STORE_FEATURE_LABEL).map(([id, label]) => ({ id, label })),
           messageSamples: parseStoredProfile(store.profileJson).messageSamples,
         ...vendorCatalog(store.profileJson),
         ...pictureMaps(store.profileJson, setup?.storeType ?? null),
         googleSheets,
+        gmail,
         aiChat,
         agents,
         channels,
@@ -390,6 +395,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         ...vendorCatalog(store.profileJson),
         ...pictureMaps(store.profileJson, setup?.storeType ?? null),
         googleSheets,
+        gmail,
         aiChat,
         agents,
         channels,

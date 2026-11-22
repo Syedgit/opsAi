@@ -92,6 +92,8 @@ export function extractVendorHint(question: string): string | null {
 }
 
 export function wantsLastPaidAsk(q: string): boolean {
+  // Till "paid out" / payout is not a vendor invoice payment.
+  if (/\bpaid[-\s]?outs?\b|\bpayouts?\b/.test(q)) return false;
   return (
     /\bwhen\s+did\s+we\s+pay\b/.test(q) ||
     /\blast\s+(paid\s+)?invoice\b/.test(q) ||
@@ -104,6 +106,46 @@ export function wantsLastPaidAsk(q: string): boolean {
 
 export function wantsOpenDueAsk(q: string): boolean {
   return /\b(open|due|unpaid|pending|still\s+owe|owing|owed)\b/.test(q);
+}
+
+/** Vendor directory / history — not “open only”. */
+export function wantsVendorDirectoryAsk(q: string): boolean {
+  // “which vendor was paid last” is last-paid, not a directory list.
+  if (wantsLastPaidAsk(q) || (wantsOpenDueAsk(q) && !/\bclosed\b/.test(q) && !/\ball\b/.test(q))) {
+    return false;
+  }
+  return (
+    /\b(all|every|list).{0,40}\bvendors?\b/.test(q) ||
+    /\bwhat\s+(are\s+)?(all\s+)?(the\s+)?vendors?\b/.test(q) ||
+    /\bwhich\s+vendors?\b/.test(q) ||
+    /\bvendors?\s+(names?|list|we\s+have|we\s+use|using|used)\b/.test(q) ||
+    /\bclosed\s+invoices?\b/.test(q) ||
+    /\binvoices?\s+(closed|history|all)\b/.test(q) ||
+    /\beven\s+(for\s+)?closed\b/.test(q) ||
+    /\bin\s+general.{0,40}\bvendors?\b/.test(q)
+  );
+}
+
+export function wantsTillPaidOutAsk(q: string): boolean {
+  return /\bpaid[-\s]?outs?\b|\bpayouts?\b|\blast\s+paid\s+out\b/.test(q);
+}
+
+/** Named calendar month other than “this month” — loaders only do current week/month windows. */
+export function wantsNamedPastMonthAsk(q: string): boolean {
+  return (
+    /\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/.test(q) &&
+    !/\bthis\s+month\b/.test(q) &&
+    !/\bso\s+far\b/.test(q)
+  );
+}
+
+/** Owner asking how a vendor was paid (cash/card) — standing tender is NOT the answer. */
+export function wantsVendorPaymentMethodAsk(q: string): boolean {
+  return (
+    (/\b(cash|card|check|cheque)\b/.test(q) &&
+      /\b(vendor|invoice|bill|paid|payment|buying|standing)\b/.test(q)) ||
+    /\bhow\s+(did|do|was|were).{0,40}\b(pay|paid|payment)\b/.test(q)
+  );
 }
 
 export const SupervisorRouteSchema = z.object({
@@ -151,14 +193,15 @@ export function buildSupervisorSystem(toolDigest: string): string {
     'Pick ONE primary tool from the catalog. Return JSON only matching:',
     '{"agentId":"books","toolId":"standing_report"|"open_invoices"|"invoice_period_summary"|"missing_closes"|"help_capabilities"|"clarify"|"unsupported"|"not_ai_chat","slots":{"period":"week"|"month"|null,"vendor":string|null,"status":"all"|"open"|"paid"|null},"clarity":"ok"|"need_slot"|"clarify"|"unsupported"|"not_ai_chat","ask":string|null}',
     'Use prior turns: short follow-ups like "total", "paid", "open ones" continue the last topic.',
-    'standing_report = DMR / standing / sales vs buying.',
-    'open_invoices = still owed / unpaid remaining / due invoices. Put vendor in slots.vendor when named.',
-    'invoice_period_summary = paid/open counts, last paid invoice. status paid for “when did we pay / last paid”. Put vendor in slots.vendor when named.',
+    'standing_report = DMR / standing / sales vs buying. Cash/card there are REGISTER sales tender — never vendor payment method.',
+    'open_invoices = still owed / unpaid remaining / due invoices ONLY. Never use for “all vendors” or closed invoices.',
+    'invoice_period_summary = vendor list, paid/open/all invoices in the period, last paid invoice. status all for “which vendors / closed invoices”; status paid for “when did we pay / last paid”. Put vendor in slots.vendor when named.',
     'missing_closes = days without a close.',
     'help_capabilities = what can you do.',
-    'unsupported = forecast, payroll, profit, wages, utility due dates.',
+    'unsupported = forecast, payroll, profit, wages, utility due dates, named past months beyond this week/month window.',
     'not_ai_chat = ONLY posting a close, invoice photo, or OK/FIX with amounts — never a who/what/how question.',
     'If the message asks BOTH last-paid AND open/due, prefer invoice_period_summary with status paid and vendor set; code may also load open invoices.',
+    'Till paid-out / payout ≠ vendor invoice — clarify.',
     'clarify / need_slot = set ask to one short question; do not invent numbers.',
     'Default period to month when unspecified. Default status to all for invoice_period_summary unless they say paid or open.',
     'Catalog:',
@@ -251,14 +294,64 @@ export function planFromKeywords(question: string, history: ChatTurn[] = []): As
     };
   }
 
+  if (wantsTillPaidOutAsk(q)) {
+    return {
+      clarity: 'clarify',
+      ask: 'Do you mean a till paid-out from a close, or the last vendor invoice we paid?',
+      steps: [{ toolId: 'clarify', slots: {}, purpose: 'clarify' }],
+    };
+  }
+
+  if (wantsNamedPastMonthAsk(q) && !/this\s+(week|month)/.test(q)) {
+    return {
+      clarity: 'clarify',
+      ask: 'I can show this week or this calendar month so far. Which one do you want?',
+      steps: [{ toolId: 'clarify', slots: {}, purpose: 'clarify' }],
+    };
+  }
+
   const aboutInvoices =
     /invoice|bill|vendor|owe|owing|owed|pending/.test(q) ||
     wantsLastPaidAsk(q) ||
+    wantsVendorDirectoryAsk(q) ||
+    wantsVendorPaymentMethodAsk(q) ||
     (/invoice|bill|vendor|owe|pending/.test(prior) &&
       /^(total|paid|open|all|yes|those|them|how many)\b/.test(q));
 
   if (aboutInvoices) {
-    const lastPaid = wantsLastPaidAsk(q) || (/\bpaid\b/.test(q) && !wantsOpenDueAsk(q));
+    if (wantsVendorDirectoryAsk(q)) {
+      return {
+        clarity: 'ok',
+        ask: null,
+        steps: [
+          {
+            toolId: 'invoice_period_summary',
+            slots: { period, vendor: null, status: 'all' },
+            purpose: 'vendor_directory',
+          },
+        ],
+      };
+    }
+
+    if (wantsVendorPaymentMethodAsk(q) && !wantsOpenDueAsk(q)) {
+      return {
+        clarity: 'ok',
+        ask: null,
+        steps: [
+          {
+            toolId: 'invoice_period_summary',
+            slots: {
+              period,
+              vendor,
+              status: /\bopen\b/.test(q) ? 'open' : /\bpaid\b/.test(q) ? 'paid' : 'all',
+            },
+            purpose: vendor ? `vendor_payment:${vendor}` : 'vendor_payment',
+          },
+        ],
+      };
+    }
+
+    const lastPaid = wantsLastPaidAsk(q) || (/\bpaid\b/.test(q) && !wantsOpenDueAsk(q) && !/\bcash|card\b/.test(q));
     const openDue = wantsOpenDueAsk(q);
     const wantsCount =
       /how many|count|total|summary|so far|paid invoice|invoices we|invoices this|invoices made/.test(q) ||

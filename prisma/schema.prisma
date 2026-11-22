@@ -39,10 +39,38 @@ model User {
 
   // Many-to-many relationship with stores
   stores UserStore[]
+  gmailConnections GmailConnection[]
 
   @@index([email])
   @@index([provider, providerId])
   @@map("users")
+}
+
+/// Per-business Gmail read-only connector. One inbox per store (not per owner).
+model GmailConnection {
+  id              String    @id @default(uuid())
+  storeId         String    @unique @map("store_id")
+  /// Owner who completed OAuth (audit).
+  userId          String    @map("user_id")
+  googleEmail     String    @map("google_email")
+  /// AES-GCM ciphertext of the refresh token (see lib/tokenCrypto.ts).
+  refreshTokenEnc String    @map("refresh_token_enc") @db.Text
+  scope           String
+  /// active | needs_reconnect | disconnected
+  status          String    @default("active")
+  /// Owner alert rules: [{ id, label, from, contains, mode }]
+  alertRulesJson  Json?     @map("alert_rules_json")
+  lastSyncAt      DateTime? @map("last_sync_at")
+  lastError       String?   @map("last_error") @db.Text
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  store StoreConfig @relation(fields: [storeId], references: [storeId], onDelete: Cascade)
+  user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([userId])
+  @@map("gmail_connections")
 }
 
 // Junction table for User-Store many-to-many relationship
@@ -103,6 +131,7 @@ model StoreConfig {
 
   // Many-to-many relationship with users
   users UserStore[]
+  gmailConnection GmailConnection?
 
   // Optional: one business number, many groups — Meta group_id → store
   whatsappGroups StoreWhatsAppGroup[]

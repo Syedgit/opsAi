@@ -273,7 +273,7 @@ export async function loadToolFacts(
   let totalDollars = 0;
   let counted = 0;
   const vendors: Record<string, number> = {};
-  let lastPaid: { vendor: string; amount: number; date: string } | null = null;
+  let lastPaid: { vendor: string; amount: number; date: string; method: string | null } | null = null;
 
   for (const row of rows) {
     const raw = row.payloadJson;
@@ -307,11 +307,21 @@ export async function loadToolFacts(
       const paidAmt = paid > 0 ? paid : total;
       paidCount += 1;
       paidDollars += paidAmt;
+      const methods = (inv.payments || []).map((p) => p.method).filter(Boolean);
+      const method =
+        methods.length > 0
+          ? [...new Set(methods)].join('/')
+          : inv.paymentStatus === 'paid_cash'
+            ? 'cash'
+            : inv.paymentStatus === 'paid_other'
+              ? 'other'
+              : null;
       // rows ascend by createdAt — last fully-paid invoice wins as most recent.
       lastPaid = {
         vendor,
         amount: Math.round(paidAmt * 100) / 100,
         date: d || row.createdAt.toISOString().slice(0, 10),
+        method,
       };
     }
   }
@@ -330,7 +340,9 @@ export async function loadToolFacts(
         : `${counted} invoice(s)${vendorLabel} · ${money(Math.round(totalDollars * 100) / 100)} billed · ${paidCount} paid · ${openCount} open (${money(Math.round(openDollars * 100) / 100)} owed)`;
 
   const lastPaidLine = lastPaid
-    ? `Last paid${vendorLabel}: ${lastPaid.vendor} · ${money(lastPaid.amount)} · ${lastPaid.date}`
+    ? `Last paid${vendorLabel}: ${lastPaid.vendor} · ${money(lastPaid.amount)} · ${lastPaid.date}${
+        lastPaid.method ? ` · ${lastPaid.method}` : ''
+      }`
     : nameHint && status === 'paid'
       ? `No fully paid invoice on the books for “${nameHint}” in ${report.label}.`
       : null;

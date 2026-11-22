@@ -8,7 +8,7 @@ import { applyStoredProfile } from './profileStore';
  * Prisma's UserRole is a Postgres enum, so `WHERE role = OWNER` becomes
  * `varchar = "UserRole"` and Postgres raises 42883. Filter role in JS instead.
  */
-function isOwnerRole(role: string): boolean {
+export function isOwnerRole(role: string): boolean {
   return role === UserRole.OWNER;
 }
 

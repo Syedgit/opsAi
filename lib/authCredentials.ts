@@ -6,12 +6,19 @@ export const MAX_NAME_LENGTH = 80;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export type AuthAction = 'login' | 'signup' | 'me' | 'logout';
+export type AuthAction = 'login' | 'signup' | 'me' | 'logout' | 'whatsapp' | 'credentials';
 
 export type CredentialError = { ok: false; error: string; status: number };
 
 export type SignupInput = { ok: true; email: string; password: string; name: string };
 export type LoginInput = { ok: true; email: string; password: string };
+export type LinkCredentialsInput = { ok: true; email: string; password: string };
+
+/** Placeholder email for WhatsApp-only accounts (not for desktop login). */
+export function isSyntheticPhoneEmail(email: string | null | undefined): boolean {
+  const value = String(email || '').trim().toLowerCase();
+  return /^wa\.\d+@phone\.opsai\.us$/.test(value);
+}
 
 function headerValue(value: unknown): string | undefined {
   if (typeof value === 'string' && value) return value;
@@ -44,6 +51,8 @@ export function authActionFromUrl(url?: string): AuthAction | null {
   if (path.endsWith('/login')) return 'login';
   if (path.endsWith('/logout')) return 'logout';
   if (path.endsWith('/me')) return 'me';
+  if (path.endsWith('/whatsapp')) return 'whatsapp';
+  if (path.endsWith('/credentials')) return 'credentials';
   return null;
 }
 
@@ -121,6 +130,35 @@ export function parseLoginInput(body: Record<string, unknown>): LoginInput | Cre
   return { ok: true, email, password: body.password };
 }
 
+/** Logged-in WhatsApp owner attaching a real email + password for desktop login. */
+export function parseLinkCredentialsInput(body: Record<string, unknown>): LinkCredentialsInput | CredentialError {
+  const email = parseEmail(body.email);
+  if (typeof email !== 'string') return email;
+  if (isSyntheticPhoneEmail(email)) {
+    return { ok: false, error: 'Use your real email address', status: 400 };
+  }
+  const password = parseNewPassword(body.password);
+  if (typeof password !== 'string') return password;
+  const confirm = body.passwordConfirm ?? body.confirmPassword;
+  if (typeof confirm === 'string' && confirm !== password) {
+    return { ok: false, error: 'Passwords do not match', status: 400 };
+  }
+  return { ok: true, email, password };
+}
+
+/** True when this account still needs a real email + password for desktop login. */
+export function canAddDesktopCredentials(user: {
+  email: string;
+  password?: string | null;
+  provider?: string | null;
+}): boolean {
+  if (user.password && !isSyntheticPhoneEmail(user.email)) return false;
+  return user.provider === 'whatsapp' || isSyntheticPhoneEmail(user.email) || !user.password;
+}
+
 export const DUPLICATE_EMAIL_ERROR = 'An account with this email already exists. Sign in instead.';
-export const NO_PASSWORD_ERROR = 'This account has no password set. Create a new account with email and password.';
+export const NO_PASSWORD_ERROR =
+  'This account has no password yet. Sign in with WhatsApp, then add email under More.';
 export const INVALID_LOGIN_ERROR = 'Invalid email or password';
+export const DESKTOP_LOGIN_ALREADY_SET =
+  'Desktop email login is already set on this account. Sign in with that email.';

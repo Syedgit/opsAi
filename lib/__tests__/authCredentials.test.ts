@@ -2,6 +2,9 @@ import {
   DUPLICATE_EMAIL_ERROR,
   authActionFromRequest,
   authActionFromUrl,
+  canAddDesktopCredentials,
+  isSyntheticPhoneEmail,
+  parseLinkCredentialsInput,
   parseLoginInput,
   parseSignupInput,
   readJsonBody,
@@ -13,6 +16,8 @@ describe('authActionFromUrl', () => {
     expect(authActionFromUrl('/api/auth/login?next=/onboarding')).toBe('login');
     expect(authActionFromUrl('/api/auth/me/')).toBe('me');
     expect(authActionFromUrl('/api/auth/logout')).toBe('logout');
+    expect(authActionFromUrl('/api/auth/whatsapp')).toBe('whatsapp');
+    expect(authActionFromUrl('/api/auth/credentials')).toBe('credentials');
     expect(authActionFromUrl('/api/auth/index.ts')).toBeNull();
   });
 });
@@ -94,6 +99,47 @@ describe('parseLoginInput', () => {
 
   it('requires both fields', () => {
     expect(parseLoginInput({})).toMatchObject({ ok: false, error: 'Email and password are required' });
+  });
+});
+
+describe('desktop credentials helpers', () => {
+  it('detects synthetic WhatsApp placeholder emails', () => {
+    expect(isSyntheticPhoneEmail('wa.15551234567@phone.opsai.us')).toBe(true);
+    expect(isSyntheticPhoneEmail('owner@store.com')).toBe(false);
+  });
+
+  it('parses link credentials and rejects placeholder emails', () => {
+    expect(
+      parseLinkCredentialsInput({
+        email: 'Owner@Store.com',
+        password: 'secret123',
+        passwordConfirm: 'secret123',
+      }),
+    ).toEqual({ ok: true, email: 'owner@store.com', password: 'secret123' });
+    expect(
+      parseLinkCredentialsInput({
+        email: 'wa.15551234567@phone.opsai.us',
+        password: 'secret123',
+        passwordConfirm: 'secret123',
+      }),
+    ).toMatchObject({ ok: false, error: 'Use your real email address' });
+  });
+
+  it('only allows desktop credentials when not already set', () => {
+    expect(
+      canAddDesktopCredentials({
+        email: 'wa.15551234567@phone.opsai.us',
+        password: null,
+        provider: 'whatsapp',
+      }),
+    ).toBe(true);
+    expect(
+      canAddDesktopCredentials({
+        email: 'owner@store.com',
+        password: 'hashed',
+        provider: 'whatsapp',
+      }),
+    ).toBe(false);
   });
 });
 

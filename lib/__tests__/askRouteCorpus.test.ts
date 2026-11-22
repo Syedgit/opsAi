@@ -28,6 +28,8 @@ const CORPUS: Expectation[] = [
   { q: 'what do we still owe', toolId: 'open_invoices' },
   { q: 'pending vendor bills', toolId: 'open_invoices' },
   { q: 'what do we still owe Pepsi', toolId: 'open_invoices' },
+  { q: 'what are all the vendors name', toolId: 'invoice_period_summary', status: 'all' },
+  { q: 'just in general what are all the vendors we have been using', toolId: 'invoice_period_summary', status: 'all' },
   { q: 'how many invoices this month', toolId: 'invoice_period_summary', status: 'all' },
   { q: 'total paid invoices', toolId: 'invoice_period_summary', status: 'paid' },
   { q: 'who was the vendor paid last time', toolId: 'invoice_period_summary', status: 'paid' },

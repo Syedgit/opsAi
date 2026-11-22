@@ -27,6 +27,11 @@ describe('classifyMessage', () => {
 });
 
 describe('isWhatsAppCommand', () => {
+  it('detects login keywords', () => {
+    expect(isWhatsAppCommand('Login')).toBe(true);
+    expect(isWhatsAppCommand('start')).toBe(true);
+  });
+
   it('detects OK command', () => {
     expect(isWhatsAppCommand('OK')).toBe(true);
     expect(isWhatsAppCommand('ok')).toBe(true);

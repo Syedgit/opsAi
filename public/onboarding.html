@@ -341,6 +341,10 @@
         if (window.opsai) {
             window.opsai.me().then(function (d) {
                 if (!d) window.location.replace('/login?next=' + encodeURIComponent(location.pathname + location.search));
+                else if (d.phoneE164) {
+                    const phoneInput = document.getElementById('ownerPhoneE164');
+                    if (phoneInput && !phoneInput.value) phoneInput.value = d.phoneE164;
+                }
             });
         }
         document.getElementById('logoutBtn').addEventListener('click', function () {
@@ -417,6 +421,13 @@
                 name: 'Google Sheets',
                 blurb: 'Mirror confirmed entries into a spreadsheet you already use.',
                 icon: '/integrations/google-sheets.svg',
+                defaultWanted: false
+            },
+            {
+                id: 'gmail',
+                name: 'Gmail',
+                blurb: 'Read-only scan for past-due mail; WhatsApp digests for the owner.',
+                icon: '/integrations/gmail.svg',
                 defaultWanted: false
             },
             {
@@ -858,6 +869,7 @@
             const tools = {
                 whatsapp: true,
                 googleSheets: !!toolsWanted.googleSheets,
+                gmail: !!toolsWanted.gmail,
                 slack: !!toolsWanted.slack,
                 email: !!toolsWanted.email,
                 books: !!toolsWanted.books,

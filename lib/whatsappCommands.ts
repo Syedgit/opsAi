@@ -3,6 +3,7 @@ import { PendingStatus } from '@prisma/client';
 import { format, startOfDay, endOfDay } from 'date-fns';
 import { deliverStoreMessage, managerPhonesForStore, postToStoreGroups, sendWhatsAppButtons, sendWhatsAppMessage, sendWhatsAppTemplate } from './whatsappMessaging';
 import { computerDashboardHint, groupDashboardHint, isPublicAppUrl, sendPrivateDashboardLinks } from './whatsappLogin';
+import { handlePhoneLoginKeyword, isPhoneLoginKeyword } from './whatsappPhoneAuth';
 import {
   cancelPendingAction,
   confirmPendingAction,
@@ -36,7 +37,8 @@ export interface CommandResult {
   storeId?: string;
 }
 
-const COMMAND_RE = /^(OK|CANCEL|FIX|STATUS|TODAY|TASKS|WEEK|MONTH|HELP|SEND|RULE|DUE|STOP|GOTIT|SUMMARY)(\s|$)/i;
+const COMMAND_RE =
+  /^(OK|CANCEL|FIX|STATUS|TODAY|TASKS|WEEK|MONTH|HELP|SEND|RULE|DUE|STOP|GOTIT|SUMMARY|LOGIN|START|SIGNIN|DASHBOARD)(\s|$)/i;
 /** Taps on opsAi's buttons arrive as their title when Meta drops the payload. */
 const TAP_RE = /^(show summary|👍 got it|got it)$/i;
 /** Old link command only — not "store sales" / "store cash" captions on a close photo. */
@@ -44,7 +46,12 @@ const STORE_LINK_RE = /^STORE(\s+S\d+)?$/i;
 
 export function isWhatsAppCommand(text: string): boolean {
   const trimmed = text.trim();
-  return COMMAND_RE.test(trimmed) || STORE_LINK_RE.test(trimmed) || TAP_RE.test(trimmed);
+  return (
+    COMMAND_RE.test(trimmed) ||
+    STORE_LINK_RE.test(trimmed) ||
+    TAP_RE.test(trimmed) ||
+    isPhoneLoginKeyword(trimmed)
+  );
 }
 
 export async function handleWhatsAppCommand(
@@ -56,6 +63,10 @@ export async function handleWhatsAppCommand(
   const trimmed = commandText.trim();
   if (/^show summary$/i.test(trimmed)) return handleShowSummary(prisma, phoneE164, []);
   if (/^(👍 )?got it$/i.test(trimmed)) return { success: true, message: '' };
+  if (isPhoneLoginKeyword(trimmed) || /^(log\s*in|sign\s*in)$/i.test(trimmed)) {
+    return handlePhoneLoginKeyword(prisma, phoneE164);
+  }
+
   const parts = trimmed.split(/\s+/);
   const command = parts[0].toUpperCase();
 
@@ -63,6 +74,11 @@ export async function handleWhatsAppCommand(
     case 'GOTIT':
       // Only there so the person writes back and tomorrow's summary still gets through.
       return { success: true, message: '' };
+    case 'LOGIN':
+    case 'START':
+    case 'SIGNIN':
+    case 'DASHBOARD':
+      return handlePhoneLoginKeyword(prisma, phoneE164);
     case 'SUMMARY':
       return handleShowSummary(prisma, phoneE164, parts.slice(1));
     case 'STOP':
@@ -745,6 +761,7 @@ async function handleHelp(): Promise<CommandResult> {
       'TODAY — today\'s confirmed count',
       'TASKS — what is still open for your shift',
       'DUE — vendor bills still owed',
+      'LOGIN — open the dashboard (tap-link, no password)',
       'HELP — this message',
       '',
       '💬 Enrolled AI chat (owners/managers, 1:1 only): ask about standing, DMR, or open vendor bills in plain words.',
