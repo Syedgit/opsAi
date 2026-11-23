@@ -20,9 +20,9 @@
     <link rel="apple-touch-startup-image" href="/splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
     <link rel="apple-touch-startup-image" href="/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
     <link rel="apple-touch-startup-image" href="/splash-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
-    <link rel="stylesheet" href="/app-shell.css?v=4">
+    <link rel="stylesheet" href="/app-shell.css?v=6">
     <link rel="stylesheet" href="/app-ui.css?v=2">
-    <script src="/app-shell.js?v=3"></script>
+    <script src="/app-shell.js?v=6"></script>
     <title>opsAi · Tasks &amp; alerts</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -170,18 +170,15 @@
 <body>
     <div id="appSplash" aria-hidden="true"><img src="/icon-192.png" alt=""><span>opsAi</span></div>
 <header>
-    <a href="/dashboard" class="brand-logo" aria-label="Operation Intelligence"><img src="/logo.jpg" alt="Operation Intelligence"></a>
-    <a href="/dashboard">&larr; Dashboard</a>
     <h1>Tasks &amp; alerts</h1>
     <select id="storeSelect" aria-label="Business"></select>
-    <button type="button" class="small" id="logoutBtn">Log out</button>
+    <button type="button" class="small desk-only" id="logoutBtn">Log out</button>
 </header>
 <main>
     <div id="notice"></div>
     <div class="tabs">
-        <div class="tab active" data-view="today">Due</div>
         <div class="tab" data-view="inspection">Inspection</div>
-        <div class="tab" data-view="setup">Business admin</div>
+        <div class="tab active" data-view="setup">Setup</div>
     </div>
     <div id="content"><div class="empty">Loading…</div></div>
 </main>
@@ -206,7 +203,8 @@
     const pageParams = new URLSearchParams(location.search);
     let storeId = pageParams.get('storeId') || '';
     const startView = pageParams.get('view');
-    let view = startView === 'setup' || startView === 'inspection' || startView === 'today' ? startView : 'today';
+    let view = startView === 'inspection' || startView === 'setup' ? startView : 'setup';
+    if (startView === 'today') view = 'setup';
     const gmailFlash = pageParams.get('gmail');
     if (gmailFlash) {
         pageParams.delete('gmail');
@@ -243,6 +241,13 @@
     function note(kind, text) {
         document.getElementById('notice').innerHTML = text ? '<div class="notice ' + kind + '">' + esc(text) + '</div>' : '';
         if (text) window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    /** In-app confirm (no browser dialogs). */
+    function askConfirm(opts) {
+        if (window.opsai && typeof window.opsai.confirm === 'function') {
+            return window.opsai.confirm(opts);
+        }
+        return Promise.resolve(window.confirm(opts && opts.body ? opts.body : 'Continue?'));
     }
     function clock(value) {
         if (!value) return '';
@@ -370,9 +375,15 @@
                         : '<td></td>') + '</tr>';
             }).join('');
         };
-        const head = '<thead><tr><th>Task</th><th>Due</th><th>Status</th><th>Proof</th><th></th></tr></thead>';
+        const head = '<thead><tr><th>Task</th><th>When</th><th>Status</th><th>Proof</th><th></th></tr></thead>';
 
         const alertsOn = !(board.channels && board.channels.taskAlerts && board.channels.taskAlerts.enabled === false);
+        const delivery = board.delivery || null;
+        const deliveryWarn = alertsOn && delivery && (
+            !delivery.canDeliver ||
+            delivery.usingLinkedOwnerPhone ||
+            (delivery.staffCount === 0 && delivery.groupCount === 0)
+        );
         html += '<div class="card"><div class="row" style="justify-content: space-between; gap:10px; flex-wrap:wrap;"><div>' +
             '<h2 style="margin:0;">Needs action' + (open.length ? ' · ' + open.length : '') + '</h2>' +
             '<p class="muted" style="margin:6px 0 0;">' +
@@ -384,8 +395,13 @@
                 ? '<div class="row" style="gap:10px;align-items:center;">' +
                   '<label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer;white-space:nowrap;">' +
                   '<input type="checkbox" data-task-alerts' + (alertsOn ? ' checked' : '') + '> WhatsApp alerts</label>' +
-                  '<button data-run-now class="primary"' + (alertsOn ? '' : ' disabled title="Turn on WhatsApp alerts first"') + '>Send alerts</button></div>'
+                  '<button data-run-now class="primary"' + (alertsOn ? '' : ' disabled title="Turn on WhatsApp alerts first"') + '>Send alerts</button>' +
+                  '<button type="button" class="small" data-test-wa-alert' + (alertsOn ? '' : ' disabled') + '>Test WhatsApp</button></div>'
                 : '') + '</div>' +
+            (deliveryWarn && delivery.hint
+                ? '<div class="empty" style="margin-top:12px;border-color:rgba(180,90,40,.35);background:rgba(180,90,40,.06);">' + esc(delivery.hint) +
+                  ' Open <strong>People</strong>, add a staff or owner WhatsApp number, then tap <strong>Test WhatsApp</strong>.</div>'
+                : '') +
             (open.length
                 ? '<table style="margin-top:12px;">' + head + '<tbody>' + rows(open) + '</tbody></table>'
                 : '<div class="empty">Nothing due right now. If you just set Lock up for a past time, turn on alerts and tap Send alerts.</div>') + '</div>';
@@ -899,9 +915,17 @@
         const canOwners = board.canManageOwners;
         if (!board.canEdit && team.whatsapp.length === 0) return '';
         let html = '<div class="card"><div class="row" style="justify-content: space-between; align-items: baseline; margin-bottom: 8px;"><h2 style="margin:0;">WhatsApp team</h2>' + (team.whatsapp.length ? '<span class="count">' + team.whatsapp.length + '</span>' : '') + '</div>';
-        html += '<p class="muted card-help">People here message opsAi on WhatsApp 1:1.</p>';
-        if (team.whatsapp.length === 0) html += '<div class="muted" style="margin-bottom: 8px;">No WhatsApp numbers yet.</div>';
-        else {
+        html += '<p class="muted card-help">People here message opsAi on WhatsApp 1:1. One number can only be listed on one business; your other businesses still DM that owner number for task alerts.</p>';
+        if (team.whatsapp.length === 0) {
+            const d = board.delivery || null;
+            if (d && d.usingLinkedOwnerPhone) {
+                html += '<div class="muted" style="margin-bottom: 8px;">No local numbers — owner alerts go to ' +
+                    esc(d.linkedOwnerPhoneMasked || 'your linked WhatsApp') +
+                    ' (same number as another business you own). Add staff numbers below for the shift.</div>';
+            } else {
+                html += '<div class="muted" style="margin-bottom: 8px;">No WhatsApp numbers yet.</div>';
+            }
+        } else {
             html += '<table><thead><tr><th>Name</th><th>Number</th><th>Role</th>' + (board.canEdit ? '<th></th>' : '') + '</tr></thead><tbody>';
             team.whatsapp.forEach(function (p) {
                 const ownerLocked = p.role === 'OWNER' && !canOwners;
@@ -979,71 +1003,101 @@
     function agentsCard() {
         const agents = board.agents || {};
         const chat = board.aiChat || {};
+        const plan = board.plan || {};
+        const features = plan.features || {};
         const isOwner = board.canManageOwners;
-        const catalog = agents.catalog || [];
         const booksOn = !!(agents.enabled && agents.enabled.books) || !!chat.enrolled;
-        const price = chat.monthlyUsd != null ? chat.monthlyUsd : 20;
-        if (!catalog.length && !booksOn && !isOwner && !board.canEdit) return '';
+        const staffOn = !!(agents.enabled && agents.enabled.staff);
+        const booksInPlan = !!(features.booksLookups || agents.planIncludesBooks || chat.includedInPlan);
+        const autoInPlan = !!(features.autoRemind || agents.planIncludesAutoRemind);
+        if (!booksOn && !isOwner && !board.canEdit) return '';
 
+        const lead = agents.leadName || 'Zar';
+        const planName = plan.name || 'Pro';
         let html = '<div class="card">';
-        html += '<p class="muted card-help">' +
-            (agents.packLabel ? '<strong>' + esc(agents.packLabel) + '</strong> · ' : '') +
-            esc(agents.marketingLine || 'Your business agents — you confirm every money post.') + '</p>';
-
-        if (catalog.length) {
-            html += '<ul class="agent-rows">';
-            catalog.forEach(function (a) {
-                const on = a.enabled !== false;
-                const priceLabel = a.pricing === 'addon'
-                    ? ('$' + (a.monthlyUsd != null ? a.monthlyUsd : price) + '/mo')
-                    : 'Included';
-                const role = a.role || a.name;
-                html += '<li><div class="agent-meta"><div class="agent-name">' + esc(a.name) +
-                    '<span class="muted" style="font-weight:500;font-size:12px;"> · ' + esc(role) + '</span></div>' +
-                    '<div class="agent-job">' + esc(a.job) + '</div></div><div class="agent-side">' +
-                    '<div class="agent-status' + (on ? '' : ' off') + '">' + (on ? 'On' : 'Off') + ' · ' + esc(priceLabel) + '</div>';
-                if (isOwner && a.canToggle && a.id === 'staff') {
-                    html += '<div style="margin-top:8px;"><button type="button" class="small" data-agent-toggle="staff" data-agent-on="' + (on ? '0' : '1') + '">' +
-                        (on ? 'Turn off' : 'Turn on') + '</button></div>';
-                }
-                if (isOwner && a.id === 'books') {
-                    html += '<div style="margin-top:8px;">';
-                    if (on) {
-                        html += '<button type="button" class="small danger" id="unenrollAiChat">Turn off</button>';
-                    } else if (chat.selfEnroll || agents.selfEnrollBooks) {
-                        html += '<button type="button" class="primary" id="enrollAiChat">Enable Quinn · $' + esc(String(price)) + '</button>';
-                    } else {
-                        html += '<span class="muted" style="font-size:12px;">Enrollment closed</span>';
-                    }
-                    html += '</div>';
-                }
-                html += '</div></li>';
-            });
-            html += '</ul>';
-        }
+        html += '<p class="muted card-help">Chat agent is on for every plan. Books look-ups need Pro or Premium. Your plan: <strong>' +
+            esc(planName) + '</strong> — <a href="/billing">Billing</a>.</p>';
 
         if (isOwner) {
-            const auto = agents.autonomy === 'auto_remind' ? 'auto_remind' : 'draft_only';
-            html += '<p style="margin-top:14px;"><button type="button" class="small" id="setAgentAutonomy" data-autonomy="' +
-                (auto === 'draft_only' ? 'auto_remind' : 'draft_only') + '">' +
-                (auto === 'draft_only' ? 'Allow Follow-up auto-remind' : 'Use draft-only reminders') +
-                '</button></p>';
+            html += '<form id="leadNameForm" class="grid" style="margin-bottom:14px;align-items:end;">' +
+                '<div><label>Agent name (chat)</label>' +
+                '<input type="text" name="leadName" maxlength="32" required value="' + esc(lead) + '" placeholder="Zar"></div>' +
+                '<button type="submit" class="small">Save name</button></form>';
+        } else {
+            html += '<p style="margin:0 0 14px;">Chat agent: <strong>' + esc(lead) + '</strong></p>';
         }
 
-        html += '<div class="crew-cta">';
-        html += '<a href="/crew?storeId=' + encodeURIComponent(storeId) + '"><button type="button" class="primary">Chat with agents</button></a>';
-        if (booksOn) {
-            html += '<form id="aiChatQuestionForm" style="margin-top: 16px;">' +
-                '<label>Ask Quinn (Books)</label>' +
-                '<textarea name="question" rows="2" maxlength="500" required placeholder="How is standing this month?" style="width:100%;margin:6px 0 8px;"></textarea>' +
-                '<button type="submit" class="primary">Ask</button></form>' +
-                '<pre id="aiChatAnswer" class="muted" style="white-space:pre-wrap;margin-top:12px;display:none;"></pre>';
-        } else if (!isOwner) {
-            html += '<p class="muted" style="margin-top:12px;">Quinn (Books) is off until the owner enables it.</p>';
+        html += '<h3 style="font-size:14px;margin:0 0 8px;font-weight:650;">What ' + esc(lead) + ' can use</h3>';
+        html += '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">';
+
+        html += '<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;">' +
+            '<div><strong>Chat agent</strong><div class="muted" style="font-size:13px;margin-top:2px;">Ops chat — included on all plans</div></div>' +
+            '<span class="muted" style="font-size:13px;">On</span></div>';
+
+        html += '<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;">';
+        html += '<div><strong>Books look-ups</strong><div class="muted" style="font-size:13px;margin-top:2px;">Standing, invoices, DMR in chat' +
+            (booksInPlan ? ' · included on ' + esc(planName) : ' · Pro &amp; Premium') + '</div></div>';
+        if (isOwner) {
+            if (!booksInPlan && !booksOn) {
+                html += '<a href="/billing" class="small" style="text-decoration:none;"><button type="button" class="primary">Upgrade plan</button></a>';
+            } else if (booksOn) {
+                html += '<button type="button" class="small danger" id="unenrollAiChat">Turn off</button>';
+            } else if (chat.selfEnroll || agents.selfEnrollBooks || booksInPlan) {
+                html += '<button type="button" class="primary" id="enrollAiChat">Enable</button>';
+            } else {
+                html += '<a href="/billing" class="muted" style="font-size:12px;">See plans</a>';
+            }
+        } else {
+            html += '<span class="muted">' + (booksOn ? 'On' : 'Off') + '</span>';
         }
         html += '</div>';
+
+        if (isOwner) {
+            html += '<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;">' +
+                '<div><strong>Staff shifts</strong><div class="muted" style="font-size:13px;margin-top:2px;">Shift task proof on WhatsApp</div></div>' +
+                '<button type="button" class="small" data-agent-toggle="staff" data-agent-on="' + (staffOn ? '0' : '1') + '">' +
+                (staffOn ? 'Turn off' : 'Turn on') + '</button></div>';
+            const auto = agents.autonomy === 'auto_remind' ? 'auto_remind' : 'draft_only';
+            html += '<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;">' +
+                '<div><strong>Follow-up reminds</strong><div class="muted" style="font-size:13px;margin-top:2px;">' +
+                (autoInPlan
+                    ? (auto === 'draft_only' ? 'Draft only — you send' : 'May auto-remind')
+                    : 'Auto-remind on Premium') + '</div></div>';
+            if (autoInPlan) {
+                html += '<button type="button" class="small" id="setAgentAutonomy" data-autonomy="' +
+                    (auto === 'draft_only' ? 'auto_remind' : 'draft_only') + '">' +
+                    (auto === 'draft_only' ? 'Allow auto-remind' : 'Draft only') +
+                    '</button>';
+            } else {
+                html += '<a href="/billing" class="small" style="text-decoration:none;"><button type="button" class="small">Upgrade</button></a>';
+            }
+            html += '</div>';
+        } else {
+            html += '<div><strong>Staff shifts</strong> · <span class="muted">' + (staffOn ? 'On' : 'Off') + '</span></div>';
+        }
+        html += '</div>';
+
+        html += '<div class="crew-cta">' +
+            '<a href="/crew?storeId=' + encodeURIComponent(storeId) + '"><button type="button" class="primary">Open chat</button></a>' +
+            '</div>';
         html += channelsCard();
         return html + '</div>';
+    }
+
+    function alertsStrip() {
+        if (!board.canEdit) return '';
+        const alertsOn = !(board.channels && board.channels.taskAlerts && board.channels.taskAlerts.enabled === false);
+        const openN = ((board.runs || []).filter(function (r) { return r.status === 'OPEN' && r.alertedAt; })).length;
+        return '<div class="card" style="margin-bottom:12px;"><div class="row" style="justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">' +
+            '<div><strong>WhatsApp task alerts</strong>' +
+            '<div class="muted" style="margin-top:4px;font-size:13px;">' +
+            (openN ? openN + ' open right now. ' : 'No open tasks. ') +
+            'Cron (or Send) pushes due reminders to staff.</div></div>' +
+            '<div class="row" style="gap:10px;align-items:center;">' +
+            '<label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer;white-space:nowrap;">' +
+            '<input type="checkbox" data-task-alerts' + (alertsOn ? ' checked' : '') + '> On</label>' +
+            '<button data-run-now class="small"' + (alertsOn ? '' : ' disabled') + '>Send now</button>' +
+            '<button type="button" class="small" data-test-wa-alert' + (alertsOn ? '' : ' disabled') + '>Test WhatsApp</button></div></div></div>';
     }
 
     function toolRow(icon, name, statusHtml, blurb, actionsHtml) {
@@ -1128,7 +1182,7 @@
 
         // Gmail
         (function () {
-            const t = def('gmail', { icon: '/integrations/gmail.svg', name: 'Gmail', blurb: 'This business’s inbox only. Read-only scan; WhatsApp DM when a rule matches.' });
+            const t = def('gmail', { icon: '/integrations/gmail.svg', name: 'Gmail', blurb: 'This business’s inbox only. Read-only scan; WhatsApp DM and/or store group when a rule matches. You can also set rules in Chat.' });
             const rules = Array.isArray(gm.rules) ? gm.rules : [];
             const builtins = Array.isArray(gm.builtinRules) ? gm.builtinRules : [];
             let status = gm.connected
@@ -1147,7 +1201,7 @@
                 }
                 actions += '<div style="margin-top:14px;padding-top:12px;border-top:1px solid #eee;">';
                 actions += '<strong style="font-size:13px;">Alert rules</strong>';
-                actions += '<p class="muted" style="font-size:12px;margin:4px 0 8px;">Built-in plus your own. Match From and/or subject text → WhatsApp DM.</p>';
+                actions += '<p class="muted" style="font-size:12px;margin:4px 0 8px;">Built-in plus your own. Match From and/or subject text → owner DM, store group, or both.</p>';
                 if (builtins.length) {
                     actions += '<p class="muted" style="font-size:12px;margin:0 0 8px;">Included: ' +
                         builtins.map(function (b) { return esc(b.label); }).join(', ') + '.</p>';
@@ -1158,6 +1212,8 @@
                         const bits = [];
                         if (r.from) bits.push('From ' + r.from);
                         if (r.contains) bits.push('contains “' + r.contains + '”');
+                        const route = r.route === 'group' ? 'group' : (r.route === 'both' ? 'DM + group' : 'DM');
+                        bits.push('→ ' + route);
                         actions += '<li style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:6px 0;border-top:1px solid #f0f0f0;font-size:13px;">' +
                             '<span><strong>' + esc(r.label) + '</strong><span class="muted"> · ' + esc(bits.join(' · ')) + '</span></span>' +
                             (isOwner ? '<button type="button" class="small danger" data-gmail-rule-del="' + esc(r.id) + '">Remove</button>' : '') +
@@ -1172,6 +1228,7 @@
                         '<label style="font-size:12px;">Label (optional)<input type="text" name="label" maxlength="40" placeholder="Pest visit" style="display:block;width:100%;margin-top:4px;padding:8px;"></label>' +
                         '<label style="font-size:12px;">From (optional)<input type="text" name="from" maxlength="120" placeholder="billing@vendor.com or @chase.com" style="display:block;width:100%;margin-top:4px;padding:8px;"></label>' +
                         '<label style="font-size:12px;">Subject / body contains (optional)<input type="text" name="contains" maxlength="120" placeholder="Upcoming Service Appointment" style="display:block;width:100%;margin-top:4px;padding:8px;"></label>' +
+                        '<label style="font-size:12px;">Send to<select name="route" style="display:block;width:100%;margin-top:4px;padding:8px;"><option value="dm">Owner WhatsApp DM</option><option value="group">Store WhatsApp group</option><option value="both">DM + group</option></select></label>' +
                         '<button type="submit" class="primary">Add alert rule</button></form>';
                 }
                 actions += '</div>';
@@ -1233,9 +1290,9 @@
 
         // Books
         (function () {
-            const t = def('books', { icon: '/integrations/books.svg', name: 'Books', blurb: 'Ask standing and invoices in Crew ($20/store add-on).' });
+            const t = def('books', { icon: '/integrations/books.svg', name: 'Books', blurb: 'Chat answers standing and invoices from confirmed data (Pro & Premium).' });
             const on = !!(agents.enabled && agents.enabled.books) || !!chat.enrolled;
-            const price = chat.monthlyUsd != null ? chat.monthlyUsd : 20;
+            const booksInPlan = !!(chat.includedInPlan || agents.planIncludesBooks || (board.plan && board.plan.features && board.plan.features.booksLookups));
             const status = on
                 ? '<span class="tool-status">Connected</span>'
                 : '<span class="tool-status off">Not connected</span>';
@@ -1244,10 +1301,10 @@
                 actions = '<p class="muted" style="font-size:12px;margin:0;">Owner enables Books.</p>';
             } else if (on) {
                 actions = '<button type="button" class="small danger" id="unenrollAiChat">Turn off</button>';
-            } else if (chat.selfEnroll || agents.selfEnrollBooks) {
-                actions = '<button type="button" class="primary" id="enrollAiChat">Enable · $' + esc(String(price)) + '/mo</button>';
+            } else if (booksInPlan || chat.selfEnroll || agents.selfEnrollBooks) {
+                actions = '<button type="button" class="primary" id="enrollAiChat">Enable</button>';
             } else {
-                actions = '<p class="muted" style="font-size:12px;margin:0;">Enrollment closed.</p>';
+                actions = '<p class="muted" style="font-size:12px;margin:0;">Included on Pro &amp; Premium — <a href="/billing">change plan</a>.</p>';
             }
             html += toolRow(t.icon, t.name, status, t.blurb, actions);
         })();
@@ -1312,7 +1369,7 @@
         const crewCard = agentsCard();
 
         const navItems = [
-            crewCard ? { id: 'admin-crew', label: 'Agents' } : null,
+            crewCard ? { id: 'admin-crew', label: 'Agent setup' } : null,
             (waCard || dashCard) ? { id: 'admin-people', label: 'People', count: team.whatsapp.length + team.dashboard.length } : null,
             { id: 'admin-store', label: 'Business' },
             (vendorCard || sampleCard) ? { id: 'admin-vendors', label: 'Vendors', count: vendorCount || null } : null,
@@ -1334,8 +1391,8 @@
         if (crewCard) {
             html += adminSection(
                 'admin-crew',
-                'Agents',
-                'Agents and tool connections for this business. Each tool below has its own Connect / Save.',
+                'Agent setup',
+                'Name your agent and turn capabilities on or off. Open Chat to talk to them.',
                 crewCard,
                 adminPanel
             );
@@ -1360,7 +1417,7 @@
             html += adminSection('admin-vendors', 'Vendors', 'Who shows up when someone sends an invoice or order.', vendorsBody, adminPanel);
         }
 
-        let tasksBody = '';
+        let tasksBody = alertsStrip();
         if (board.canEdit) {
             tasksBody += '<div class="admin-head" style="margin-bottom:12px;"><span></span><button class="primary" data-new>+ New task</button></div>';
         }
@@ -1423,12 +1480,17 @@
     function isSevenEleven() { return !board.setup || board.setup.storeType === 'seven_eleven'; }
 
     function render() {
-        if (view === 'inspection' && !isSevenEleven()) view = 'today';
-        document.querySelectorAll('.tab').forEach(function (t) { if (t.dataset.view === 'inspection') t.style.display = isSevenEleven() ? '' : 'none'; });
+        if (view === 'today') view = 'setup';
+        if (view === 'inspection' && !isSevenEleven()) view = 'setup';
+        document.querySelectorAll('.tab').forEach(function (t) {
+            if (t.dataset.view === 'inspection') t.style.display = isSevenEleven() ? '' : 'none';
+        });
+        const tabsEl = document.querySelector('.tabs');
+        if (tabsEl) tabsEl.style.display = isSevenEleven() ? '' : 'none';
         document.body.classList.toggle('admin-page', view === 'setup');
         const content = document.getElementById('content');
         content.className = view === 'setup' ? 'admin-view' : '';
-        content.innerHTML = view === 'today' ? renderToday() : view === 'inspection' ? renderInspection() : renderSetup();
+        content.innerHTML = view === 'inspection' ? renderInspection() : renderSetup();
         document.querySelectorAll('.tab').forEach(function (t) { t.classList.toggle('active', t.dataset.view === view); });
     }
 
@@ -1537,7 +1599,13 @@
         }
         if (el.dataset.delete) {
             const t = board.templates.find(function (x) { return x.id === el.dataset.delete; });
-            if (!t || !confirm('Delete "' + t.title + '"? Open reminders for it stop. Past results stay in the score.')) return;
+            if (!t) return;
+            if (!(await askConfirm({
+                title: 'Delete task?',
+                body: 'Delete “' + t.title + '”? Open reminders stop. Past results stay in the score.',
+                confirmLabel: 'Delete task',
+                danger: true,
+            }))) return;
             if (await act({ action: 'delete', id: t.id }, 'Task deleted.')) load();
             return;
         }
@@ -1547,12 +1615,38 @@
         }
         if (el.hasAttribute('data-run-now')) {
             el.disabled = true;
-            await act({ action: 'run_now' }, function (r) { return 'Checked now: ' + r.alerted + ' new alert(s), ' + r.reminded + ' reminder(s).'; });
+            await act({ action: 'run_now' }, function (r) {
+                const parts = [];
+                parts.push('Checked now: ' + (r.created || 0) + ' new due, ' + (r.alerted || 0) + ' alert(s), ' + (r.reminded || 0) + ' reminder(s).');
+                if (r.delivery && r.delivery.hint && !(r.alerted || r.reminded)) {
+                    parts.push(r.delivery.hint);
+                }
+                return parts.join(' ');
+            });
             load();
             return;
         }
+        if (el.hasAttribute('data-test-wa-alert')) {
+            el.disabled = true;
+            await act({ action: 'test_whatsapp_alert' }, function (r) {
+                if (r.sent > 0) {
+                    return 'Test alert sent on WhatsApp. Check the store group or staff/owner phone.';
+                }
+                if (r.welcomed > 0) {
+                    return (r.delivery && r.delivery.hint) ||
+                        'Sent a WhatsApp welcome template instead. Reply OK on that phone, then tap Test WhatsApp again.';
+                }
+                return (r.delivery && r.delivery.hint) || 'Could not send a test alert. Add WhatsApp people or a group first.';
+            });
+            el.disabled = false;
+            return;
+        }
         if (el.dataset.approve) {
-            if (!confirm('Accept this photo and mark the task done?')) return;
+            if (!(await askConfirm({
+                title: 'Accept photo?',
+                body: 'Accept this photo and mark the task done.',
+                confirmLabel: 'Accept photo',
+            }))) return;
             if (await act({ action: 'approve', runId: el.dataset.approve }, 'Photo accepted. Task marked done.')) load();
             return;
         }
@@ -1565,7 +1659,12 @@
             return;
         }
         if (el.dataset.removeWa) {
-            if (!confirm('Remove this WhatsApp number from the business? They will not be recognized until you add them again.')) return;
+            if (!(await askConfirm({
+                title: 'Remove WhatsApp number?',
+                body: 'They will not be recognized for this business until you add them again.',
+                confirmLabel: 'Remove number',
+                danger: true,
+            }))) return;
             if (await act({ action: 'remove_whatsapp_person', id: el.dataset.removeWa }, 'WhatsApp person removed.')) load();
             return;
         }
@@ -1575,12 +1674,22 @@
             return;
         }
         if (el.id === 'clearGoogleSheet') {
-            if (!confirm('Stop writing confirmed WhatsApp entries to this Google Sheet?')) return;
+            if (!(await askConfirm({
+                title: 'Disconnect Google Sheet?',
+                body: 'Confirmed WhatsApp entries will stop writing to this sheet until you connect again.',
+                confirmLabel: 'Disconnect sheet',
+                danger: true,
+            }))) return;
             if (await act({ action: 'clear_google_sheet' }, 'Google Sheet disconnected.')) load();
             return;
         }
         if (el.id === 'disconnectGmail') {
-            if (!confirm('Disconnect Gmail? Morning inbox digests will stop until you connect again.')) return;
+            if (!(await askConfirm({
+                title: 'Disconnect Gmail?',
+                body: 'Morning inbox digests will stop until you connect again.',
+                confirmLabel: 'Disconnect Gmail',
+                danger: true,
+            }))) return;
             try {
                 const res = await fetch('/api/connectors/gmail/disconnect', {
                     method: 'POST',
@@ -1600,7 +1709,12 @@
         }
         if (el.getAttribute('data-gmail-rule-del')) {
             const ruleId = el.getAttribute('data-gmail-rule-del');
-            if (!confirm('Remove this Gmail alert rule?')) return;
+            if (!(await askConfirm({
+                title: 'Remove alert rule?',
+                body: 'This Gmail alert rule will stop matching. Built-in rules stay on.',
+                confirmLabel: 'Remove rule',
+                danger: true,
+            }))) return;
             try {
                 const res = await fetch('/api/connectors/gmail/rules?storeId=' + encodeURIComponent(storeId), {
                     method: 'DELETE',
@@ -1624,13 +1738,17 @@
             return;
         }
         if (el.id === 'enrollAiChat') {
-            if (!confirm('Enable Quinn (Books) for this business? Add-on is about $' + ((board.aiChat && board.aiChat.monthlyUsd) || 20) + '/business/mo when billing is live.')) return;
-            if (await act({ action: 'set_agents', books: true }, 'Quinn (Books) enabled for this business.')) load();
+            if (await act({ action: 'set_agents', books: true }, 'Books look-ups enabled for this business.')) load();
             return;
         }
         if (el.id === 'unenrollAiChat') {
-            if (!confirm('Turn off Quinn (Books) for this business?')) return;
-            if (await act({ action: 'set_agents', books: false }, 'Quinn (Books) turned off.')) load();
+            if (!(await askConfirm({
+                title: 'Turn off books look-ups?',
+                body: 'Chat will stop answering standing and invoices for this business until you turn them back on.',
+                confirmLabel: 'Turn off',
+                danger: true,
+            }))) return;
+            if (await act({ action: 'set_agents', books: false }, 'Books look-ups turned off.')) load();
             return;
         }
         if (el.id === 'setAgentAutonomy') {
@@ -1658,17 +1776,32 @@
         }
         if (el.getAttribute('data-agent-toggle') === 'staff') {
             const turnOn = el.getAttribute('data-agent-on') === '1';
-            if (!turnOn && !confirm('Turn off Staff? Shift task proof on WhatsApp will stop for this business until you turn it back on.')) return;
-            if (await act({ action: 'set_agents', staff: turnOn }, turnOn ? 'Staff agent on.' : 'Staff agent off.')) load();
+            if (!turnOn && !(await askConfirm({
+                title: 'Turn off staff shifts?',
+                body: 'Shift task proof on WhatsApp will stop for this business until you turn it back on.',
+                confirmLabel: 'Turn off',
+                danger: true,
+            }))) return;
+            if (await act({ action: 'set_agents', staff: turnOn }, turnOn ? 'Staff shifts on.' : 'Staff shifts off.')) load();
             return;
         }
         if (el.dataset.removeDash) {
-            if (!confirm('Remove this person’s dashboard access to this business?')) return;
+            if (!(await askConfirm({
+                title: 'Remove dashboard access?',
+                body: 'This person will lose dashboard access to this business.',
+                confirmLabel: 'Remove access',
+                danger: true,
+            }))) return;
             if (await act({ action: 'remove_dashboard_member', userId: el.dataset.removeDash }, 'Dashboard access removed.')) load();
             return;
         }
         if (el.hasAttribute('data-deactivate-store')) {
-            if (!confirm('Remove this business from the dashboard? Past reports stay saved.')) return;
+            if (!(await askConfirm({
+                title: 'Remove this business?',
+                body: 'It leaves the dashboard. Past reports stay saved.',
+                confirmLabel: 'Remove business',
+                danger: true,
+            }))) return;
             if (await act({ action: 'deactivate_store' }, 'Business removed from the dashboard.')) {
                 location.href = '/dashboard';
             }
@@ -1731,7 +1864,12 @@
             return;
         }
         if (el.dataset.deletePic) {
-            if (!confirm('Remove this picture map? Later photos will not use those lines.')) return;
+            if (!(await askConfirm({
+                title: 'Remove picture map?',
+                body: 'Later photos will not use those lines until you set a new map.',
+                confirmLabel: 'Remove map',
+                danger: true,
+            }))) return;
             if (await act({ action: 'delete_picture_template', id: el.dataset.deletePic }, 'Picture map removed.')) load();
             return;
         }
@@ -1869,6 +2007,7 @@
                         label: String(f.get('label') || '').trim() || null,
                         from: String(f.get('from') || '').trim() || null,
                         contains: String(f.get('contains') || '').trim() || null,
+                        route: String(f.get('route') || 'dm').trim() || 'dm',
                     }),
                 });
                 if (res.status === 401) { location.href = '/login'; return; }
@@ -1882,27 +2021,12 @@
             }
             return;
         }
-        if (e.target.id === 'aiChatQuestionForm') {
+        if (e.target.id === 'leadNameForm') {
             e.preventDefault();
             const f = new FormData(e.target);
-            const question = String(f.get('question') || '').trim();
-            const out = document.getElementById('aiChatAnswer');
-            if (!question || !out) return;
-            out.style.display = 'block';
-            out.textContent = 'Thinking…';
-            try {
-                const res = await fetch('/api/stores/ask', {
-                    method: 'POST',
-                    headers: authHeaders(),
-                    body: JSON.stringify({ storeId: storeId, question: question }),
-                });
-                if (res.status === 401) { location.href = '/login'; return; }
-                const data = await res.json().catch(function () { return {}; });
-                if (!res.ok) throw new Error(data.error || ('Server answered ' + res.status));
-                out.textContent = data.answer || 'No answer.';
-            } catch (err) {
-                out.textContent = err.message || 'Could not ask.';
-            }
+            const leadName = String(f.get('leadName') || '').trim();
+            if (!leadName) return;
+            if (await act({ action: 'set_agents', leadName: leadName }, 'Agent name saved.')) load();
             return;
         }
         if (e.target.id === 'whatsappPersonForm') {

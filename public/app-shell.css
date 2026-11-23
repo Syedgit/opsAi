@@ -146,7 +146,104 @@ html.app-standalone .auth-container {
   html { background: #111; }
 }
 
-/* Phone bottom nav: Chat (Riley) · Today · More */
+/* Desktop left rail (chat-first shell) */
+#opsaiRail {
+  display: none;
+}
+@media (min-width: 769px) {
+  html.opsai-desk-rail body {
+    padding-left: 220px;
+  }
+  #opsaiRail {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 220px;
+    z-index: 2147480500;
+    background: #f4f5f7;
+    border-right: 1px solid #e5e7eb;
+    padding: 14px 10px 16px;
+    font-family: var(--font, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+    box-sizing: border-box;
+  }
+  #opsaiRail .rail-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px 16px;
+    text-decoration: none;
+    color: #0f172a;
+  }
+  #opsaiRail .rail-brand img {
+    height: 28px;
+    width: auto;
+    border-radius: 6px;
+    background: #fff;
+  }
+  #opsaiRail .rail-brand span {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  #opsaiRail .rail-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #94a3b8;
+    padding: 10px 10px 6px;
+  }
+  #opsaiRail a.rail-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 10px;
+    border-radius: 10px;
+    text-decoration: none;
+    color: #334155;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  #opsaiRail a.rail-item:hover {
+    background: rgba(255, 255, 255, 0.85);
+    color: #0f172a;
+  }
+  #opsaiRail a.rail-item[aria-current="page"] {
+    background: #fff;
+    color: #0f172a;
+    box-shadow: 0 0 0 1px #e5e7eb, 0 4px 12px rgba(15, 23, 42, 0.04);
+  }
+  #opsaiRail .rail-ico {
+    width: 1.25rem;
+    text-align: center;
+    font-size: 14px;
+    opacity: 0.85;
+  }
+  #opsaiRail .rail-spacer {
+    flex: 1;
+  }
+  #opsaiRail .rail-foot {
+    padding: 8px 10px 0;
+    border-top: 1px solid #e5e7eb;
+    margin-top: 8px;
+  }
+  #opsaiRail .rail-foot a {
+    display: block;
+    font-size: 12px;
+    color: #64748b;
+    text-decoration: none;
+    padding: 6px 0;
+  }
+  #opsaiRail .rail-foot a:hover {
+    color: #0f172a;
+  }
+}
+
+/* Phone bottom nav: Chat · Tasks · More */
 #opsaiTabBar {
   display: none;
 }
@@ -195,4 +292,68 @@ html.app-standalone .auth-container {
     line-height: 1;
     font-weight: 700;
   }
+}
+
+/* Shared in-app confirm / sheet (replaces window.confirm / alert) */
+.opsai-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 2147482900;
+  background: rgba(17, 17, 17, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 16px;
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+}
+.opsai-sheet[hidden] { display: none !important; }
+.opsai-sheet-card {
+  width: min(420px, 100%);
+  background: #fff;
+  border-radius: 16px;
+  padding: 22px 20px 18px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+.opsai-sheet-card h2 {
+  font-size: 18px;
+  margin: 0 0 8px;
+  letter-spacing: -0.02em;
+  color: #111;
+}
+.opsai-sheet-card p {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #4b5563;
+}
+.opsai-sheet-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.opsai-sheet-btn {
+  width: 100%;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  color: #111;
+  border-radius: 999px;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+  font-family: inherit;
+}
+.opsai-sheet-btn.primary {
+  background: #111;
+  border-color: #111;
+  color: #fff;
+}
+.opsai-sheet-btn.danger {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #fff;
+}
+@media (min-width: 640px) {
+  .opsai-sheet { align-items: center; }
 }

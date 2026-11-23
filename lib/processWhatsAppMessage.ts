@@ -272,8 +272,8 @@ async function handleInboundWhatsApp(
     }
   }
 
-  // Books agent (enrolled AI chat): 1:1 only (not the store group). Same grounded answers as the web card.
-  if (text && !mediaId && !input.groupId && isAgentEnabled(storeProfile?.profileJson, 'books')) {
+  // Owner/manager 1:1 AI chat (Books + connectors) — same tools as Crew. Not the store group.
+  if (text && !mediaId && !input.groupId) {
     try {
       const chat = await tryWhatsAppAiChat(prisma, {
         phoneE164,
@@ -283,9 +283,14 @@ async function handleInboundWhatsApp(
         hasMedia: false,
       });
       if (chat.handled) {
-        logWaPath({ messageId, from, storeId, path: 'ai_chat' });
-        await sendWhatsAppMessage(prisma, phoneE164, chat.answer, storeId);
-        await updateMessageLog(prisma, messageId, { classification: 'AI_CHAT', processed: true, storeId });
+        const chatStoreId = chat.storeId || storeId;
+        logWaPath({ messageId, from, storeId: chatStoreId, path: 'ai_chat' });
+        await sendWhatsAppMessage(prisma, phoneE164, chat.answer, chatStoreId);
+        await updateMessageLog(prisma, messageId, {
+          classification: 'AI_CHAT',
+          processed: true,
+          storeId: chatStoreId,
+        });
         return;
       }
     } catch (error) {

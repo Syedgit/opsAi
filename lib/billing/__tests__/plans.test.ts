@@ -1,44 +1,65 @@
-import { describeBilling, monthlyFeeUsd, newAccountBilling, STORE_PLAN, TRIAL_DAYS, utcMonthRange } from '../plans';
+import {
+  DEFAULT_PLAN_ID,
+  PLAN_PRO,
+  PLAN_STANDARD,
+  TRIAL_DAYS,
+  describeBilling,
+  getPlan,
+  monthlyFeeUsd,
+  newAccountBilling,
+  normalizePlanId,
+  utcMonthRange,
+} from '../plans';
 import { BUSY_PHOTO, TYPICAL_PHOTO, launchUnitEconomics, monthlyAiCostUsd } from '../economics';
 
-describe('launch billing', () => {
-  it('starts a 14-day Store trial with no card', () => {
+describe('tiered billing', () => {
+  it('starts a 14-day Pro trial with no card', () => {
     const now = new Date('2026-11-08T18:00:00Z');
     const started = newAccountBilling(now);
-    expect(started.plan).toBe('store');
+    expect(started.plan).toBe(DEFAULT_PLAN_ID);
+    expect(started.plan).toBe('pro');
     expect(started.planStatus).toBe('trial');
     expect(started.trialEndsAt.toISOString()).toBe('2026-11-22T18:00:00.000Z');
     expect(TRIAL_DAYS).toBe(14);
-    expect(STORE_PLAN.monthlyUsdPerStore).toBe(25);
+    expect(PLAN_PRO.monthlyUsdPerStore).toBe(45);
+    expect(PLAN_STANDARD.monthlyUsdPerStore).toBe(25);
   });
 
-  it('charges 25 USD per store, so five locations are 125', () => {
-    expect(monthlyFeeUsd(1)).toBe(25);
-    expect(monthlyFeeUsd(5)).toBe(125);
-    expect(monthlyFeeUsd(0)).toBe(0);
-    expect(describeBilling({ planStatus: 'trial' }, 5).monthlyUsd).toBe(125);
-    expect(describeBilling({ planStatus: 'trial' }, 5).storeCount).toBe(5);
+  it('maps legacy store to pro and charges per plan', () => {
+    expect(normalizePlanId('store')).toBe('pro');
+    expect(normalizePlanId('pro')).toBe('pro');
+    expect(monthlyFeeUsd(1, 'standard')).toBe(25);
+    expect(monthlyFeeUsd(5, 'pro')).toBe(225);
+    expect(monthlyFeeUsd(2, 'premium')).toBe(158);
+    expect(describeBilling({ plan: 'store', planStatus: 'trial' }, 1).plan).toBe('pro');
+    expect(describeBilling({ plan: 'pro', planStatus: 'trial' }, 5).monthlyUsd).toBe(225);
+    expect(describeBilling({ plan: 'pro', planStatus: 'trial' }, 5).planName).toBe('Pro');
+    expect(getPlan('premium').features.autoRemind).toBe(true);
+    expect(getPlan('standard').features.chatAgent).toBe(true);
+    expect(getPlan('standard').features.booksLookups).toBe(false);
+    expect(getPlan('pro').features.booksLookups).toBe(true);
   });
 
   it('keeps access during the trial and closes it after', () => {
     const trialEndsAt = new Date('2026-11-22T18:00:00Z');
-    const open = describeBilling({ plan: 'store', planStatus: 'trial', trialEndsAt }, 1, new Date('2026-11-15T12:00:00Z'));
+    const open = describeBilling({ plan: 'pro', planStatus: 'trial', trialEndsAt }, 1, new Date('2026-11-15T12:00:00Z'));
     expect(open.access).toBe(true);
     expect(open.status).toBe('trial');
     expect(open.daysLeft).toBe(8);
-    const closed = describeBilling({ plan: 'store', planStatus: 'trial', trialEndsAt }, 1, new Date('2026-11-23T00:00:00Z'));
+    const closed = describeBilling({ plan: 'pro', planStatus: 'trial', trialEndsAt }, 1, new Date('2026-11-23T00:00:00Z'));
     expect(closed.access).toBe(false);
     expect(closed.status).toBe('expired');
   });
 
-  it('lets a paid Store plan through after the trial date', () => {
+  it('lets a paid plan through after the trial date', () => {
     const paid = describeBilling(
-      { plan: 'store', planStatus: 'active', trialEndsAt: new Date('2026-11-01T00:00:00Z') },
+      { plan: 'pro', planStatus: 'active', trialEndsAt: new Date('2026-11-01T00:00:00Z') },
       1,
       new Date('2026-11-20T00:00:00Z')
     );
     expect(paid.access).toBe(true);
     expect(paid.status).toBe('active');
+    expect(paid.features.booksLookups).toBe(true);
   });
 });
 

@@ -130,7 +130,7 @@ export async function loadActiveGmailRefreshToken(
 export async function addGmailOwnerRule(
   prisma: PrismaClient,
   storeId: string,
-  input: { label?: unknown; from?: unknown; contains?: unknown; mode?: unknown }
+  input: { label?: unknown; from?: unknown; contains?: unknown; mode?: unknown; route?: unknown }
 ): Promise<{ ok: true; gmail: GmailPublicStatus } | { ok: false; error: string; status?: number }> {
   const row = await prisma.gmailConnection.findUnique({ where: { storeId } });
   if (!row || row.status === 'disconnected') {

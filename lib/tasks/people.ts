@@ -92,7 +92,18 @@ export async function addWhatsAppPerson(
       return { ok: false, status: 409, error: 'That WhatsApp number is already on this store.' };
     }
     if (taken.isActive && taken.storeId && taken.storeId !== storeId) {
-      return { ok: false, status: 409, error: 'That WhatsApp number is already registered to another store.' };
+      // One WhatsApp number = one home store in the directory. Owners of several businesses
+      // still get task DMs via the linked-owner fallback — no need to re-add the same phone.
+      const home = await prisma.storeConfig.findUnique({
+        where: { storeId: taken.storeId },
+        select: { storeName: true },
+      });
+      const homeName = home?.storeName || taken.storeId;
+      return {
+        ok: false,
+        status: 409,
+        error: `That WhatsApp number is already on ${homeName}. One number can only be listed once — task alerts for your other businesses still DM that same number. Add different staff numbers here for the shift.`,
+      };
     }
     await prisma.userDirectory.update({
       where: { id: taken.id },

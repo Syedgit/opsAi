@@ -1,4 +1,5 @@
 import {
+  channelsForGmailHits,
   extractEmailAddress,
   matchGmailOwnerRule,
   matchOwnerFrom,
@@ -17,6 +18,7 @@ describe('gmail owner rules', () => {
         contains: null,
         label: 'Bill',
         mode: 'alert',
+        route: 'dm',
       }),
     ]);
   });
@@ -24,6 +26,15 @@ describe('gmail owner rules', () => {
   it('requires from or contains on create', () => {
     expect(normalizeNewGmailRule({}).ok).toBe(false);
     expect(normalizeNewGmailRule({ from: '@chase.com' }).ok).toBe(true);
+  });
+
+  it('keeps route on create and channel split', () => {
+    const made = normalizeNewGmailRule({ from: '@x.com', route: 'group', label: 'Prices' });
+    expect(made.ok).toBe(true);
+    if (!made.ok) return;
+    expect(made.rule.route).toBe('group');
+    expect(channelsForGmailHits(['Prices', 'past_due'], [made.rule])).toEqual({ dm: true, group: true });
+    expect(channelsForGmailHits(['Prices'], [made.rule])).toEqual({ dm: false, group: true });
   });
 
   it('matches from address and domain', () => {

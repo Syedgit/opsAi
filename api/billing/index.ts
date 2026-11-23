@@ -2,12 +2,10 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrismaClient } from '@prisma/client';
 import { requireAuthUser } from '../../lib/apiAuth';
 import { readJsonBody } from '../../lib/authCredentials';
-import { isAiChatEnrolled } from '../../lib/aiChatAccess';
 import {
-  ASK_DATA_USD_PER_STORE_PER_MONTH,
   PLANS,
-  USD_PER_STORE_PER_MONTH,
   describeBilling,
+  isPlanId,
   utcMonthRange,
 } from '../../lib/billing/plans';
 import {
@@ -24,6 +22,7 @@ import {
   createCheckoutUrl,
   createPortalUrl,
   loadBillingUser,
+  startPlanChange,
   subscriptionPastDue,
 } from '../../lib/billing/stripeActions';
 import { logAppError, loggedHandler, serializeError } from '../../lib/requestLog';
@@ -49,11 +48,41 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       res.status(401).json({ error: 'User not found or inactive' });
       return;
     }
+    if (action === 'set_plan') {
+      const planId = body.plan;
+      if (!isPlanId(planId)) {
+        res.status(400).json({ error: 'Choose standard, pro, or premium.' });
+        return;
+      }
+      const result = await startPlanChange(prisma, user, planId);
+      if (!result.ok) {
+        res.status(result.status).json({
+          error: result.error,
+          code: 'code' in result ? result.code : undefined,
+          plan: planId,
+        });
+        return;
+      }
+      if ('url' in result && result.url) {
+        res.json({ success: true, url: result.url, requiresPayment: true });
+        return;
+      }
+      const storeCount = Array.isArray(user.stores) ? user.stores.length : 0;
+      const nextPlan = 'plan' in result ? result.plan : planId;
+      res.json({
+        success: true,
+        changed: true,
+        billing: describeBilling({ ...user, plan: nextPlan, planStatus: 'active' }, storeCount),
+        plans: PLANS,
+      });
+      return;
+    }
+    const checkoutPlan = isPlanId(body.plan) ? body.plan : undefined;
     const result =
       action === 'portal'
         ? await createPortalUrl(user)
         : action === 'checkout'
-          ? await createCheckoutUrl(prisma, user)
+          ? await createCheckoutUrl(prisma, user, process.env, { planId: checkoutPlan })
           : { ok: false as const, status: 400, error: 'Unknown billing action' };
     if (!result.ok) {
       res.status(result.status).json({ error: result.error });
@@ -87,13 +116,9 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       return;
     }
 
-    const booksStoreCount = user.stores.filter((row) => isAiChatEnrolled(row.store.profileJson)).length;
-    const estimate = estimateMonthlyUsd(user.stores.length, booksStoreCount);
+    const estimate = estimateMonthlyUsd(user.stores.length, 0, process.env, user.plan);
     const billing = {
       ...describeBilling(user, user.stores.length),
-      booksStoreCount,
-      booksUsdPerStore: ASK_DATA_USD_PER_STORE_PER_MONTH,
-      booksUsd: estimate.booksUsd,
       monthlyUsd: estimate.totalUsd,
       baseUsd: estimate.baseUsd,
     };
@@ -157,12 +182,10 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       trial: { days: 14, cardRequired: false },
       payments: {
         ready: payments.ready,
-        booksReady: payments.booksReady,
         hasCustomer: Boolean(user.stripeCustomerId),
         hasSubscription: Boolean(user.stripeSubscriptionId),
         pastDue,
-        unitUsd: USD_PER_STORE_PER_MONTH,
-        booksUnitUsd: ASK_DATA_USD_PER_STORE_PER_MONTH,
+        unitUsd: billing.monthlyUsdPerStore,
       },
       month,
       savings,

@@ -1,11 +1,12 @@
 import type { PrismaClient } from '@prisma/client';
 import Stripe from 'stripe';
-import { isAiChatEnrolled } from '../aiChatAccess';
 import { logApp, logAppError, serializeError } from '../requestLog';
+import { isPlanId, type PlanId } from './plans';
 import {
   billedStoreQuantity,
   checkoutSessionParams,
   patchFromStripeEvent,
+  priceIdForPlan,
   stripeConfig,
   stripeId,
   stripeTrialEndUnix,
@@ -14,17 +15,12 @@ import {
   type StripeObject,
 } from './stripe';
 
-/** How many of the user's stores have Books (aiChat) enrolled. */
+/** @deprecated Books is a plan feature; kept for tests that still import the helper. */
 export async function countBooksEnrolledStores(
-  prisma: PrismaClient,
-  storeIds: string[]
+  _prisma: PrismaClient,
+  _storeIds: string[]
 ): Promise<number> {
-  if (storeIds.length === 0) return 0;
-  const stores = await prisma.storeConfig.findMany({
-    where: { storeId: { in: storeIds } },
-    select: { profileJson: true },
-  });
-  return stores.filter((s) => isAiChatEnrolled(s.profileJson)).length;
+  return 0;
 }
 
 export function getStripe(env: NodeJS.ProcessEnv = process.env): Stripe | null {
@@ -37,6 +33,7 @@ type BillingUser = {
   id: string;
   email: string;
   name: string | null;
+  plan: string | null;
   planStatus: string | null;
   trialEndsAt: Date | null;
   stripeCustomerId: string | null;
@@ -52,6 +49,7 @@ export async function loadBillingUser(prisma: PrismaClient, userId: string): Pro
       email: true,
       name: true,
       isActive: true,
+      plan: true,
       planStatus: true,
       trialEndsAt: true,
       stripeCustomerId: true,
@@ -64,6 +62,7 @@ export async function loadBillingUser(prisma: PrismaClient, userId: string): Pro
     id: user.id,
     email: user.email,
     name: user.name,
+    plan: user.plan,
     planStatus: user.planStatus,
     trialEndsAt: user.trialEndsAt,
     stripeCustomerId: user.stripeCustomerId,
@@ -93,7 +92,8 @@ async function ensureCustomer(
 export async function createCheckoutUrl(
   prisma: PrismaClient,
   user: BillingUser,
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  options: { planId?: PlanId } = {}
 ): Promise<{ ok: true; url: string } | { ok: false; status: number; error: string }> {
   const cfg = stripeConfig(env);
   if (!cfg.ready) {
@@ -106,26 +106,27 @@ export async function createCheckoutUrl(
   if (!stripe) {
     return { ok: false, status: 503, error: 'Card checkout is not configured yet. Email support@opsai.us.' };
   }
+  const planId: PlanId = options.planId && isPlanId(options.planId) ? options.planId : isPlanId(user.plan) ? user.plan : 'pro';
+  // Existing paid sub without a plan swap → billing portal (card/invoices).
   if (user.stripeSubscriptionId && user.planStatus === 'active') {
     return createPortalUrl(user, env);
   }
 
   try {
     const customerId = await ensureCustomer(prisma, stripe, user);
-    const storeIds = user.stores
-      .map((row) => (row && typeof row === 'object' && 'storeId' in row ? String((row as { storeId: string }).storeId) : ''))
-      .filter(Boolean);
-    const booksQuantity = cfg.booksReady ? await countBooksEnrolledStores(prisma, storeIds) : 0;
+    const priceId = priceIdForPlan(planId, env);
+    if (!priceId) {
+      return { ok: false, status: 503, error: 'Card checkout is not configured yet. Email support@opsai.us.' };
+    }
     const session = await stripe.checkout.sessions.create(
       checkoutSessionParams({
         customerId,
         userId: user.id,
-        priceId: cfg.priceId,
+        priceId,
         quantity: billedStoreQuantity(user.stores.length),
         appUrl: cfg.appUrl,
         trialEnd: stripeTrialEndUnix(user.trialEndsAt),
-        booksPriceId: cfg.booksReady ? cfg.booksPriceId : undefined,
-        booksQuantity,
+        planId,
       }) as Stripe.Checkout.SessionCreateParams
     );
     if (!session.url) {
@@ -135,6 +136,94 @@ export async function createCheckoutUrl(
   } catch (error: unknown) {
     logAppError('billing.checkout', serializeError(error));
     return { ok: false, status: 502, error: 'Could not start checkout. Try again, or email support@opsai.us.' };
+  }
+}
+
+/**
+ * Switch plan: collect a card via Checkout when unpaid; prorate the Stripe sub when already paying.
+ */
+export async function startPlanChange(
+  prisma: PrismaClient,
+  user: BillingUser,
+  planId: PlanId,
+  env: NodeJS.ProcessEnv = process.env
+): Promise<
+  | { ok: true; url: string }
+  | { ok: true; changed: true; plan: PlanId }
+  | { ok: false; status: number; error: string; code?: string }
+> {
+  const cfg = stripeConfig(env);
+  if (!cfg.ready) {
+    return {
+      ok: false,
+      status: 503,
+      code: 'CHECKOUT_UNAVAILABLE',
+      error: 'Add a payment method to change plans.',
+    };
+  }
+  if (user.stores.length < 1) {
+    return { ok: false, status: 400, error: 'Add a store before you subscribe.' };
+  }
+  const current = isPlanId(user.plan) ? user.plan : 'pro';
+  if (current === planId && user.stripeSubscriptionId && user.planStatus === 'active') {
+    return { ok: false, status: 400, error: 'You are already on that plan.' };
+  }
+  // Already paying → swap Price on the subscription (Stripe charges/credits the difference).
+  if (user.stripeSubscriptionId && user.planStatus === 'active') {
+    return changeSubscriptionPlan(prisma, user, planId, env);
+  }
+  // Trial / expired / no card → Checkout collects payment method (and charges when trial ends).
+  return createCheckoutUrl(prisma, user, env, { planId });
+}
+
+async function changeSubscriptionPlan(
+  prisma: PrismaClient,
+  user: BillingUser,
+  planId: PlanId,
+  env: NodeJS.ProcessEnv = process.env
+): Promise<
+  | { ok: true; url: string }
+  | { ok: true; changed: true; plan: PlanId }
+  | { ok: false; status: number; error: string }
+> {
+  const cfg = stripeConfig(env);
+  const stripe = getStripe(env);
+  if (!cfg.ready || !stripe || !user.stripeSubscriptionId) {
+    return { ok: false, status: 503, error: 'Card checkout is not configured yet. Email support@opsai.us.' };
+  }
+  const newPriceId = priceIdForPlan(planId, env);
+  if (!newPriceId) {
+    return { ok: false, status: 503, error: 'No Stripe price for that plan. Email support@opsai.us.' };
+  }
+  try {
+    const sub = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
+    const baseItem =
+      sub.items.data.find((row) => Object.values(cfg.priceIds).includes(row.price.id)) ??
+      sub.items.data.find((row) => row.price.id === cfg.priceId) ??
+      sub.items.data[0];
+    if (!baseItem) {
+      return createPortalUrl(user, env);
+    }
+    if (baseItem.price.id !== newPriceId) {
+      await stripe.subscriptions.update(user.stripeSubscriptionId, {
+        items: [{ id: baseItem.id, price: newPriceId, quantity: billedStoreQuantity(user.stores.length) }],
+        proration_behavior: 'create_prorations',
+        metadata: { userId: user.id, plan: planId },
+      });
+    } else {
+      await stripe.subscriptions.update(user.stripeSubscriptionId, {
+        metadata: { userId: user.id, plan: planId },
+      });
+    }
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { plan: planId, planStatus: 'active' },
+    });
+    logApp('billing.plan_change', { userId: user.id, plan: planId, priceId: newPriceId });
+    return { ok: true, changed: true, plan: planId };
+  } catch (error: unknown) {
+    logAppError('billing.plan_change', serializeError(error));
+    return { ok: false, status: 502, error: 'Could not change plan. Try again, or email support@opsai.us.' };
   }
 }
 
@@ -190,6 +279,7 @@ export async function applyStripePatch(
       ...(patch.stripeCustomerId ? { stripeCustomerId: patch.stripeCustomerId } : {}),
       ...(patch.stripeSubscriptionId !== undefined ? { stripeSubscriptionId: patch.stripeSubscriptionId } : {}),
       ...(patch.planStatus ? { planStatus: patch.planStatus } : {}),
+      ...(patch.plan ? { plan: patch.plan } : {}),
     },
   });
   return true;
@@ -227,10 +317,12 @@ export async function applyCheckoutSessionId(
     const session = await stripe.checkout.sessions.retrieve(sessionId);
     const owner = userIdFromStripeObject(session as unknown as StripeObject);
     if (owner && owner !== userId) return;
+    const sessionMeta =
+      session.metadata && typeof session.metadata === 'object' ? session.metadata : {};
     await applyStripeEvent(prisma, 'checkout.session.completed', {
       ...(session as unknown as StripeObject),
       client_reference_id: owner || userId,
-      metadata: { userId },
+      metadata: { ...sessionMeta, userId },
     });
   } catch (error: unknown) {
     logAppError('billing.session', serializeError(error));
@@ -255,34 +347,23 @@ export async function syncStripeSubscriptionQuantity(
     });
     if (!user?.stripeSubscriptionId) return;
     const quantity = billedStoreQuantity(user.stores.length);
-    const storeIds = user.stores.map((row) => row.storeId);
-    const booksQuantity = cfg.booksReady ? await countBooksEnrolledStores(prisma, storeIds) : 0;
     const sub = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
     const items: Stripe.SubscriptionUpdateParams.Item[] = [];
     const baseItem = sub.items.data.find((row) => row.price.id === cfg.priceId) ?? sub.items.data[0];
     if (baseItem && baseItem.quantity !== quantity) {
       items.push({ id: baseItem.id, quantity });
     }
-    if (cfg.booksReady && cfg.booksPriceId) {
+    // Drop legacy Books add-on line items if still present.
+    if (cfg.booksPriceId) {
       const booksItem = sub.items.data.find((row) => row.price.id === cfg.booksPriceId);
-      if (booksQuantity > 0) {
-        if (booksItem) {
-          if (booksItem.quantity !== booksQuantity) {
-            items.push({ id: booksItem.id, quantity: booksQuantity });
-          }
-        } else {
-          items.push({ price: cfg.booksPriceId, quantity: booksQuantity });
-        }
-      } else if (booksItem) {
-        items.push({ id: booksItem.id, deleted: true });
-      }
+      if (booksItem) items.push({ id: booksItem.id, deleted: true });
     }
     if (items.length === 0) return;
     await stripe.subscriptions.update(user.stripeSubscriptionId, {
       items,
       proration_behavior: 'create_prorations',
     });
-    logApp('billing.quantity', { userId, quantity, booksQuantity });
+    logApp('billing.quantity', { userId, quantity });
   } catch (error: unknown) {
     logAppError('billing.quantity', serializeError(error));
   }

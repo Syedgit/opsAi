@@ -20,9 +20,9 @@
     <link rel="apple-touch-startup-image" href="/splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
     <link rel="apple-touch-startup-image" href="/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
     <link rel="apple-touch-startup-image" href="/splash-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
-    <link rel="stylesheet" href="/app-shell.css?v=4">
+    <link rel="stylesheet" href="/app-shell.css?v=6">
     <link rel="stylesheet" href="/app-ui.css?v=2">
-    <script src="/app-shell.js?v=3"></script>
+    <script src="/app-shell.js?v=6"></script>
     <title>Plan and usage - opsAi</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -41,12 +41,37 @@
         th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); }
         th { color: var(--text-light); font-weight: 600; }
         .banner { background: #fff3cd; color: #664d03; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; }
+        .banner.info { background: #f0f7ff; color: #1e3a5f; }
+        .banner.ok-banner { background: #ecfdf3; color: #0f7b3a; }
         .error { color: #e74c3c; }
         .ok { color: #0f7b3a; }
         .btn { display: inline-block; background: var(--primary); color: #fff; border: none; padding: 12px 18px; border-radius: var(--radius); font-weight: 650; cursor: pointer; margin: 12px 8px 0 0; font-size: 14px; }
         .btn:hover { background: var(--primary-dark); }
         .btn.secondary { background: #fff; color: var(--text); border: 1px solid var(--border); }
         .btn.secondary:hover { background: var(--bg-light); }
+        .btn:disabled { opacity: 0.65; cursor: default; }
+        .pay-sheet {
+            position: fixed; inset: 0; z-index: 80;
+            background: rgba(17, 17, 17, 0.45);
+            display: flex; align-items: flex-end; justify-content: center;
+            padding: 16px; padding-bottom: max(16px, env(safe-area-inset-bottom));
+        }
+        .pay-sheet[hidden] { display: none !important; }
+        .pay-sheet-card {
+            width: min(440px, 100%);
+            background: #fff;
+            border-radius: 16px;
+            padding: 24px 22px 20px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+        }
+        .pay-sheet-card h2 { font-size: 20px; margin: 0 0 8px; letter-spacing: -0.02em; }
+        .pay-sheet-card p { color: var(--text-light); font-size: 14px; margin: 0 0 8px; line-height: 1.5; }
+        .pay-sheet-card .price-line { font-size: 15px; color: var(--text); font-weight: 600; margin: 12px 0 18px; }
+        .pay-sheet-actions { display: flex; flex-direction: column; gap: 8px; }
+        .pay-sheet-actions .btn { margin: 0; width: 100%; text-align: center; }
+        @media (min-width: 640px) {
+            .pay-sheet { align-items: center; }
+        }
         .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0; }
         .stat { background: #f8f9fa; border-radius: 10px; padding: 14px 16px; }
         .stat .n { font-size: 22px; font-weight: 700; }
@@ -66,15 +91,26 @@
 <body>
     <div id="appSplash" aria-hidden="true"><img src="/icon-192.png" alt=""><span>opsAi</span></div>
     <header>
-        <a href="/dashboard" class="logo"><img src="/logo.jpg" alt="Operation Intelligence"></a>
-        <a href="/dashboard">Dashboard</a>
+        <h1 style="font-size:17px;font-weight:650;letter-spacing:-0.02em;flex:1;">Billing</h1>
     </header>
     <main>
         <h1>Plan and usage</h1>
-        <p class="muted">14-day trial, then $25 per business per month. Books add-on is $20 per enrolled business. Time saved is desk work you skipped vs typing the same close or invoice into a sheet.</p>
+        <p class="muted">14-day trial, then Standard / Pro / Premium per business. Time saved is desk work you skipped vs typing the same close or invoice into a sheet.</p>
         <div id="banner"></div>
         <div class="card" id="planCard">Loading…</div>
         <div id="payActions"></div>
+        <div id="paySheet" class="pay-sheet" hidden role="dialog" aria-modal="true" aria-labelledby="paySheetTitle">
+            <div class="pay-sheet-card">
+                <h2 id="paySheetTitle">Add a payment method</h2>
+                <p id="paySheetBody">To change plans, add a card. Checkout is secure and takes about a minute.</p>
+                <p class="price-line" id="paySheetPrice"></p>
+                <div class="pay-sheet-actions">
+                    <button type="button" class="btn" id="paySheetContinue">Continue to secure checkout</button>
+                    <a class="btn secondary" id="paySheetSupport" href="mailto:support@opsai.us?subject=opsAi%20plan%20change" style="display:none;text-align:center;text-decoration:none;">Email support</a>
+                    <button type="button" class="btn secondary" id="paySheetCancel">Not now</button>
+                </div>
+            </div>
+        </div>
         <div class="card" id="savingsCard">
             <h2>This month</h2>
             <p class="muted" id="monthLabel"></p>
@@ -95,15 +131,65 @@
         function money(n) {
             return '$' + Number(n || 0).toFixed(n >= 1 ? 2 : 4);
         }
-        async function billingAction(action) {
+        function moneyWhole(n) {
+            return '$' + Number(n || 0).toFixed(0);
+        }
+        const FALLBACK_PLANS = [
+            { id: 'standard', name: 'Standard', monthlyUsdPerStore: 25, blurb: 'WhatsApp capture, dashboard, tasks, and one chat agent.', features: { chatAgent: true, booksLookups: false, staffShifts: true, autoRemind: false } },
+            { id: 'pro', name: 'Pro', monthlyUsdPerStore: 45, blurb: 'Everything in Standard plus books look-ups in chat.', features: { chatAgent: true, booksLookups: true, staffShifts: true, autoRemind: false }, popular: true },
+            { id: 'premium', name: 'Premium', monthlyUsdPerStore: 79, blurb: 'Everything in Pro plus follow-up auto-remind.', features: { chatAgent: true, booksLookups: true, staffShifts: true, autoRemind: true } }
+        ];
+        async function billingAction(action, extra) {
             const res = await fetch('/api/billing', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: action })
+                body: JSON.stringify(Object.assign({ action: action }, extra || {}))
             });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Could not start billing');
+            const data = await res.json().catch(function () { return {}; });
+            if (!res.ok) {
+                const err = new Error(data.error || 'Could not start billing');
+                err.code = data.code;
+                err.plan = data.plan;
+                err.status = res.status;
+                throw err;
+            }
             if (data.url) window.location.href = data.url;
+            return data;
+        }
+        function showBanner(kind, html) {
+            const banner = document.getElementById('banner');
+            banner.className = 'banner' + (kind === 'info' ? ' info' : kind === 'ok' ? ' ok-banner' : '');
+            banner.innerHTML = html;
+            banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        function closePaySheet() {
+            const sheet = document.getElementById('paySheet');
+            sheet.hidden = true;
+            sheet.dataset.plan = '';
+        }
+        function openPaySheet(opts) {
+            const sheet = document.getElementById('paySheet');
+            const title = document.getElementById('paySheetTitle');
+            const body = document.getElementById('paySheetBody');
+            const price = document.getElementById('paySheetPrice');
+            const cont = document.getElementById('paySheetContinue');
+            const support = document.getElementById('paySheetSupport');
+            title.textContent = opts.title || 'Add a payment method';
+            body.innerHTML = opts.body || '';
+            price.textContent = opts.priceLine || '';
+            price.style.display = opts.priceLine ? '' : 'none';
+            cont.textContent = opts.continueLabel || 'Continue to secure checkout';
+            cont.disabled = !!opts.disableContinue;
+            cont.style.display = opts.hideContinue ? 'none' : '';
+            if (support) {
+                support.style.display = opts.showSupport ? '' : 'none';
+                if (opts.planId) {
+                    support.href = 'mailto:support@opsai.us?subject=' +
+                        encodeURIComponent('opsAi plan change to ' + (opts.planId || ''));
+                }
+            }
+            sheet.dataset.plan = opts.planId || '';
+            sheet.hidden = false;
         }
         (async function () {
             try {
@@ -117,6 +203,29 @@
                 const b = data.billing || {};
                 const pay = data.payments || {};
                 const banner = document.getElementById('banner');
+                let pendingPlanId = '';
+                document.getElementById('paySheetCancel').onclick = closePaySheet;
+                document.getElementById('paySheet').addEventListener('click', function (e) {
+                    if (e.target.id === 'paySheet') closePaySheet();
+                });
+                document.getElementById('paySheetContinue').onclick = function () {
+                    const plan = document.getElementById('paySheet').dataset.plan || pendingPlanId;
+                    const btn = document.getElementById('paySheetContinue');
+                    btn.disabled = true;
+                    billingAction(plan ? 'set_plan' : 'checkout', plan ? { plan: plan } : {})
+                        .catch(function (err) {
+                            btn.disabled = false;
+                            closePaySheet();
+                            showBanner('info', friendlyBillingError(err, plan));
+                        });
+                };
+                function friendlyBillingError(err, planId) {
+                    const name = (FALLBACK_PLANS.find(function (p) { return p.id === planId; }) || {}).name || 'that plan';
+                    if (err && (err.code === 'CHECKOUT_UNAVAILABLE' || err.status === 503)) {
+                        return 'To switch to <strong>' + esc(name) + '</strong>, add a payment method. Email <a href="mailto:support@opsai.us">support@opsai.us</a> and we’ll help you finish.';
+                    }
+                    return esc((err && err.message) || 'Could not update your plan. Try again.');
+                }
                 if (params.get('checkout') === 'success') {
                     banner.className = 'banner';
                     banner.innerHTML = b.access && b.status === 'active'
@@ -144,36 +253,139 @@
                     }
                 }
                 const storesCount = b.storeCount || 0;
-                const booksCount = b.booksStoreCount || 0;
-                const booksLine = booksCount > 0
-                    ? '<p>Books add-on · ' + esc(booksCount) + ' business' + (booksCount === 1 ? '' : 'es') +
-                      ' · ' + money(b.booksUsdPerStore || 20) + '/business · ' + money(b.booksUsd || 0) + '/month</p>'
-                    : '<p class="muted">Books add-on · $20/business — enroll from Business admin → Crew when you want grounded Q&amp;A.</p>';
+                const currentPlan = b.plan || 'pro';
+                const planName = b.planName || 'Pro';
+                const feat = b.features || {};
+                const featureBits = [];
+                if (feat.chatAgent !== false) featureBits.push('Chat agent');
+                if (feat.booksLookups) featureBits.push('Books look-ups');
+                if (feat.staffShifts) featureBits.push('Staff shifts');
+                if (feat.autoRemind) featureBits.push('Auto-remind');
+                const planList = (Array.isArray(b.plans) && b.plans.length)
+                    ? b.plans
+                    : ((Array.isArray(data.plans) && data.plans.length) ? data.plans : FALLBACK_PLANS);
+                function featureLine(p) {
+                    const f = p.features || {};
+                    const bits = ['Chat agent'];
+                    if (f.booksLookups) bits.push('Books look-ups');
+                    if (f.autoRemind) bits.push('Auto-remind');
+                    return bits.join(' · ');
+                }
+                const hasSub = !!pay.hasSubscription;
+                const tiers = planList.map(function (p) {
+                    const on = p.id === currentPlan;
+                    const rank = { standard: 1, pro: 2, premium: 3 };
+                    const isUpgrade = (rank[p.id] || 0) > (rank[currentPlan] || 0);
+                    const seatTotal = moneyWhole((p.monthlyUsdPerStore || 0) * Math.max(1, storesCount));
+                    let label;
+                    if (on && hasSub) label = 'Current plan';
+                    else if (on && !hasSub) label = 'Subscribe · add card · ' + seatTotal + '/mo';
+                    else if (!hasSub) label = (isUpgrade ? 'Upgrade' : 'Switch') + ' · add card · ' + seatTotal + '/mo';
+                    else label = (isUpgrade ? 'Upgrade' : 'Switch') + ' to ' + p.name + ' · ' + seatTotal + '/mo';
+                    const btn = on && hasSub
+                        ? '<button type="button" class="btn secondary" disabled style="opacity:0.7;cursor:default;margin:12px 0 0;width:100%;">Current plan</button>'
+                        : '<button type="button" class="btn' + (isUpgrade || (on && !hasSub) ? '' : ' secondary') +
+                          '" data-set-plan="' + esc(p.id) + '" style="margin:12px 0 0;width:100%;">' +
+                          esc(label) + '</button>';
+                    return '<div style="flex:1;min-width:180px;padding:16px;border:2px solid ' +
+                        (on ? 'var(--primary,#25d366)' : 'var(--border,#e5e5e5)') +
+                        ';border-radius:12px;background:' + (on ? '#f0fdf4' : '#fff') +
+                        ';display:flex;flex-direction:column;">' +
+                        '<div style="font-weight:700;font-size:17px;">' + esc(p.name) +
+                        (p.popular ? ' <span style="font-size:11px;font-weight:650;color:var(--primary-dark,#0f7b3a);">Popular</span>' : '') +
+                        '</div>' +
+                        '<div style="font-size:28px;font-weight:700;margin:8px 0 4px;">' + moneyWhole(p.monthlyUsdPerStore) +
+                        '<span style="font-size:13px;font-weight:500;color:var(--text-light);">/biz/mo</span></div>' +
+                        '<div class="muted" style="font-size:13px;flex:1;">' + esc(p.blurb || '') + '</div>' +
+                        '<div class="muted" style="font-size:12px;margin-top:8px;">' + esc(featureLine(p)) + '</div>' +
+                        btn + '</div>';
+                }).join('');
+                const monthTotal = moneyWhole((b.monthlyUsdPerStore || 45) * Math.max(1, storesCount));
                 document.getElementById('planCard').innerHTML =
-                    '<h2>' + money(b.monthlyUsdPerStore || 25) + ' per business</h2>' +
+                    '<h2>Your plan: ' + esc(planName) + '</h2>' +
                     '<p>' + (b.status === 'trial' ? 'Trial' : esc(b.status)) +
                     ' · ' + esc(storesCount) + ' location' + (storesCount === 1 ? '' : 's') +
-                    ' · base ' + money(b.baseUsd != null ? b.baseUsd : (storesCount * 25)) + '/month</p>' +
-                    booksLine +
-                    '<p style="margin-top:8px;"><strong>' + money(b.monthlyUsd) + '/month</strong> after trial.</p>' +
-                    (b.trialEndsAt ? '<p class="muted" style="margin-top:8px;">Trial ends ' + esc(new Date(b.trialEndsAt).toLocaleString()) + '</p>' : '');
+                    ' · <strong>' + moneyWhole(b.monthlyUsdPerStore || 45) + '/business</strong>' +
+                    (storesCount > 1 ? ' · <strong>' + moneyWhole(b.monthlyUsd) + '/month</strong> total' : '') +
+                    '</p>' +
+                    (featureBits.length ? '<p class="muted" style="margin-top:6px;">Includes: ' + esc(featureBits.join(' · ')) + '</p>' : '') +
+                    (b.trialEndsAt ? '<p class="muted" style="margin-top:8px;">Trial ends ' + esc(new Date(b.trialEndsAt).toLocaleString()) + '</p>' : '') +
+                    '<h3 style="font-size:15px;margin:20px 0 10px;">Choose a plan</h3>' +
+                    '<p class="muted" style="font-size:13px;margin:0 0 12px;">Upgrades open a short checkout to add your card' +
+                    (b.status === 'trial' ? ' — you won’t be charged until the trial ends' : '') + '.</p>' +
+                    '<div style="display:flex;flex-wrap:wrap;gap:12px;">' + tiers + '</div>';
+                function requestPlanChange(planId, triggerBtn) {
+                    const plan = planList.find(function (p) { return p.id === planId; }) ||
+                        FALLBACK_PLANS.find(function (p) { return p.id === planId; });
+                    const name = (plan && plan.name) || 'this plan';
+                    const seatTotal = moneyWhole(((plan && plan.monthlyUsdPerStore) || 0) * Math.max(1, storesCount));
+                    pendingPlanId = planId;
+                    if (!pay.ready) {
+                        openPaySheet({
+                            planId: planId,
+                            title: 'Add a payment method',
+                            body: 'To switch to <strong>' + esc(name) + '</strong>, add a card on file. Secure checkout isn’t live on this account yet — email support and we’ll help you finish.',
+                            priceLine: seatTotal + '/month · ' + esc(String(Math.max(1, storesCount))) +
+                                ' business' + (storesCount === 1 ? '' : 'es') +
+                                (b.status === 'trial' ? ' after trial' : ''),
+                            hideContinue: true,
+                            showSupport: true,
+                        });
+                        document.getElementById('paySheetCancel').textContent = 'Close';
+                        if (triggerBtn) triggerBtn.disabled = false;
+                        return;
+                    }
+                    openPaySheet({
+                        planId: planId,
+                        title: 'Switch to ' + name,
+                        body: 'Add a card to move to <strong>' + esc(name) + '</strong>. Checkout is secured by Stripe — we never see your full card number.',
+                        priceLine: seatTotal + '/month' + (b.status === 'trial' ? ' after trial' : '') +
+                            ' · ' + esc(String(Math.max(1, storesCount))) + ' business' + (storesCount === 1 ? '' : 'es'),
+                        continueLabel: 'Continue to secure checkout',
+                    });
+                    document.getElementById('paySheetCancel').textContent = 'Not now';
+                    if (triggerBtn) triggerBtn.disabled = false;
+                }
+                document.querySelectorAll('[data-set-plan]').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        const plan = btn.getAttribute('data-set-plan');
+                        if (!plan) return;
+                        btn.disabled = true;
+                        if (!pay.ready || !pay.hasSubscription) {
+                            requestPlanChange(plan, btn);
+                            return;
+                        }
+                        // Already subscribed: try in-place plan change; fall back to sheet on error.
+                        billingAction('set_plan', { plan: plan }).then(function (data) {
+                            if (data && data.url) return;
+                            window.location.reload();
+                        }).catch(function (err) {
+                            btn.disabled = false;
+                            if (err.status === 503 || err.code === 'CHECKOUT_UNAVAILABLE') {
+                                requestPlanChange(plan, btn);
+                                return;
+                            }
+                            showBanner('info', friendlyBillingError(err, plan));
+                        });
+                    });
+                });
                 const actions = document.getElementById('payActions');
                 if (!pay.ready) {
-                    actions.innerHTML = '<p class="muted">Card checkout turns on after Stripe keys are set. Until then email support@opsai.us.</p>';
+                    actions.innerHTML = '<div class="card" style="margin-top:8px;"><h2 style="font-size:16px;margin:0 0 6px;">Payment method</h2>' +
+                        '<p class="muted" style="margin:0;">Choose a plan above to add a card. If secure checkout isn’t live on this account yet, email <a href="mailto:support@opsai.us">support@opsai.us</a>.</p></div>';
                 } else if (pay.hasSubscription) {
                     const warn = pay.pastDue
                         ? '<p class="error" style="margin-bottom:8px;">Last payment failed — open the portal to update your card.</p>'
                         : '';
                     actions.innerHTML = warn + '<button type="button" class="btn secondary" id="portalBtn">Manage card and invoices</button>';
                     document.getElementById('portalBtn').onclick = function () {
-                        billingAction('portal').catch(function (err) { alert(err.message); });
+                        billingAction('portal').catch(function (err) {
+                            showBanner('info', friendlyBillingError(err));
+                        });
                     };
                 } else {
-                    actions.innerHTML = '<button type="button" class="btn" id="checkoutBtn">Subscribe · $' +
-                        Number(b.monthlyUsd || 25).toFixed(0) + '/month</button>';
-                    document.getElementById('checkoutBtn').onclick = function () {
-                        billingAction('checkout').catch(function (err) { alert(err.message); });
-                    };
+                    actions.innerHTML = '<p class="muted" style="margin-bottom:8px;">Pick a plan above to add a card · about ' +
+                        monthTotal + '/month after trial.</p>';
                 }
                 document.getElementById('monthLabel').textContent = data.month ? 'Calendar month ' + data.month : '';
                 const sav = data.savings || {};

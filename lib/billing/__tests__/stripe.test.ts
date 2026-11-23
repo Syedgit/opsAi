@@ -3,7 +3,9 @@ import {
   checkoutSessionParams,
   estimateMonthlyUsd,
   patchFromStripeEvent,
+  planIdFromStripeObject,
   planStatusFromStripeSubscription,
+  priceIdForPlan,
   stripeConfig,
   stripeTrialEndUnix,
   userIdFromStripeObject,
@@ -16,6 +18,17 @@ describe('stripeConfig', () => {
     expect(
       stripeConfig({ STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_PRICE_ID: 'price_x' } as NodeJS.ProcessEnv).ready
     ).toBe(true);
+    expect(
+      priceIdForPlan('premium', {
+        STRIPE_SECRET_KEY: 'sk_test_x',
+        STRIPE_PRICE_ID: 'price_default',
+        STRIPE_PRICE_ID_PREMIUM: 'price_premium',
+      } as NodeJS.ProcessEnv)
+    ).toBe('price_premium');
+    expect(
+      priceIdForPlan('pro', { STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_PRICE_ID: 'price_default' } as NodeJS.ProcessEnv)
+    ).toBe('price_default');
+    expect(planIdFromStripeObject({ metadata: { plan: 'pro' } })).toBe('pro');
     expect(
       stripeConfig({
         STRIPE_SECRET_KEY: 'sk_test_x',
@@ -139,18 +152,22 @@ describe('checkoutSessionParams', () => {
 });
 
 describe('estimateMonthlyUsd', () => {
-  it('sums base stores plus Books add-ons', () => {
-    expect(estimateMonthlyUsd(2, 1)).toEqual({
-      baseUsd: 50,
-      booksUsd: 20,
-      totalUsd: 70,
-      booksPriceConfigured: false,
+  it('bills plan price × stores (books is not an add-on)', () => {
+    expect(estimateMonthlyUsd(2, 1, process.env, 'pro')).toMatchObject({
+      baseUsd: 90,
+      booksUsd: 0,
+      totalUsd: 90,
+      monthlyUsdPerStore: 45,
+      planId: 'pro',
+      planName: 'Pro',
     });
+    expect(estimateMonthlyUsd(1, 0, process.env, 'standard').totalUsd).toBe(25);
+    expect(estimateMonthlyUsd(1, 0, process.env, 'premium').totalUsd).toBe(79);
   });
 });
 
 describe('applyStripeEvent', () => {
-  it('writes customer, subscription, and active status', async () => {
+  it('writes customer, subscription, plan, and active status', async () => {
     const update = jest.fn().mockResolvedValue({});
     const prisma = {
       user: {
@@ -161,7 +178,7 @@ describe('applyStripeEvent', () => {
     const result = await applyStripeEvent(prisma as never, 'checkout.session.completed', {
       customer: 'cus_1',
       subscription: 'sub_1',
-      metadata: { userId: 'u1' },
+      metadata: { userId: 'u1', plan: 'premium' },
     });
     expect(result).toEqual({ applied: true, ignored: false });
     expect(update).toHaveBeenCalledWith({
@@ -170,6 +187,7 @@ describe('applyStripeEvent', () => {
         stripeCustomerId: 'cus_1',
         stripeSubscriptionId: 'sub_1',
         planStatus: 'active',
+        plan: 'premium',
       },
     });
   });

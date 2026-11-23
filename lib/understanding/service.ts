@@ -14,6 +14,7 @@ import { loadStoreProfiles } from './storeProfiles';
 import { transcribeAudio } from './transcribe';
 import type { AiUsageRecord } from './usage';
 import type { Understanding } from './schema';
+import { readLeadName } from '../agents/crew';
 
 export interface UnderstandParams {
   messageId: string;
@@ -35,8 +36,14 @@ export interface UnderstandParams {
  */
 export type UnderstandOutcome = 'handled' | 'fallback';
 
-const FIRST_REPORT_INTRO =
-  '👋 This is your first report. Check each number below. If something is wrong, reply FIX and the field (for example FIX card 1260), then OK. After that, keep sending reports the same way.';
+function firstReportIntro(leadName: string): string {
+  const who = (leadName || 'opsAi').trim() || 'opsAi';
+  return (
+    `👋 Hey — I'm ${who}, your store teammate. This is your first report. ` +
+    'Check each number below. If something is wrong, reply FIX and the field (for example FIX card 1260), then OK. ' +
+    'After that, keep sending reports the same way.'
+  );
+}
 
 const RETRY_MESSAGE =
   "😕 I couldn't read that right now. Please send it again in a minute, or type the numbers like: cash 298 card 1355 gas 1440.";
@@ -372,7 +379,14 @@ export async function understandAndRespond(prisma: PrismaClient, params: Underst
     where: { storeId, status: 'CONFIRMED' },
   });
   const isMoneyReport = entries.some((e) => e.kind !== 'work_schedule' && e.kind !== 'fuel_prices');
-  const welcome = confirmedBefore === 0 && isMoneyReport ? `${FIRST_REPORT_INTRO}\n\n` : '';
+  let welcome = '';
+  if (confirmedBefore === 0 && isMoneyReport) {
+    const storeRow = await prisma.storeConfig.findUnique({
+      where: { storeId },
+      select: { profileJson: true },
+    });
+    welcome = `${firstReportIntro(readLeadName(storeRow?.profileJson))}\n\n`;
+  }
 
   const body =
     others.length === 0

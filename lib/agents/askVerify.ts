@@ -20,6 +20,7 @@ export type AskIntentKind =
   | 'last_paid'
   | 'vendor_payment_method'
   | 'missing_closes'
+  | 'ops_today'
   | 'help'
   | 'other';
 
@@ -48,6 +49,15 @@ export function inferAskIntent(question: string, history: ChatTurn[] = []): AskI
   if (wantsOpenDueAsk(q)) return 'open_due';
   if (/missing\s+(a\s+)?close|no close|forgot.*close|days?\s+missing/.test(q)) return 'missing_closes';
   if (/\b(help|what can you)\b/.test(q)) return 'help';
+  if (
+    /^(hi|hii+|hello|hey|yo|good (morning|afternoon|evening))\b/.test(q) ||
+    /\b(anything|what).{0,24}(follow|due|need|check|attention|todo|to-?do|priority|priorities)\b/.test(q) ||
+    /\b(what('?s| is) (due|open|left|next)|what should i (do|check|follow))\b/.test(q) ||
+    /\bfollow\s*up\b/.test(q) ||
+    /\bneeds?\s+attention\b/.test(q)
+  ) {
+    return 'ops_today';
+  }
   if (
     /stand|standing|dmr|how (are|is) (we|sales?)|\bsales?\b/.test(q) ||
     /\b(buying|expenses?|till)\b/.test(q) ||
@@ -245,7 +255,12 @@ export function verifyAndDraftAnswer(input: {
   return {
     status: 'answer',
     text: joinFallbacks(parts),
-    polish: intent === 'standing' || intent === 'invoice_period' || intent === 'help',
+    polish:
+      intent === 'standing' ||
+      intent === 'invoice_period' ||
+      intent === 'help' ||
+      intent === 'ops_today' ||
+      parts.some((p) => p.toolId === 'ops_today'),
   };
 }
 
@@ -288,5 +303,39 @@ export const REFINE_SYSTEM = [
   'Rewrite for clarity only. Keep every dollar amount, date, vendor name, and count exactly as in the draft.',
   'Do not add payment methods, months, or vendors that are not in the draft.',
   'Do not invent data. No markdown fences. No “feel free to ask” closers.',
+  'Sound like a sharp ops teammate: direct, relative to the question (e.g. “anything to follow?” → lead with what needs attention).',
+  'You may end with one natural next step tied to the facts (e.g. “Want standing for the week?”) — never a multi-option menu.',
   '2–8 short sentences or tight bullets. Plain text for WhatsApp or the web chat.',
 ].join(' ');
+
+/**
+ * Exit lead: answer ONLY from verified draft.
+ * Clarify belongs at entry (before tools), never here — exit must not interview.
+ */
+export const EXIT_LEAD_SYSTEM = [
+  'You rewrite a verified facts draft into a direct answer for the owner.',
+  'Return JSON only: {"action":"answer","text":string}',
+  'Keep every dollar amount, date, vendor name, and count exactly as in verifiedDraft. No invented data.',
+  'No markdown. No fluff closers. Never ask a clarifying question. Never switch topics. Never list tools.',
+  'If the draft says there is no data, say that plainly.',
+].join(' ');
+
+export type ExitLeadResult = { kind: 'answer'; text: string };
+
+export function parseExitLeadJson(raw: string | null | undefined, draft: string): ExitLeadResult {
+  if (!raw?.trim()) return { kind: 'answer', text: draft };
+  const cleaned = raw
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '');
+  try {
+    const json = JSON.parse(cleaned) as { action?: string; text?: string };
+    // Exit never clarifies — discard interview attempts and keep the draft.
+    if (json.action === 'clarify') return { kind: 'answer', text: draft };
+    const text = typeof json.text === 'string' ? json.text.trim() : '';
+    if (text) return { kind: 'answer', text: acceptPolishedAnswer(draft, text) };
+  } catch {
+    /* fall through */
+  }
+  return { kind: 'answer', text: acceptPolishedAnswer(draft, raw) };
+}

@@ -79,6 +79,8 @@ function makePrisma(state: {
       findUnique: async ({ where }: { where: { email: string } }) => users.find((u) => u.email === where.email) ?? null,
     },
     storeConfig: {
+      findUnique: async ({ where }: { where: { storeId: string } }) =>
+        ({ storeId: where.storeId, storeName: where.storeId === 'S002' ? 'Test-Store' : where.storeId }),
       update: jest.fn().mockResolvedValue({}),
     },
   };
@@ -116,6 +118,17 @@ describe('store people', () => {
     const { prisma } = makePrisma({ directory: [] });
     const result = await addWhatsAppPerson(prisma, 'S001', manager, { phoneE164: '+15553333333', role: 'OWNER' });
     expect(result).toMatchObject({ ok: false, status: 403 });
+  });
+
+  it('explains when the number is already on another business', async () => {
+    const { prisma } = makePrisma({
+      directory: [{ id: 'd1', phoneE164: '+17329397703', name: null, role: 'OWNER', storeId: 'S002', isActive: true }],
+    });
+    const result = await addWhatsAppPerson(prisma, 'S009', owner, { phoneE164: '+17329397703', role: 'OWNER' });
+    expect(result).toMatchObject({ ok: false, status: 409 });
+    if (result.ok) throw new Error('expected failure');
+    expect(result.error).toContain('Test-Store');
+    expect(result.error).toContain('only be listed once');
   });
 
   it('lets a manager add staff and change their own WhatsApp number later', async () => {

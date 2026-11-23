@@ -1,6 +1,11 @@
 import type { PrismaClient } from '@prisma/client';
 import { isOwnerRole } from '../understanding/storeProfiles';
-import { isSendableWhatsAppPhone, sendWhatsAppMessage } from '../whatsappMessaging';
+import {
+  isSendableWhatsAppPhone,
+  managerPhonesForStore,
+  postToStoreGroups,
+  sendWhatsAppMessage,
+} from '../whatsappMessaging';
 import { logApp, logAppError, serializeError } from '../requestLog';
 import {
   loadActiveGmailRefreshToken,
@@ -8,9 +13,10 @@ import {
   touchGmailSync,
 } from './connection';
 import { gmailClientFromRefreshToken } from './oauth';
+import { channelsForGmailHits } from './rules';
 import { formatGmailHitsDigest, scanGmailForActionItems } from './scan';
 
-/** WhatsApp DMs for this store only (owners/managers on the directory). */
+/** WhatsApp DMs for this store’s owners (includes owner phone linked from another business). */
 async function whatsappTargetsForStore(
   prisma: PrismaClient,
   storeId: string
@@ -24,6 +30,11 @@ async function whatsappTargetsForStore(
     if (!person.storeId || !isOwnerRole(person.role)) continue;
     if (!isSendableWhatsAppPhone(person.phoneE164)) continue;
     out.push({ phoneE164: person.phoneE164, storeId: person.storeId });
+  }
+  if (out.length === 0) {
+    for (const phone of await managerPhonesForStore(prisma, storeId)) {
+      out.push({ phoneE164: phone, storeId });
+    }
   }
   const seen = new Set<string>();
   return out.filter((row) => {
@@ -41,7 +52,7 @@ export type GmailDigestRunResult = {
   errors: number;
 };
 
-/** Scan each store’s connected inbox; DM that store’s owners when rules match. */
+/** Scan each store’s connected inbox; WhatsApp DM and/or group per rule route. */
 export async function runGmailActionDigests(
   prisma: PrismaClient,
   now = new Date()
@@ -81,20 +92,39 @@ export async function runGmailActionDigests(
       result.withHits += 1;
 
       const text = formatGmailHitsDigest(creds.email, hits);
-      const targets = await whatsappTargetsForStore(prisma, row.storeId);
-      if (targets.length === 0) {
-        logApp('gmail.digest', { storeId: row.storeId, ok: false, reason: 'no_whatsapp_target' });
-        continue;
+      const channels = channelsForGmailHits(
+        hits.map((h) => h.reason),
+        creds.rules
+      );
+      let sentHere = 0;
+      let groupPosted = 0;
+
+      if (channels.group) {
+        groupPosted = await postToStoreGroups(prisma, row.storeId, text);
+        sentHere += groupPosted;
       }
-      for (const target of targets) {
-        const ok = await sendWhatsAppMessage(prisma, target.phoneE164, text, target.storeId);
-        if (ok) result.sent += 1;
+
+      const needDm = channels.dm || (channels.group && groupPosted === 0);
+      if (needDm) {
+        const targets = await whatsappTargetsForStore(prisma, row.storeId);
+        if (targets.length === 0 && groupPosted === 0) {
+          logApp('gmail.digest', { storeId: row.storeId, ok: false, reason: 'no_whatsapp_target' });
+          continue;
+        }
+        for (const target of targets) {
+          const ok = await sendWhatsAppMessage(prisma, target.phoneE164, text, target.storeId);
+          if (ok) sentHere += 1;
+        }
       }
+
+      result.sent += sentHere;
       logApp('gmail.digest', {
         storeId: row.storeId,
-        ok: true,
+        ok: sentHere > 0,
         hits: hits.length,
-        targets: targets.length,
+        dm: needDm,
+        groupPosted,
+        sent: sentHere,
       });
     } catch (error) {
       result.errors += 1;

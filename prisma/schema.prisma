@@ -29,8 +29,8 @@ model User {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  /// store. $25 per location after the trial.
-  plan        String    @default("store")
+  /// standard | pro | premium (legacy: store → pro). Per business after trial.
+  plan        String    @default("pro")
   /// trial | active | expired | canceled
   planStatus  String    @default("trial") @map("plan_status")
   trialEndsAt DateTime? @map("trial_ends_at")

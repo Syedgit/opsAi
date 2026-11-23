@@ -11,7 +11,12 @@ export const CREW_TOOL_IDS = [
   'open_invoices',
   'invoice_period_summary',
   'missing_closes',
+  'staff_schedule',
+  'ops_today',
   'help_capabilities',
+  'list_connectors',
+  'list_gmail_rules',
+  'create_gmail_rule',
   'clarify',
   'unsupported',
   'not_ai_chat',
@@ -19,13 +24,22 @@ export const CREW_TOOL_IDS = [
 
 export type CrewToolId = (typeof CREW_TOOL_IDS)[number];
 
-export type ToolPeriod = 'week' | 'month';
+export type ToolPeriod = 'week' | 'month' | 'custom';
 export type InvoiceStatusFilter = 'all' | 'open' | 'paid';
+export type GmailRuleRouteSlot = 'dm' | 'group' | 'both';
 
 export type ToolSlots = {
   period?: ToolPeriod | null;
+  /** ISO days when period is custom (single-day sales = from === to). */
+  from?: string | null;
+  to?: string | null;
   vendor?: string | null;
   status?: InvoiceStatusFilter | null;
+  /** Gmail automation create slots (not date range). */
+  ruleLabel?: string | null;
+  ruleFrom?: string | null;
+  ruleContains?: string | null;
+  route?: GmailRuleRouteSlot | null;
 };
 
 export type CrewToolDef = {
@@ -38,15 +52,23 @@ export type CrewToolDef = {
 };
 
 const BOOKS_TOOL_DEFS: Record<
-  Exclude<CrewToolId, 'clarify' | 'unsupported' | 'not_ai_chat'>,
+  Exclude<
+    CrewToolId,
+    'clarify' | 'unsupported' | 'not_ai_chat' | 'list_connectors' | 'list_gmail_rules' | 'create_gmail_rule'
+  >,
   CrewToolDef
 > = {
   standing_report: {
     id: 'standing_report',
     agentId: 'books',
     description:
-      'Period standing / DMR: sales, cash, card, gas, buying, expenses, standing, close count, missing closes.',
-    examples: ['How is standing this month?', 'How is the DMR looking?', 'How are sales this week?'],
+      'Standing / DMR / sales for a week, month, or a specific day (yesterday, today, or a date). Sales, cash, card, gas, buying, expenses, standing, closes.',
+    examples: [
+      'How is standing this month?',
+      'What was sale yesterday?',
+      'Sales for 11/21',
+      'How are sales this week?',
+    ],
   },
   open_invoices: {
     id: 'open_invoices',
@@ -71,11 +93,36 @@ const BOOKS_TOOL_DEFS: Record<
     description: 'How many days in the period are missing a confirmed close.',
     examples: ['How many missing closes?', 'Which days missing a close this month?'],
   },
+  staff_schedule: {
+    id: 'staff_schedule',
+    agentId: 'books',
+    description:
+      'Who worked / is working from the confirmed shift schedule (hours only, never pay). Use for yesterday, today, or this week’s roster.',
+    examples: [
+      'Who worked yesterday?',
+      'Who is working today?',
+      'Who was on at the shop yesterday?',
+      'Show this week’s schedule hours',
+    ],
+  },
+  ops_today: {
+    id: 'ops_today',
+    agentId: 'books',
+    description:
+      'What needs attention now: open tasks due/overdue, bills due soon, who is on today, missing yesterday close. Default for “anything to follow?”, greetings, or vague business follow-ups.',
+    examples: [
+      'Anything to follow today?',
+      'What needs attention?',
+      'What’s due today?',
+      'What should I check?',
+      'Hi',
+    ],
+  },
   help_capabilities: {
     id: 'help_capabilities',
     agentId: 'books',
     description: 'List what Books can answer from confirmed data for this business.',
-    examples: ['What can you help with?', 'Help'],
+    examples: ['What can you help with?', 'Help', 'What can you do'],
     alwaysAvailable: true,
   },
 };
@@ -94,6 +141,38 @@ export function booksToolsForPack(pack: VerticalPack): CrewToolDef[] {
 export const C_STORE_GAS_BOOKS_TOOLS: CrewToolDef[] = booksToolsForPack('c_store_gas');
 
 export const META_TOOLS: CrewToolDef[] = [
+  {
+    id: 'list_connectors',
+    agentId: 'books',
+    description:
+      'Show which connectors are set up for this business (Gmail, WhatsApp group, task alerts) and what is still missing. Use for “what’s connected?”, “set up Gmail”, connector status.',
+    examples: [
+      'What connectors do we have?',
+      'Is Gmail connected?',
+      'What’s set up for alerts?',
+      'Show connected apps',
+    ],
+    alwaysAvailable: true,
+  },
+  {
+    id: 'list_gmail_rules',
+    agentId: 'books',
+    description: 'List Gmail alert rules (From / contains / where they deliver: DM, group, or both).',
+    examples: ['Show Gmail rules', 'What email alerts do I have?', 'List my Gmail automations'],
+    alwaysAvailable: true,
+  },
+  {
+    id: 'create_gmail_rule',
+    agentId: 'books',
+    description:
+      'Add a Gmail alert rule. Slots: ruleFrom and/or ruleContains, optional ruleLabel, route dm|group|both. Requires Gmail connected; OAuth connect stays in Business admin → Tools.',
+    examples: [
+      'Alert me when mail from ustocktrader contains Test-sza',
+      'When pricing email comes from @vendor.com post it in the group',
+      'Add a Gmail rule from billing@x.com to DM me',
+    ],
+    alwaysAvailable: true,
+  },
   {
     id: 'clarify',
     agentId: 'books',

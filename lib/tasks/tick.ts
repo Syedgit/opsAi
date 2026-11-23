@@ -1,12 +1,17 @@
 import type { PrismaClient } from '@prisma/client';
-import { managerPhonesForStore, postToStoreGroups, sendWhatsAppMessage } from '../whatsappMessaging';
+import {
+  managerPhonesForStore,
+  postToStoreGroups,
+  sendWelcomeTemplate,
+  sendWhatsAppMessage,
+} from '../whatsappMessaging';
 import { maybeMorningDepositText } from '../understanding/depositDue';
 import { releaseAwaitingCloses } from '../understanding/awaitingText';
 import { maybeThursdayHoursText } from '../understanding/hoursDigest';
 import { alertMessage, reminderMessage, type MessageRun } from './messages';
 import { dueSoFar } from './schedule';
 import { localDateString } from './time';
-import { logApp, logAppError, serializeError } from '../requestLog';
+import { logApp, logAppError, maskPhone, serializeError } from '../requestLog';
 import { taskAlertsEnabled } from '../notify/channels';
 import {
   adminDailySummaryMessageId,
@@ -119,6 +124,118 @@ const toMessageRun = (run: RunRow, instructions?: string | null): MessageRun => 
   fallback: run.fallback,
 });
 
+/** Why WhatsApp task alerts may not land — used by Send alerts / test alert UI. */
+export async function diagnoseTaskAlertDelivery(
+  prisma: PrismaClient,
+  storeId: string
+): Promise<{
+  alertsEnabled: boolean;
+  groupCount: number;
+  staffCount: number;
+  managerCount: number;
+  fallbackManagerCount: number;
+  /** True when this business has no local People row but an owner phone from another of your businesses will get DMs. */
+  usingLinkedOwnerPhone: boolean;
+  linkedOwnerPhoneMasked: string | null;
+  canDeliver: boolean;
+  hint: string;
+}> {
+  const store = await prisma.storeConfig.findUnique({
+    where: { storeId },
+    select: { profileJson: true },
+  });
+  const alertsEnabled = store ? taskAlertsEnabled(store.profileJson) : false;
+  const groups = await prisma.storeWhatsAppGroup.count({ where: { storeId, active: true } });
+  const members = await prisma.userDirectory.findMany({
+    where: { storeId, isActive: true },
+    select: { role: true, phoneE164: true },
+  });
+  const staffCount = members.filter((m) => m.role === 'STAFF').length;
+  const managerCount = members.filter((m) => m.role === 'OWNER' || m.role === 'MANAGER').length;
+  const fallback = await managerPhonesForStore(prisma, storeId);
+  const localPhones = new Set(members.map((m) => m.phoneE164));
+  const linkedOnly = fallback.filter((p) => !localPhones.has(p));
+  const usingLinkedOwnerPhone = members.length === 0 && linkedOnly.length > 0;
+  const linkedOwnerPhoneMasked = usingLinkedOwnerPhone ? maskPhone(linkedOnly[0]) ?? null : null;
+  const canDeliver = groups > 0 || staffCount > 0 || managerCount > 0 || fallback.length > 0;
+  let hint = '';
+  if (!alertsEnabled) {
+    hint = 'WhatsApp task alerts are off for this business. Turn them on under Setup → Tasks.';
+  } else if (!canDeliver) {
+    hint =
+      'No WhatsApp group or people on this business. Add staff (or an owner/manager phone) under People, or link a store WhatsApp group — then tap Send alerts again.';
+  } else if (usingLinkedOwnerPhone) {
+    hint =
+      `Your owner WhatsApp (${linkedOwnerPhoneMasked || 'linked number'}) is on another business you own — task alerts for this one still DM that number. Add staff under People so the shift gets them too.`;
+  } else if (groups === 0 && staffCount === 0) {
+    hint =
+      'No staff listing and no group — alerts will DM the owner/manager phone. Add staff under People so the shift gets them.';
+  } else {
+    hint = 'Delivery path looks ready. If nothing arrives, the person may need to message opsAi first (24-hour WhatsApp window), or reply to a welcome template.';
+  }
+  return {
+    alertsEnabled,
+    groupCount: groups,
+    staffCount,
+    managerCount,
+    fallbackManagerCount: fallback.length,
+    usingLinkedOwnerPhone,
+    linkedOwnerPhoneMasked,
+    canDeliver,
+    hint,
+  };
+}
+
+/** Phones we would DM for a store alert (staff first, else owners/managers, else fallback). */
+async function alertDmPhones(prisma: PrismaClient, storeId: string): Promise<string[]> {
+  const members = await prisma.userDirectory.findMany({ where: { storeId, isActive: true } });
+  const staff = members.filter((m) => m.role === 'STAFF');
+  const bosses = members.filter((m) => m.role === 'OWNER' || m.role === 'MANAGER');
+  const targets = staff.length > 0 ? staff : bosses.length > 0 ? bosses : members;
+  const phones = [...new Set(targets.map((m) => m.phoneE164))];
+  if (phones.length > 0) return phones;
+  return managerPhonesForStore(prisma, storeId);
+}
+
+/** One-off WhatsApp ping so owners can verify delivery without waiting for a due task. */
+export async function sendTaskAlertTest(
+  prisma: PrismaClient,
+  storeId: string
+): Promise<{
+  sent: number;
+  welcomed: number;
+  delivery: Awaited<ReturnType<typeof diagnoseTaskAlertDelivery>>;
+}> {
+  const delivery = await diagnoseTaskAlertDelivery(prisma, storeId);
+  if (!delivery.alertsEnabled || !delivery.canDeliver) {
+    return { sent: 0, welcomed: 0, delivery };
+  }
+  const store = await prisma.storeConfig.findUnique({
+    where: { storeId },
+    select: { storeName: true },
+  });
+  const storeName = store?.storeName || storeId;
+  const text = [
+    `✅ ${storeName} · opsAi test alert`,
+    'Task reminders are connected for this business.',
+    'When a shift task is due, staff get a WhatsApp message like this. Reply with the task number and proof (photo or “1 done”).',
+  ].join('\n');
+  let sent = await deliverToStore(prisma, storeId, text);
+  let welcomed = 0;
+  let hint = delivery.hint;
+  // Free-form fails outside Meta's 24h window — nudge with the approved welcome template instead.
+  if (sent === 0 && delivery.groupCount === 0) {
+    for (const phone of await alertDmPhones(prisma, storeId)) {
+      if (await sendWelcomeTemplate(prisma, phone, { storeId, storeName })) welcomed += 1;
+    }
+    hint =
+      welcomed > 0
+        ? 'Free-form test could not deliver (WhatsApp 24-hour window). Sent a welcome template instead — reply OK on WhatsApp, then tap Test WhatsApp again.'
+        : 'Could not reach WhatsApp (token, phone id, or Meta window). Confirm the number is correct and that person has messaged opsAi recently.';
+  }
+  return { sent, welcomed, delivery: { ...delivery, hint } };
+}
+
 /**
  * Group first (the shift sees it together). Otherwise DM store staff.
  * Owners/managers are not CC'd on every due/remind — they get brief daily/weekly summaries.
@@ -149,13 +266,22 @@ export async function deliverToStore(prisma: PrismaClient, storeId: string, text
   return sent;
 }
 
-/** Owners and managers of the store, by private message. */
+/** Owners and managers of the store, by private message (includes owner phone linked from another business you own). */
 export async function notifyManagers(prisma: PrismaClient, storeId: string, text: string): Promise<number> {
   const members = await prisma.userDirectory.findMany({ where: { storeId, isActive: true } });
+  const seen = new Set<string>();
   let sent = 0;
   for (const member of members) {
     if (member.role !== 'OWNER' && member.role !== 'MANAGER') continue;
+    if (seen.has(member.phoneE164)) continue;
+    seen.add(member.phoneE164);
     if (await sendWhatsAppMessage(prisma, member.phoneE164, text, storeId)) sent += 1;
+  }
+  if (sent > 0) return sent;
+  for (const phone of await managerPhonesForStore(prisma, storeId)) {
+    if (seen.has(phone)) continue;
+    seen.add(phone);
+    if (await sendWhatsAppMessage(prisma, phone, text, storeId)) sent += 1;
   }
   return sent;
 }

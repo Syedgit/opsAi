@@ -1,6 +1,8 @@
 import {
-  ASK_DATA_USD_PER_STORE_PER_MONTH,
-  USD_PER_STORE_PER_MONTH,
+  getPlan,
+  isPlanId,
+  monthlyFeeUsd,
+  type PlanId,
   type PlanStatus,
 } from './plans';
 
@@ -11,7 +13,9 @@ export type StripeConfig = {
   secretKey: string;
   webhookSecret: string;
   priceId: string;
-  /** Optional Books add-on Price ID ($20/store/mo). */
+  /** Optional per-tier Price IDs; fall back to `priceId` when unset. */
+  priceIds: Record<PlanId, string>;
+  /** @deprecated Optional legacy Books add-on Price ID — tiers include features now. */
   booksPriceId: string;
   appUrl: string;
   ready: boolean;
@@ -25,16 +29,29 @@ export function stripeConfig(env: NodeJS.ProcessEnv = process.env): StripeConfig
   const priceId = env.STRIPE_PRICE_ID?.trim() || '';
   const booksPriceId = env.STRIPE_BOOKS_PRICE_ID?.trim() || '';
   const appUrl = (env.APP_URL?.trim() || 'http://localhost:3000').replace(/\/+$/, '');
+  const priceIds: Record<PlanId, string> = {
+    standard: env.STRIPE_PRICE_ID_STANDARD?.trim() || priceId,
+    pro: env.STRIPE_PRICE_ID_PRO?.trim() || priceId,
+    premium: env.STRIPE_PRICE_ID_PREMIUM?.trim() || priceId,
+  };
   return {
     secretKey,
     webhookSecret,
     priceId,
+    priceIds,
     booksPriceId,
     appUrl,
     ready: Boolean(secretKey && priceId),
     webhookReady: Boolean(secretKey && webhookSecret),
     booksReady: Boolean(secretKey && booksPriceId),
   };
+}
+
+/** Stripe Price ID for a plan tier (per-tier env, else default STRIPE_PRICE_ID). */
+export function priceIdForPlan(planId: PlanId | string | null | undefined, env: NodeJS.ProcessEnv = process.env): string {
+  const cfg = stripeConfig(env);
+  const id = isPlanId(planId) ? planId : 'pro';
+  return cfg.priceIds[id] || cfg.priceId;
 }
 
 /** Stripe line quantity. Never 0 — Checkout and subscription items reject it. */
@@ -61,6 +78,7 @@ export type StripeBillingPatch = {
   stripeCustomerId?: string;
   stripeSubscriptionId?: string | null;
   planStatus?: PlanStatus;
+  plan?: PlanId;
 };
 
 export function stripeId(value: unknown): string | undefined {
@@ -84,7 +102,17 @@ export function userIdFromStripeObject(object: StripeObject): string | null {
   return null;
 }
 
+export function planIdFromStripeObject(object: StripeObject): PlanId | null {
+  const meta = object.metadata;
+  if (meta && typeof meta === 'object' && meta !== null) {
+    const plan = (meta as { plan?: unknown }).plan;
+    if (isPlanId(plan)) return plan;
+  }
+  return null;
+}
+
 export function patchFromStripeEvent(type: string, object: StripeObject): StripeBillingPatch | null {
+  const plan = planIdFromStripeObject(object) ?? undefined;
   if (type === 'checkout.session.completed') {
     const stripeCustomerId = stripeId(object.customer);
     if (!stripeCustomerId) return null;
@@ -92,6 +120,7 @@ export function patchFromStripeEvent(type: string, object: StripeObject): Stripe
       stripeCustomerId,
       stripeSubscriptionId: stripeId(object.subscription) ?? undefined,
       planStatus: 'active',
+      ...(plan ? { plan } : {}),
     };
   }
   if (type === 'customer.subscription.created' || type === 'customer.subscription.updated') {
@@ -101,6 +130,7 @@ export function patchFromStripeEvent(type: string, object: StripeObject): Stripe
       stripeCustomerId: stripeId(object.customer),
       stripeSubscriptionId: typeof object.id === 'string' ? object.id : undefined,
       planStatus: planStatusFromStripeSubscription(status),
+      ...(plan ? { plan } : {}),
     };
   }
   if (type === 'customer.subscription.deleted') {
@@ -136,8 +166,8 @@ export type CheckoutSessionParams = {
   success_url: string;
   cancel_url: string;
   line_items: Array<{ price: string; quantity: number }>;
-  subscription_data: { metadata: { userId: string }; trial_end?: number };
-  metadata: { userId: string; booksQuantity?: string };
+  subscription_data: { metadata: { userId: string; plan?: string }; trial_end?: number };
+  metadata: { userId: string; plan?: string; booksQuantity?: string };
   allow_promotion_codes: true;
 };
 
@@ -148,6 +178,7 @@ export function checkoutSessionParams(input: {
   quantity: number;
   appUrl: string;
   trialEnd?: number;
+  planId?: PlanId;
   booksPriceId?: string;
   booksQuantity?: number;
 }): CheckoutSessionParams {
@@ -158,6 +189,7 @@ export function checkoutSessionParams(input: {
   if (input.booksPriceId && booksQty > 0) {
     line_items.push({ price: input.booksPriceId, quantity: booksQty });
   }
+  const planMeta = input.planId ? { plan: input.planId } : {};
   return {
     mode: 'subscription',
     customer: input.customerId,
@@ -166,36 +198,45 @@ export function checkoutSessionParams(input: {
     cancel_url: `${input.appUrl}/billing?checkout=cancel`,
     line_items,
     subscription_data: {
-      metadata: { userId: input.userId },
+      metadata: { userId: input.userId, ...planMeta },
       ...(input.trialEnd ? { trial_end: input.trialEnd } : {}),
     },
     metadata: {
       userId: input.userId,
+      ...planMeta,
       ...(booksQty > 0 ? { booksQuantity: String(booksQty) } : {}),
     },
     allow_promotion_codes: true,
   };
 }
 
-/** Monthly estimate: base stores + enrolled Books add-ons. */
+/**
+ * Monthly estimate from the account plan × store count.
+ * `booksStoreCount` is ignored (kept for call-site compat); books is a Pro+ feature, not an add-on.
+ */
 export function estimateMonthlyUsd(
   storeCount: number,
-  booksStoreCount: number,
-  env: NodeJS.ProcessEnv = process.env
+  _booksStoreCount: number = 0,
+  env: NodeJS.ProcessEnv = process.env,
+  planId?: string | null
 ): {
   baseUsd: number;
   booksUsd: number;
   totalUsd: number;
   booksPriceConfigured: boolean;
+  monthlyUsdPerStore: number;
+  planId: string;
+  planName: string;
 } {
-  const stores = Math.max(0, Math.floor(storeCount));
-  const books = Math.max(0, Math.floor(booksStoreCount));
-  const baseUsd = stores * USD_PER_STORE_PER_MONTH;
-  const booksUsd = books * ASK_DATA_USD_PER_STORE_PER_MONTH;
+  const plan = getPlan(planId);
+  const totalUsd = monthlyFeeUsd(storeCount, plan.id);
   return {
-    baseUsd,
-    booksUsd,
-    totalUsd: baseUsd + booksUsd,
+    baseUsd: totalUsd,
+    booksUsd: 0,
+    totalUsd,
     booksPriceConfigured: Boolean(stripeConfig(env).booksPriceId),
+    monthlyUsdPerStore: plan.monthlyUsdPerStore,
+    planId: plan.id,
+    planName: plan.name,
   };
 }

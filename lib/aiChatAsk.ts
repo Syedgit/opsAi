@@ -1,23 +1,30 @@
 import { z } from 'zod';
 import type { PrismaClient } from '@prisma/client';
-import { isAiChatEnrolled } from './aiChatAccess';
+import { isBooksChatAllowed, withBooksAlignedToPlan } from './aiChatAccess';
+import { planBoardPayload } from './billing/plans';
 import { loadStoreReport } from './storeReport';
 import { loadOpenInvoices } from './tasks/invoiceReminder';
 import { paymentDueOn, remainingOf } from './understanding/invoiceBalance';
 import type { AgentId, StoreAgentId } from './agents/crew';
-import { AGENT_DISPLAY, resolveAgentPack } from './agents/crew';
+import { AGENT_DISPLAY, resolveAgentPack, syncAgentsBooksFromAiChat } from './agents/crew';
+import { lastAskFromPlan, parseLastAsk, type LastAskState } from './agents/lastAsk';
 import { runAskPlan, type ChatTurn, type SupervisorRouter } from './agents/supervisor';
 import {
-  REFINE_SYSTEM,
+  EXIT_LEAD_SYSTEM,
   acceptPolishedAnswer,
+  parseExitLeadJson,
   verifyAndDraftAnswer,
+  type ExitLeadResult,
 } from './agents/askVerify';
 import { loadToolFacts, type ToolFactsResult } from './agents/tools/loaders';
+import { matchStoreFromText } from './understanding/checks';
+import { loadStoreProfiles } from './understanding/storeProfiles';
 import { readStoredSetup } from './tasks/storeSetup';
 import { logApp, logAppError, serializeError } from './requestLog';
 
 /** Short-lived WhatsApp 1:1 thread memory (best-effort on serverless). */
 const waThreads = new Map<string, ChatTurn[]>();
+const waLastAsk = new Map<string, LastAskState>();
 
 export function waThreadKey(storeId: string, phoneE164: string): string {
   return `${storeId}:${phoneE164}`;
@@ -36,6 +43,10 @@ export function pushWaThread(storeId: string, phoneE164: string, turn: ChatTurn)
 
 const QUESTION_HINT =
   /\b(how|what|when|where|why|who|which|standing|dmr|owe|owing|owed|pending|due|forecast|vendor|bill|invoice|sales|buying|selling|utility|utilities|paid|pay|status|looking|stand)\b|\?/i;
+
+/** Connector / Gmail automation asks (WhatsApp 1:1) — may include emails with digits. */
+const CONNECTOR_HINT =
+  /\b(gmail|connectors?|connected apps?|integrations?|email alert|alert me|gmail rules?|show gmail|add (a )?gmail)\b/i;
 
 /** Ops entries (amounts, closes, orders) must never be stolen by AI chat. */
 const ENTRY_HINT =
@@ -109,8 +120,10 @@ const SUMMARY_SYSTEM = [
 export function looksLikeAiChatQuestion(text: string): boolean {
   const t = text.trim();
   if (t.length < 3 || t.length > 500) return false;
-  if (/\d/.test(t) || /\$/.test(t)) return false;
   if (ENTRY_HINT.test(t)) return false;
+  // Connector setup before the digit gate — From addresses / rule text often include numbers.
+  if (CONNECTOR_HINT.test(t)) return true;
+  if (/\d/.test(t) || /\$/.test(t)) return false;
   return QUESTION_HINT.test(t);
 }
 
@@ -407,20 +420,24 @@ export async function summarizeAiChatFacts(
   }
 }
 
-/** Refine a supervisor-verified draft for the end user (no new facts). */
-export async function refineVerifiedAnswer(
+/**
+ * Exit lead after tools: refine the verified draft for THIS question,
+ * or ask one clarifying question when the draft is not enough.
+ */
+export async function exitLeadAfterTools(
   question: string,
   draft: string,
   env: NodeJS.ProcessEnv = process.env,
   summarize?: AiChatSummarizer
-): Promise<string> {
+): Promise<ExitLeadResult> {
   if (summarize) {
     const polished = await summarize({
       question,
-      facts: { verifiedDraft: draft },
+      facts: { verifiedDraft: draft, exitLead: true },
       fallback: draft,
     });
-    return acceptPolishedAnswer(draft, polished);
+    // Test summarizers return plain text answers unless they return clarify JSON.
+    return parseExitLeadJson(polished, draft);
   }
 
   const apiKey = env.OPENAI_API_KEY?.trim();
@@ -428,7 +445,7 @@ export async function refineVerifiedAnswer(
     env.OPENAI_TEXT_MODEL?.trim() ||
     env.OPENAI_MODEL?.trim() ||
     env.OPENAI_EXTRACTION_MODEL?.trim();
-  if (!apiKey || !model) return draft;
+  if (!apiKey || !model) return { kind: 'answer', text: draft };
 
   try {
     const OpenAI = (await import('openai')).default;
@@ -436,9 +453,10 @@ export async function refineVerifiedAnswer(
     const response = await openai.chat.completions.create({
       model,
       temperature: 0.1,
-      max_tokens: 400,
+      max_tokens: 420,
+      response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: REFINE_SYSTEM },
+        { role: 'system', content: EXIT_LEAD_SYSTEM },
         {
           role: 'user',
           content: JSON.stringify({ question, verifiedDraft: draft }),
@@ -446,17 +464,28 @@ export async function refineVerifiedAnswer(
       ],
     });
     const text = response.choices[0]?.message?.content?.trim();
-    const accepted = acceptPolishedAnswer(draft, text);
-    logApp('books.refine.ok', {
+    const decided = parseExitLeadJson(text, draft);
+    logApp('books.exit_lead.ok', {
       model,
-      chars: accepted.length,
-      usedDraft: accepted === draft,
+      action: 'answer',
+      chars: decided.text.length,
     });
-    return accepted;
+    return decided;
   } catch (error) {
-    logAppError('books.refine.fail', { model, ...serializeError(error) });
-    return draft;
+    logAppError('books.exit_lead.fail', { model, ...serializeError(error) });
+    return { kind: 'answer', text: draft };
   }
+}
+
+/** Refine a supervisor-verified draft for the end user (no new facts). */
+export async function refineVerifiedAnswer(
+  question: string,
+  draft: string,
+  env: NodeJS.ProcessEnv = process.env,
+  summarize?: AiChatSummarizer
+): Promise<string> {
+  const exit = await exitLeadAfterTools(question, draft, env, summarize);
+  return exit.text;
 }
 
 export type CrewAnswer = {
@@ -465,6 +494,8 @@ export type CrewAnswer = {
   agentId: AgentId;
   agent: string;
   toolId?: string;
+  /** Pass back to the next ask so follow-ups keep the same tool+slots. */
+  lastAsk?: LastAskState | null;
 };
 
 /**
@@ -488,6 +519,8 @@ export async function answerAiChatQuestion(
     route?: SupervisorRouter;
     /** web = crew UI (never silent-skip); whatsapp = may skip ops capture. */
     channel?: 'web' | 'whatsapp';
+    /** Previous successful tool+slots for follow-up binding. */
+    lastAsk?: LastAskState | null;
   } = {}
 ): Promise<CrewAnswer> {
   // Legacy test hook: topic classifier → same loaders via tool id mapping.
@@ -539,6 +572,7 @@ export async function answerAiChatQuestion(
   const booksEnrolled = options.booksEnrolled !== false;
   const history = options.history ?? [];
   const channel = options.channel ?? 'web';
+  const lastAskIn = options.lastAsk ? parseLastAsk(options.lastAsk) : null;
   const plan = await runAskPlan(question, {
     history,
     booksEnrolled,
@@ -547,17 +581,19 @@ export async function answerAiChatQuestion(
     env: options.env,
     route: options.route,
     channel,
+    lastAsk: lastAskIn,
   });
+  const nextLastAsk = lastAskFromPlan(plan);
 
   const primaryTool = plan.steps[0]?.toolId || 'clarify';
   if (primaryTool === 'not_ai_chat') {
     if (channel === 'web') {
       return {
-        answer:
-          'What do you want to know — standing/DMR, open invoices, who was paid last, or invoice counts?',
+        answer: `I can pull today’s follow-ups for ${storeName}, or dig into standing, invoices, or the schedule — what do you need?`,
         agentId: 'books',
         agent: AGENT_DISPLAY.books,
-        toolId: 'clarify',
+        toolId: 'ops_today',
+        lastAsk: lastAskIn,
       };
     }
     return {
@@ -566,6 +602,7 @@ export async function answerAiChatQuestion(
       agentId: 'supervisor',
       agent: AGENT_DISPLAY.supervisor,
       toolId: 'not_ai_chat',
+      lastAsk: lastAskIn,
     };
   }
 
@@ -588,6 +625,7 @@ export async function answerAiChatQuestion(
         agentId: 'books',
         agent: AGENT_DISPLAY.books,
         toolId: 'clarify',
+        lastAsk: lastAskIn,
       };
     }
     const factsLoaded = loaded as ToolFactsResult;
@@ -602,11 +640,11 @@ export async function answerAiChatQuestion(
   if (parts.length === 0) {
     if (channel === 'web') {
       return {
-        answer:
-          'What do you want to know — standing/DMR, open invoices, who was paid last, or invoice counts?',
+        answer: `I can pull today’s follow-ups for ${storeName}, or dig into standing, invoices, or the schedule — what do you need?`,
         agentId: 'books',
         agent: AGENT_DISPLAY.books,
-        toolId: 'clarify',
+        toolId: 'ops_today',
+        lastAsk: lastAskIn,
       };
     }
     return {
@@ -615,6 +653,7 @@ export async function answerAiChatQuestion(
       agentId: 'supervisor',
       agent: AGENT_DISPLAY.supervisor,
       toolId: primaryTool,
+      lastAsk: lastAskIn,
     };
   }
 
@@ -639,6 +678,7 @@ export async function answerAiChatQuestion(
       agentId: 'supervisor',
       agent: AGENT_DISPLAY.supervisor,
       toolId,
+      lastAsk: nextLastAsk || lastAskIn,
     };
   }
 
@@ -648,26 +688,61 @@ export async function answerAiChatQuestion(
     chars: verified.text.length,
   });
 
-  const answer = verified.polish
-    ? await refineVerifiedAnswer(
-        question,
-        verified.text,
-        options.env ?? process.env,
-        options.summarize
-      )
-    : verified.text;
+  // Exit = answer only (no clarify). Facts already loaded.
+  const exit = await exitLeadAfterTools(
+    question,
+    verified.text,
+    options.env ?? process.env,
+    options.summarize
+  );
 
   return {
-    answer,
+    answer: exit.text,
     agentId: 'books',
     agent: AGENT_DISPLAY.books,
     toolId,
+    lastAsk: nextLastAsk || lastAskIn,
   };
 }
 
 /**
- * Admin 1:1 WhatsApp: if enrolled OWNER/MANAGER asks a data question, answer and return true.
- * Groups and staff stay on the normal ops path.
+ * Pick which business a multi-store owner means on WhatsApp 1:1.
+ * Name (“Rockaway”) or code (S009); otherwise keep the phone’s home store.
+ */
+export async function resolveWhatsAppAskStore(
+  prisma: PrismaClient,
+  fallbackStoreId: string,
+  text: string
+): Promise<{ storeId: string; clarify: string | null }> {
+  let profiles: Awaited<ReturnType<typeof loadStoreProfiles>> = [];
+  try {
+    profiles = await loadStoreProfiles(prisma, fallbackStoreId, { includeOwnerSiblings: true });
+  } catch {
+    return { storeId: fallbackStoreId, clarify: null };
+  }
+  if (profiles.length <= 1) return { storeId: fallbackStoreId, clarify: null };
+
+  const code = text.toUpperCase().match(/\b(S\d{3})\b/)?.[1];
+  if (code) {
+    const hit = profiles.find((p) => p.storeId === code);
+    if (hit) return { storeId: hit.storeId, clarify: null };
+  }
+
+  const named = matchStoreFromText(text, profiles);
+  if (named.ambiguous) {
+    const list = profiles.map((p) => `• ${p.storeName} (${p.storeId})`).join('\n');
+    return {
+      storeId: fallbackStoreId,
+      clarify: `Which business?\n${list}\n\nSay the store name or code (e.g. Rockaway or S009).`,
+    };
+  }
+  if (named.profile) return { storeId: named.profile.storeId, clarify: null };
+  return { storeId: fallbackStoreId, clarify: null };
+}
+
+/**
+ * Admin 1:1 WhatsApp: OWNER/MANAGER data + connector questions (same tools as Crew chat).
+ * Groups and staff stay on the normal ops path. Name a store when you own several.
  */
 export async function tryWhatsAppAiChat(
   prisma: PrismaClient,
@@ -681,14 +756,18 @@ export async function tryWhatsAppAiChat(
     classify?: AiChatClassifier;
     summarize?: AiChatSummarizer;
   }
-): Promise<{ handled: true; answer: string; agentId: AgentId; toolId?: string } | { handled: false }> {
+): Promise<
+  | { handled: true; answer: string; agentId: AgentId; toolId?: string; storeId: string }
+  | { handled: false }
+> {
   if (input.groupId) return { handled: false };
   if (input.hasMedia) return { handled: false };
 
   const text = input.text.trim();
-  // Allow short follow-ups when we already have a Books thread.
-  const history = getWaThread(input.storeId, input.phoneE164);
-  const followUp = history.length > 0 && text.length >= 2 && text.length <= 80 && !ENTRY_HINT.test(text);
+  // Allow short follow-ups when we already have a Books thread on the home store.
+  const homeHistory = getWaThread(input.storeId, input.phoneE164);
+  const followUp =
+    homeHistory.length > 0 && text.length >= 2 && text.length <= 80 && !ENTRY_HINT.test(text);
   if (!looksLikeAiChatQuestion(text) && !followUp) return { handled: false };
 
   const member = await prisma.userDirectory.findUnique({
@@ -699,29 +778,66 @@ export async function tryWhatsAppAiChat(
     return { handled: false };
   }
 
+  const picked = await resolveWhatsAppAskStore(prisma, input.storeId, text);
+  if (picked.clarify) {
+    return {
+      handled: true,
+      answer: picked.clarify,
+      agentId: 'supervisor',
+      toolId: 'list_connectors',
+      storeId: input.storeId,
+    };
+  }
+  const storeId = picked.storeId;
+
   const store = await prisma.storeConfig.findUnique({
-    where: { storeId: input.storeId },
+    where: { storeId },
     select: { storeName: true, profileJson: true, setupJson: true },
   });
-  if (!store || !isAiChatEnrolled(store.profileJson)) {
-    return { handled: false };
+  if (!store) return { handled: false };
+
+  const ownerLink = await prisma.userStore.findFirst({
+    where: { storeId, role: 'OWNER' },
+    select: { user: { select: { plan: true } } },
+    orderBy: { createdAt: 'asc' },
+  });
+  const planIncludesBooks = planBoardPayload(ownerLink?.user?.plan).features.booksLookups;
+  let profileJson: unknown = store.profileJson;
+  const aligned = withBooksAlignedToPlan(profileJson, planIncludesBooks);
+  if (aligned) {
+    profileJson = syncAgentsBooksFromAiChat(aligned);
+    await prisma.storeConfig.update({
+      where: { storeId },
+      data: { profileJson: profileJson as object },
+    });
   }
+  const booksEnrolled = isBooksChatAllowed(profileJson, planIncludesBooks);
 
   const setup = readStoredSetup(store.setupJson);
-  const pack = resolveAgentPack(store.profileJson, setup?.storeType ?? null);
+  const pack = resolveAgentPack(profileJson, setup?.storeType ?? null);
 
-  const result = await answerAiChatQuestion(prisma, input.storeId, store.storeName, text, {
+  const key = waThreadKey(storeId, input.phoneE164);
+  const history = getWaThread(storeId, input.phoneE164);
+  const result = await answerAiChatQuestion(prisma, storeId, store.storeName, text, {
     env: input.env,
     classify: input.classify,
     summarize: input.summarize,
     history,
     agentFilter: 'supervisor',
-    booksEnrolled: true,
+    booksEnrolled,
     pack,
     channel: 'whatsapp',
+    lastAsk: waLastAsk.get(key) || null,
   });
   if (result.skipped) return { handled: false };
-  pushWaThread(input.storeId, input.phoneE164, { role: 'user', text });
-  pushWaThread(input.storeId, input.phoneE164, { role: 'assistant', text: result.answer });
-  return { handled: true, answer: result.answer, agentId: result.agentId, toolId: result.toolId };
+  if (result.lastAsk) waLastAsk.set(key, result.lastAsk);
+  pushWaThread(storeId, input.phoneE164, { role: 'user', text });
+  pushWaThread(storeId, input.phoneE164, { role: 'assistant', text: result.answer });
+  return {
+    handled: true,
+    answer: result.answer,
+    agentId: result.agentId,
+    toolId: result.toolId,
+    storeId,
+  };
 }

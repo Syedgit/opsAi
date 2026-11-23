@@ -184,6 +184,8 @@ const SHOP_BOOKS = [
   'open_invoices',
   'invoice_period_summary',
   'missing_closes',
+  'staff_schedule',
+  'ops_today',
   'help_capabilities',
 ] as const;
 
@@ -192,10 +194,12 @@ const TILL_BOOKS = [
   'open_invoices',
   'invoice_period_summary',
   'missing_closes',
+  'staff_schedule',
+  'ops_today',
   'help_capabilities',
 ] as const;
 
-const LIGHT_BOOKS = ['help_capabilities'] as const;
+const LIGHT_BOOKS = ['staff_schedule', 'ops_today', 'help_capabilities'] as const;
 
 /** Books tool ids offered for each pack (defs live in tools/catalog.ts). */
 export const PACK_BOOKS_TOOL_IDS: Record<VerticalPack, readonly string[]> = {

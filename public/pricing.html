@@ -19,7 +19,6 @@
     <title>Pricing - opsAi</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        /* Tokens from /app-ui.css */
         body {
             font-family: var(--font);
             color: var(--text);
@@ -39,9 +38,7 @@
             box-shadow: 0 2px 20px rgba(0,0,0,0.05);
             z-index: 10;
         }
-        .logo {
-            display: block; line-height: 0; text-decoration: none;
-        }
+        .logo { display: block; line-height: 0; text-decoration: none; }
         .logo img { height: 42px; width: auto; max-width: min(240px, 52vw); }
         nav a { color: var(--text); text-decoration: none; font-weight: 500; }
         .btn-primary {
@@ -53,9 +50,10 @@
         .hero h1 { font-size: clamp(32px, 5vw, 44px); margin-bottom: 12px; letter-spacing: var(--title-tracking); }
         .hero p { color: var(--text-light); font-size: 18px; max-width: 640px; margin: 0 auto; }
         .badge { display: inline-block; background: var(--primary-soft); color: var(--primary-dark); font-weight: 600; padding: 6px 14px; border-radius: var(--radius-pill); margin-bottom: 16px; font-size: 14px; }
-        .plans { max-width: 880px; margin: 40px auto 24px; padding: 0 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }
-        .card { background: white; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 32px; box-shadow: var(--shadow-sm); }
+        .plans { max-width: 1100px; margin: 40px auto 24px; padding: 0 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; }
+        .card { background: white; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 32px; box-shadow: var(--shadow-sm); position: relative; }
         .card.popular { border-color: var(--primary); box-shadow: 0 8px 30px rgba(37, 211, 102, 0.15); }
+        .card .tag { position: absolute; top: 14px; right: 14px; font-size: 12px; font-weight: 650; color: var(--primary-dark); background: var(--primary-soft); padding: 4px 10px; border-radius: var(--radius-pill); }
         .card h2 { font-size: 22px; margin-bottom: 4px; }
         .card .price { font-size: 40px; font-weight: 700; margin: 12px 0 4px; }
         .card .price span { font-size: 16px; font-weight: 500; color: var(--text-light); }
@@ -87,32 +85,43 @@
     </nav>
     <section class="hero">
         <div class="badge">14 days free · no card</div>
-        <h1>One price per business.</h1>
-        <p>14 days free, no card. Then $25 per location per month. Five businesses is $125, because each business uses its own AI. Cancel anytime.</p>
+        <h1>Simple plans per business.</h1>
+        <p>Pick Standard, Pro, or Premium. Price is per location per month. Trial starts on Pro so you can try books look-ups in chat.</p>
     </section>
     <div class="plans">
-        <div class="card popular">
-            <h2>Per business</h2>
-            <p style="color:var(--text-light);">Each location</p>
+        <div class="card">
+            <h2>Standard</h2>
+            <p style="color:var(--text-light);">Capture and desk</p>
             <div class="price">$25<span>/business / month</span></div>
             <ul>
                 <li>WhatsApp reporting and dashboard</li>
                 <li>Sales, invoices, schedules, tasks</li>
-                <li>1 store $25 · 5 stores $125</li>
-                <li>Optional AI chat +$20/business</li>
-                <li>14-day trial, no card</li>
+                <li>Chat agent (ops help)</li>
+                <li>Staff shift proof</li>
+            </ul>
+            <a href="/signup" class="btn-primary" style="display:block;text-align:center;">Start 14-day trial</a>
+        </div>
+        <div class="card popular">
+            <span class="tag">Popular</span>
+            <h2>Pro</h2>
+            <p style="color:var(--text-light);">Chat with your books</p>
+            <div class="price">$45<span>/business / month</span></div>
+            <ul>
+                <li>Everything in Standard</li>
+                <li>Books look-ups in chat</li>
+                <li>Standing, invoices, DMR answers</li>
+                <li>Confirmed data only</li>
             </ul>
             <a href="/signup" class="btn-primary" style="display:block;text-align:center;">Start 14-day trial</a>
         </div>
         <div class="card">
-            <h2>Why per business</h2>
-            <p style="color:var(--text-light);">AI follows the location</p>
-            <div class="price" style="font-size:22px;font-weight:600;margin:16px 0;">Each close, invoice, and sheet is billed to that business’s usage</div>
+            <h2>Premium</h2>
+            <p style="color:var(--text-light);">Hands-off follow-up</p>
+            <div class="price">$79<span>/business / month</span></div>
             <ul>
-                <li>Five locations send five times the photos</li>
-                <li>No message pack or reading cap at launch</li>
-                <li>Your billing page shows AI cost per business</li>
-                <li>We watch that against the $25 fee</li>
+                <li>Everything in Pro</li>
+                <li>Follow-up auto-remind</li>
+                <li>Priority when we open support</li>
             </ul>
             <a href="/signup" class="btn-primary" style="display:block;text-align:center;">Start 14-day trial</a>
         </div>
@@ -120,15 +129,13 @@
     <div class="faq">
         <h2>Common questions</h2>
         <h3>Do I need a card for the trial?</h3>
-        <p>No. Sign up, add stores, and use WhatsApp. After 14 days the fee is $25 times the number of locations.</p>
-        <h3>What is an AI reading?</h3>
-        <p>A photo or message we send to the model: a close sheet, an invoice, a schedule, a price board. Short replies like OK or FIX do not count.</p>
-        <h3>Is there a message limit?</h3>
-        <p>Not on the plan. We track readings and estimated AI cost per business so we can see if $25 still covers a busy location. A hidden safety cap still stops a stuck phone from running the bill.</p>
+        <p>No. Sign up, add stores, and use WhatsApp. After 14 days you subscribe at your plan’s per-business rate.</p>
+        <h3>How is billing counted?</h3>
+        <p>Each active business is one seat on the plan. Five Pro businesses is 5 × $45.</p>
+        <h3>Can I change plans later?</h3>
+        <p>Yes. Open Billing in the app to manage your card and plan. Features like books look-ups unlock with Pro and above — no separate add-on charge.</p>
         <h3>Can I cancel?</h3>
         <p>Yes. The trial ends on its own if you do nothing. After you add a card you can cancel from Plan and usage before the next month. Cards are processed by Stripe.</p>
-        <h3>Who are the business agents?</h3>
-        <p>Each business gets Mira (Close), Jules (Finance), and Avery (Follow-up) on the base plan (WhatsApp capture with OK/FIX). Sam (Staff) can be toggled. <strong>Quinn (Books)</strong> is the admin ask add-on ($20 per business per month) for standing, DMR, and open vendor bills — web or WhatsApp 1:1, confirmed data only. Zar (Ops lead) routes chat. Enable agents from Business admin.</p>
     </div>
     <footer>opsAi · <a href="/terms-of-service">Terms</a> · <a href="/privacy-policy">Privacy</a></footer>
 </body>

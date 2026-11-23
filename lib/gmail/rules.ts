@@ -1,5 +1,8 @@
 import { randomUUID } from 'crypto';
 
+/** Where matching mail is delivered on WhatsApp. */
+export type GmailAlertRoute = 'dm' | 'group' | 'both';
+
 export type GmailOwnerRule = {
   id: string;
   /** Short name shown in WhatsApp digest. */
@@ -8,8 +11,10 @@ export type GmailOwnerRule = {
   from: string | null;
   /** Case-insensitive match against subject + snippet. */
   contains: string | null;
-  /** alert = DM when hit. digest reserved for later. */
+  /** alert = fire when hit. digest reserved for later. */
   mode: 'alert' | 'digest';
+  /** dm = owner WhatsApp; group = store WhatsApp group; both = DM + group. */
+  route: GmailAlertRoute;
 };
 
 export type GmailBuiltinRuleInfo = {
@@ -47,6 +52,12 @@ function cleanText(value: unknown, max: number): string | null {
   return t.slice(0, max);
 }
 
+export function parseGmailAlertRoute(value: unknown): GmailAlertRoute {
+  const raw = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (raw === 'group' || raw === 'both') return raw;
+  return 'dm';
+}
+
 export function parseGmailOwnerRules(raw: unknown): GmailOwnerRule[] {
   if (!Array.isArray(raw)) return [];
   const out: GmailOwnerRule[] = [];
@@ -60,9 +71,10 @@ export function parseGmailOwnerRules(raw: unknown): GmailOwnerRule[] {
       cleanText(row.label, MAX_LABEL) ||
       (from ? `From ${from}` : `Contains “${contains}”`);
     const mode = row.mode === 'digest' ? 'digest' : 'alert';
+    const route = parseGmailAlertRoute(row.route);
     const id =
       typeof row.id === 'string' && row.id.trim() ? row.id.trim().slice(0, 64) : randomUUID();
-    out.push({ id, label, from, contains, mode });
+    out.push({ id, label, from, contains, mode, route });
     if (out.length >= MAX_RULES) break;
   }
   return out;
@@ -73,6 +85,7 @@ export function normalizeNewGmailRule(input: {
   from?: unknown;
   contains?: unknown;
   mode?: unknown;
+  route?: unknown;
 }): { ok: true; rule: GmailOwnerRule } | { ok: false; error: string } {
   const from = cleanText(input.from, MAX_FROM);
   const contains = cleanText(input.contains, MAX_CONTAINS);
@@ -83,10 +96,28 @@ export function normalizeNewGmailRule(input: {
     cleanText(input.label, MAX_LABEL) ||
     (from ? `From ${from}` : `Contains “${contains}”`);
   const mode = input.mode === 'digest' ? 'digest' : 'alert';
+  const route = parseGmailAlertRoute(input.route);
   return {
     ok: true,
-    rule: { id: randomUUID(), label, from, contains, mode },
+    rule: { id: randomUUID(), label, from, contains, mode, route },
   };
+}
+
+/** Delivery channels needed for a set of scan hits (by matching rule label). */
+export function channelsForGmailHits(
+  reasons: string[],
+  rules: GmailOwnerRule[]
+): { dm: boolean; group: boolean } {
+  let dm = false;
+  let group = false;
+  const byLabel = new Map(rules.filter((r) => r.mode === 'alert').map((r) => [r.label, r]));
+  for (const reason of reasons) {
+    const route = byLabel.get(reason)?.route ?? 'dm';
+    if (route === 'dm' || route === 'both') dm = true;
+    if (route === 'group' || route === 'both') group = true;
+  }
+  if (!dm && !group) dm = true;
+  return { dm, group };
 }
 
 /** Extract email from "Name <a@b.com>" or bare address. */

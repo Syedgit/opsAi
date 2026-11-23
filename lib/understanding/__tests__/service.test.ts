@@ -28,6 +28,7 @@ const prisma = {
   userStore: { findMany: jest.fn().mockResolvedValue([]) },
   storeConfig: {
     findMany: jest.fn().mockResolvedValue([{ storeId: 'S001', storeName: 'Rockaway', timezone: 'America/New_York' }]),
+    findUnique: jest.fn().mockResolvedValue({ profileJson: null }),
   },
 } as unknown as PrismaClient;
 

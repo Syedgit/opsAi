@@ -15,6 +15,7 @@ describe('agents crew config', () => {
     const cfg = readStoreAgentsConfig(null);
     expect(cfg.pack).toBe('c_store_gas');
     expect(cfg.autonomy).toBe('draft_only');
+    expect(cfg.leadName).toBe('opsAi');
     expect(cfg.enabled).toEqual({
       close: true,
       finance: true,
@@ -22,6 +23,13 @@ describe('agents crew config', () => {
       staff: true,
       books: false,
     });
+  });
+
+  it('saves a custom WhatsApp lead name from onboarding', () => {
+    const next = withStoreAgentsUpdate({}, { leadName: 'Munja' });
+    expect(readStoreAgentsConfig(next).leadName).toBe('Munja');
+    expect(agentsBoardPayload(next).leadName).toBe('Munja');
+    expect(agentsBoardPayload(next).marketingLine).toMatch(/Munja/);
   });
 
   it('mirrors books from aiChat.enrolled and keeps core agents on', () => {

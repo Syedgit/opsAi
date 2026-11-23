@@ -1,10 +1,39 @@
 import {
   acceptPolishedAnswer,
   inferAskIntent,
+  parseExitLeadJson,
   polishIntroducesNewAmounts,
   verifyAndDraftAnswer,
 } from '../agents/askVerify';
 import { planFromKeywords } from '../agents/supervisor';
+
+describe('parseExitLeadJson', () => {
+  const draft = 'Open invoices: Pepsi · $40.00 due 2026-11-20';
+
+  it('keeps answer polish without new dollars', () => {
+    const out = parseExitLeadJson(
+      JSON.stringify({ action: 'answer', text: 'Pepsi still owes $40.00, due Nov 20.' }),
+      draft
+    );
+    expect(out).toEqual({ kind: 'answer', text: 'Pepsi still owes $40.00, due Nov 20.' });
+  });
+
+  it('ignores clarify action — exit is answer-only', () => {
+    const out = parseExitLeadJson(
+      JSON.stringify({ action: 'clarify', text: 'This week or this month?' }),
+      draft
+    );
+    expect(out).toEqual({ kind: 'answer', text: draft });
+  });
+
+  it('rejects polish that invents amounts', () => {
+    const out = parseExitLeadJson(
+      JSON.stringify({ action: 'answer', text: 'Pepsi owes $999.00' }),
+      draft
+    );
+    expect(out).toEqual({ kind: 'answer', text: draft });
+  });
+});
 
 describe('inferAskIntent', () => {
   it('detects vendor directory vs open due', () => {

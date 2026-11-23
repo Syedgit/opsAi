@@ -41,7 +41,15 @@ describe('vertical agent packs', () => {
     expect(shop).toEqual(expect.arrayContaining(['standing_report', 'open_invoices', 'missing_closes']));
     expect(desk).toContain('help_capabilities');
     expect(desk).not.toContain('standing_report');
-    expect(PACK_BOOKS_TOOL_IDS.real_estate).toEqual(['help_capabilities']);
+    expect(PACK_BOOKS_TOOL_IDS.real_estate).toEqual([
+      'staff_schedule',
+      'ops_today',
+      'help_capabilities',
+    ]);
+    expect(desk).toContain('staff_schedule');
+    expect(desk).toContain('ops_today');
+    expect(shop).toContain('staff_schedule');
+    expect(shop).toContain('ops_today');
   });
 
   it('board payload shows pack-specific Close job for appointments', () => {

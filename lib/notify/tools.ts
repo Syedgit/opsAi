@@ -68,7 +68,7 @@ export const BUSINESS_TOOLS: ToolDef[] = [
   {
     id: 'books',
     name: 'Books',
-    blurb: 'Ask standing and invoices in Crew ($20/store add-on).',
+    blurb: 'Ask standing and invoices in chat (included on Pro & Premium).',
     audience: 'addon',
     defaultWanted: false,
     icon: '/integrations/books.svg',

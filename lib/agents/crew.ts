@@ -31,7 +31,30 @@ export type StoreAgentsConfig = {
   pack: VerticalPack;
   enabled: Record<StoreAgentId, boolean>;
   autonomy: AgentAutonomy;
+  /**
+   * Store-facing assistant name (WhatsApp / onboarding) — like Zenzap naming Munja.
+   * Defaults to opsAi when unset.
+   */
+  leadName: string;
 };
+
+export const DEFAULT_LEAD_NAME = 'opsAi';
+
+const LEAD_NAME_MAX = 32;
+
+/** Sanitize a custom assistant name from onboarding or Tools. */
+export function cleanLeadName(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const name = raw.replace(/\s+/g, ' ').trim();
+  if (name.length < 2 || name.length > LEAD_NAME_MAX) return null;
+  if (!/^[\p{L}\p{N}][\p{L}\p{N} .'\-]{0,31}$/u.test(name)) return null;
+  return name;
+}
+
+export function readLeadName(profileJson: unknown): string {
+  const blob = readAgentsBlob(asProfile(profileJson));
+  return cleanLeadName(blob.leadName) || DEFAULT_LEAD_NAME;
+}
 
 export type AgentCatalogEntry = {
   id: StoreAgentId;
@@ -136,6 +159,7 @@ export function readStoreAgentsConfig(
       books,
     },
     autonomy,
+    leadName: cleanLeadName(blob.leadName) || DEFAULT_LEAD_NAME,
   };
 }
 
@@ -149,6 +173,23 @@ export function withAgentPack(profileJson: unknown, pack: VerticalPack): Record<
       pack,
       autonomy: prev.autonomy,
       enabled: { ...prev.enabled },
+      leadName: prev.leadName,
+    },
+  };
+}
+
+/** Set the store’s WhatsApp-facing assistant name (onboarding “create your agent”). */
+export function withLeadName(profileJson: unknown, rawName: string): Record<string, unknown> {
+  const base = asProfile(profileJson);
+  const prev = readStoreAgentsConfig(base);
+  const leadName = cleanLeadName(rawName) || DEFAULT_LEAD_NAME;
+  return {
+    ...base,
+    agents: {
+      pack: prev.pack,
+      autonomy: prev.autonomy,
+      enabled: { ...prev.enabled },
+      leadName,
     },
   };
 }
@@ -163,6 +204,7 @@ export function withStoreAgentsUpdate(
     staff?: boolean;
     books?: boolean;
     autonomy?: AgentAutonomy;
+    leadName?: string;
   },
   now = new Date()
 ): Record<string, unknown> {
@@ -174,6 +216,8 @@ export function withStoreAgentsUpdate(
   const staff = typeof patch.staff === 'boolean' ? patch.staff : prev.enabled.staff;
   const autonomy = patch.autonomy ?? prev.autonomy;
   const books = readAiChatState(base).enrolled;
+  const leadName =
+    patch.leadName !== undefined ? cleanLeadName(patch.leadName) || DEFAULT_LEAD_NAME : prev.leadName;
 
   return {
     ...base,
@@ -187,6 +231,7 @@ export function withStoreAgentsUpdate(
         staff,
         books,
       },
+      leadName,
     },
   };
 }
@@ -200,6 +245,7 @@ export function syncAgentsBooksFromAiChat(profileJson: unknown): Record<string, 
     agents: {
       pack: prev.pack,
       autonomy: prev.autonomy,
+      leadName: prev.leadName,
       enabled: {
         close: true,
         finance: true,
@@ -281,6 +327,7 @@ export function agentsBoardPayload(profileJson: unknown, storeType?: StoreType |
     packLabel: PACK_LABEL[config.pack],
     autonomy: config.autonomy,
     enabled: config.enabled,
+    leadName: config.leadName,
     baseMonthlyUsd: USD_PER_STORE_PER_MONTH,
     supervisor: { ...SUPERVISOR_AGENT, enabled: true },
     catalog: catalog.map((entry) => ({
@@ -288,7 +335,7 @@ export function agentsBoardPayload(profileJson: unknown, storeType?: StoreType |
       enabled: config.enabled[entry.id],
       canToggle: !entry.core && (entry.id !== 'books' || true),
     })),
-    marketingLine: 'Your business agents — you confirm every money post.',
+    marketingLine: `${config.leadName} and your crew — you confirm every money post.`,
   };
 }
 

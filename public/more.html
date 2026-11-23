@@ -10,9 +10,9 @@
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="apple-touch-icon" href="/icon-180.png">
     <link rel="icon" type="image/png" href="/icon-192.png">
-    <link rel="stylesheet" href="/app-shell.css?v=4">
+    <link rel="stylesheet" href="/app-shell.css?v=6">
     <link rel="stylesheet" href="/app-ui.css?v=2">
-    <script src="/app-shell.js?v=3"></script>
+    <script src="/app-shell.js?v=6"></script>
     <title>opsAi · More</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -86,7 +86,6 @@
 <body>
     <div id="appSplash" aria-hidden="true"><img src="/icon-192.png" alt=""><span>opsAi</span></div>
     <header>
-        <a href="/crew" class="brand-logo" aria-label="opsAi"><img src="/logo.jpg" alt=""></a>
         <h1>More</h1>
         <select id="storeSelect" aria-label="Business"></select>
     </header>
@@ -146,21 +145,42 @@
         });
     }
 
+    function signedInLabel() {
+        if (!account) return 'Not signed in';
+        if (account.email) return String(account.email);
+        if (account.phoneE164) return String(account.phoneE164);
+        if (account.name) return String(account.name);
+        return 'Signed in';
+    }
+
     function render() {
-        var html = '<p class="desk-hint">On a phone, this is the slim menu. Full reports stay under Reports.</p>';
-        html += '<p class="lead">Business tools and account. Day-to-day chat is with Zar.</p>';
+        var html = '<p class="desk-hint">Day-to-day work is chat. This page is profile and rare setup.</p>';
+        html += '<p class="lead">Talk to Zar first — agents work in the thread.</p>';
+
         html += '<div class="card">';
-        html += '<a href="/crew' + q() + '"><span class="ico">◎</span><div class="meta"><strong>Chat with Zar</strong><span>Ask about the business</span></div><span class="chev">›</span></a>';
-        html += '<a href="/tasks' + q() + '"><span class="ico">☰</span><div class="meta"><strong>Today</strong><span>Due tasks and alerts</span></div><span class="chev">›</span></a>';
-        html += '<a href="/dashboard' + q() + '"><span class="ico">📈</span><div class="meta"><strong>Reports</strong><span>Closes, invoices, standing</span></div><span class="chev">›</span></a>';
-        html += '</div><div class="card">';
-        html += '<a href="/tasks' + q() + '&view=setup&panel=admin-crew"><span class="ico">👥</span><div class="meta"><strong>Agents</strong><span>Turn agents on or off</span></div><span class="chev">›</span></a>';
-        html += '<a href="/tasks' + q() + '&view=setup"><span class="ico">⚙️</span><div class="meta"><strong>Business admin</strong><span>People, hours, reminders</span></div><span class="chev">›</span></a>';
+        html += '<a href="/crew' + q() + '"><span class="ico">◎</span><div class="meta"><strong>Chat</strong><span>Talk to your agent</span></div><span class="chev">›</span></a>';
+        html += '</div>';
+
+        html += '<div class="card">';
+        html += '<div class="acct" style="padding:14px 16px 10px;border-bottom:1px solid var(--border, #e5e5e5);">';
+        html += '<h2 style="margin:0 0 4px;font-size:15px;">Profile</h2>';
+        html += '<p style="margin:0;font-size:14px;">Signed in as <strong>' + String(signedInLabel()).replace(/</g, '') + '</strong></p>';
+        if (account && account.email && account.phoneE164) {
+            html += '<p class="muted" style="margin:4px 0 0;font-size:13px;">WhatsApp ' + String(account.phoneE164).replace(/</g, '') + '</p>';
+        }
+        html += '</div>';
+        html += '<a href="/tasks' + q() + '&view=setup"><span class="ico">⚙️</span><div class="meta"><strong>Business admin</strong><span>People, hours, tools, reminders</span></div><span class="chev">›</span></a>';
+        html += '<a href="/tasks' + q() + '&view=setup&panel=admin-crew"><span class="ico">◈</span><div class="meta"><strong>Agent setup</strong><span>Name, capabilities, tools</span></div><span class="chev">›</span></a>';
         html += '<a href="/billing"><span class="ico">💳</span><div class="meta"><strong>Billing</strong><span>Plan and usage</span></div><span class="chev">›</span></a>';
+        html += '</div>';
+
+        html += '<div class="card">';
+        html += '<a href="/tasks' + q() + '"><span class="ico">☰</span><div class="meta"><strong>Tasks &amp; alerts</strong><span>Open work and proof</span></div><span class="chev">›</span></a>';
+        html += '<a href="/dashboard' + q() + '"><span class="ico">📈</span><div class="meta"><strong>Reports</strong><span>Closes, invoices, standing</span></div><span class="chev">›</span></a>';
         html += '</div><div class="card">';
         if (account && account.canAddDesktopLogin) {
             html += '<div class="acct"><h2>Desktop login</h2>';
-            html += '<p>Add an email and password so you can open the same dashboard on a computer without WhatsApp. Do not create a new signup — that makes a second empty account.</p>';
+            html += '<p>Add an email and password so you can open the same account on a computer. Do not create a second signup.</p>';
             html += '<div class="err" id="desktopLoginErr" role="alert"></div>';
             html += '<div class="ok" id="desktopLoginOk"></div>';
             html += '<form id="desktopLoginForm">';
@@ -174,7 +194,7 @@
             html += '</form></div>';
         } else if (account && account.email) {
             html += '<div class="acct"><h2>Desktop login</h2>';
-            html += '<p>Sign in on a computer with <strong>' + String(account.email).replace(/</g, '') + '</strong>. WhatsApp Login still works on this same account.</p></div>';
+            html += '<p>Computer sign-in: <strong>' + String(account.email).replace(/</g, '') + '</strong>. WhatsApp login stays on this account.</p></div>';
         }
         html += '<button type="button" class="row" id="logoutBtn"><span class="ico">⎋</span><div class="meta"><strong>Log out</strong><span>Sign out of this device</span></div><span class="chev">›</span></button>';
         html += '</div>';

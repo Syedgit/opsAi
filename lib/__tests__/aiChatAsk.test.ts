@@ -2,6 +2,7 @@ import {
   intentFromKeywords,
   looksLikeAiChatQuestion,
   parseAiChatIntent,
+  resolveWhatsAppAskStore,
   summarizeAiChatFacts,
   tryWhatsAppAiChat,
   answerAiChatQuestion,
@@ -14,6 +15,13 @@ describe('looksLikeAiChatQuestion', () => {
     expect(looksLikeAiChatQuestion('what vendor invoices are still open')).toBe(true);
     expect(looksLikeAiChatQuestion('when is the next utility bill due')).toBe(true);
     expect(looksLikeAiChatQuestion('where do we stand on sales this month')).toBe(true);
+  });
+
+  it('accepts connector / Gmail setup on WhatsApp', () => {
+    expect(looksLikeAiChatQuestion('what connectors do we have')).toBe(true);
+    expect(looksLikeAiChatQuestion('is gmail connected')).toBe(true);
+    expect(looksLikeAiChatQuestion('show gmail rules')).toBe(true);
+    expect(looksLikeAiChatQuestion('alert me when mail from billing@x.com contains Test-sza')).toBe(true);
   });
 
   it('rejects normal ops entries', () => {
@@ -126,6 +134,48 @@ describe('answerAiChatQuestion guardrails', () => {
   });
 });
 
+describe('resolveWhatsAppAskStore', () => {
+  function multiStorePrisma() {
+    return {
+      userStore: {
+        findMany: jest.fn(async ({ where }: { where: Record<string, unknown> }) => {
+          if (where.storeId === 'S002') return [{ userId: 'u1', role: 'OWNER' }];
+          if (where.userId) {
+            return [
+              { storeId: 'S002', role: 'OWNER' },
+              { storeId: 'S009', role: 'OWNER' },
+            ];
+          }
+          return [];
+        }),
+      },
+      storeConfig: {
+        findMany: jest.fn().mockResolvedValue([
+          { storeId: 'S002', storeName: 'Test-Store', timezone: 'America/New_York', profileJson: null },
+          { storeId: 'S009', storeName: 'Rockaway', timezone: 'America/New_York', profileJson: null },
+        ]),
+      },
+    } as any;
+  }
+
+  it('keeps home store when no name is given', async () => {
+    const r = await resolveWhatsAppAskStore(multiStorePrisma(), 'S002', 'what connectors do we have');
+    expect(r).toEqual({ storeId: 'S002', clarify: null });
+  });
+
+  it('picks a named sibling store or code', async () => {
+    const prisma = multiStorePrisma();
+    expect(await resolveWhatsAppAskStore(prisma, 'S002', 'show gmail rules for Rockaway')).toEqual({
+      storeId: 'S009',
+      clarify: null,
+    });
+    expect(await resolveWhatsAppAskStore(prisma, 'S002', 'connectors for S009')).toEqual({
+      storeId: 'S009',
+      clarify: null,
+    });
+  });
+});
+
 describe('tryWhatsAppAiChat', () => {
   function prismaStub(opts: { role?: string; enrolled?: boolean; storeName?: string }) {
     return {
@@ -134,6 +184,10 @@ describe('tryWhatsAppAiChat', () => {
           opts.role ? { role: opts.role, isActive: true, storeId: 'S001' } : null
         ),
       },
+      userStore: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn().mockResolvedValue({ user: { plan: 'pro' } }),
+      },
       storeConfig: {
         findUnique: jest.fn().mockResolvedValue({
           storeName: opts.storeName || 'Rockaway',
@@ -141,6 +195,10 @@ describe('tryWhatsAppAiChat', () => {
           timezone: 'America/New_York',
           setupJson: null,
         }),
+        findMany: jest.fn().mockResolvedValue([
+          { storeId: 'S001', storeName: opts.storeName || 'Rockaway', timezone: 'America/New_York', profileJson: null },
+        ]),
+        update: jest.fn().mockResolvedValue({}),
       },
       pendingActions: {
         findMany: jest.fn().mockResolvedValue([]),

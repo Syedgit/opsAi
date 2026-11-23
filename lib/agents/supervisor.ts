@@ -5,12 +5,18 @@
 
 import { z } from 'zod';
 import type { StoreAgentId } from './crew';
+import { parseStandingDayHint, parseYtdRange } from './dayHint';
+export { parseYtdRange } from './dayHint';
+import { applyLastAskToPlan, type LastAskState } from './lastAsk';
 import {
   isCrewToolId,
   toolsForSupervisor,
   type CrewToolId,
   type ToolSlots,
 } from './tools/catalog';
+
+export { parseStandingDayHint } from './dayHint';
+export type { LastAskState } from './lastAsk';
 
 export type ChatTurn = { role: 'user' | 'assistant'; text: string };
 
@@ -110,6 +116,9 @@ export function wantsOpenDueAsk(q: string): boolean {
 
 /** Vendor directory / history — not “open only”. */
 export function wantsVendorDirectoryAsk(q: string): boolean {
+  if (/\bhow many vendors?\b/.test(q) || /\bvendors?\s+we\s+have\b/.test(q) || /\bnumber of vendors?\b/.test(q)) {
+    return true;
+  }
   // “which vendor was paid last” is last-paid, not a directory list.
   if (wantsLastPaidAsk(q) || (wantsOpenDueAsk(q) && !/\bclosed\b/.test(q) && !/\ball\b/.test(q))) {
     return false;
@@ -155,16 +164,27 @@ export const SupervisorRouteSchema = z.object({
     'open_invoices',
     'invoice_period_summary',
     'missing_closes',
+    'staff_schedule',
+    'ops_today',
     'help_capabilities',
+    'list_connectors',
+    'list_gmail_rules',
+    'create_gmail_rule',
     'clarify',
     'unsupported',
     'not_ai_chat',
   ]),
   slots: z
     .object({
-      period: z.enum(['week', 'month']).nullable().optional(),
+      period: z.enum(['week', 'month', 'custom']).nullable().optional(),
+      from: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+      to: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
       vendor: z.string().trim().min(1).max(60).nullable().optional(),
       status: z.enum(['all', 'open', 'paid']).nullable().optional(),
+      ruleLabel: z.string().trim().min(1).max(40).nullable().optional(),
+      ruleFrom: z.string().trim().min(1).max(120).nullable().optional(),
+      ruleContains: z.string().trim().min(1).max(120).nullable().optional(),
+      route: z.enum(['dm', 'group', 'both']).nullable().optional(),
     })
     .optional(),
   clarity: z.enum(['ok', 'need_slot', 'clarify', 'unsupported', 'not_ai_chat']).default('ok'),
@@ -191,22 +211,52 @@ export function buildSupervisorSystem(toolDigest: string): string {
   return [
     'You are the opsAi Supervisor for a small-business owner chat (any vertical).',
     'Pick ONE primary tool from the catalog. Return JSON only matching:',
-    '{"agentId":"books","toolId":"standing_report"|"open_invoices"|"invoice_period_summary"|"missing_closes"|"help_capabilities"|"clarify"|"unsupported"|"not_ai_chat","slots":{"period":"week"|"month"|null,"vendor":string|null,"status":"all"|"open"|"paid"|null},"clarity":"ok"|"need_slot"|"clarify"|"unsupported"|"not_ai_chat","ask":string|null}',
-    'Use prior turns: short follow-ups like "total", "paid", "open ones" continue the last topic.',
-    'standing_report = DMR / standing / sales vs buying. Cash/card there are REGISTER sales tender — never vendor payment method.',
+    '{"agentId":"books","toolId":"standing_report"|"open_invoices"|"invoice_period_summary"|"missing_closes"|"staff_schedule"|"ops_today"|"help_capabilities"|"list_connectors"|"list_gmail_rules"|"create_gmail_rule"|"clarify"|"unsupported"|"not_ai_chat","slots":{"period":"week"|"month"|"custom"|null,"from":"YYYY-MM-DD"|null,"to":"YYYY-MM-DD"|null,"vendor":string|null,"status":"all"|"open"|"paid"|null,"ruleLabel":string|null,"ruleFrom":string|null,"ruleContains":string|null,"route":"dm"|"group"|"both"|null},"clarity":"ok"|"need_slot"|"clarify"|"unsupported"|"not_ai_chat","ask":string|null}',
+    'Use prior turns + lastAsk: short follow-ups ("total", "paid", bare date 11/21, “it was about sale”) continue the last tool — never restart on ops_today.',
+    'Prefer answering with a data tool over clarify. Never ask for a date when the user already said yesterday, today, or a calendar date.',
+    'For a single day (yesterday / today / 11/21): toolId standing_report, slots.period=custom, slots.from=slots.to=ISO day.',
+    'For YTD / year to date / this year: standing_report with period=custom from Jan 1 to today — never reuse a prior single-day lastAsk.',
+    'Use ops_today for greetings / “anything to follow?” only — not for sales, standing, or invoice questions.',
+    'standing_report = DMR / standing / sale / sales (including yesterday or a specific day). Cash/card there are REGISTER sales tender — never vendor payment method.',
     'open_invoices = still owed / unpaid remaining / due invoices ONLY. Never use for “all vendors” or closed invoices.',
     'invoice_period_summary = vendor list, paid/open/all invoices in the period, last paid invoice. status all for “which vendors / closed invoices”; status paid for “when did we pay / last paid”. Put vendor in slots.vendor when named.',
     'missing_closes = days without a close.',
-    'help_capabilities = what can you do.',
+    'staff_schedule = who worked / who is working / shift roster / hours from the confirmed schedule sheet (never pay or wages).',
+    'ops_today = today’s follow-ups: open tasks, bills due soon, who is on, missing yesterday close.',
+    'help_capabilities = explicit “what can you do / help” only — not for hi or vague follow-ups (use ops_today).',
+    'list_connectors = what’s connected (Gmail, WhatsApp group, task alerts) / set up apps / connector status.',
+    'list_gmail_rules = show existing Gmail alert rules.',
+    'create_gmail_rule = add a Gmail alert. Fill slots.ruleFrom and/or ruleContains, optional ruleLabel, route dm|group|both (default dm). OAuth connect is in the app, not chat.',
     'unsupported = forecast, payroll, profit, wages, utility due dates, named past months beyond this week/month window.',
     'not_ai_chat = ONLY posting a close, invoice photo, or OK/FIX with amounts — never a who/what/how question.',
     'If the message asks BOTH last-paid AND open/due, prefer invoice_period_summary with status paid and vendor set; code may also load open invoices.',
     'Till paid-out / payout ≠ vendor invoice — clarify.',
-    'clarify / need_slot = set ask to one short question; do not invent numbers.',
-    'Default period to month when unspecified. Default status to all for invoice_period_summary unless they say paid or open.',
+    'clarify / need_slot = rare; only when two money tools conflict. Prefer ops_today over clarify for vague business questions.',
+    'Default period to month when unspecified (week if they say week). Default status to all for invoice_period_summary unless they say paid or open.',
     'Catalog:',
     toolDigest,
   ].join('\n');
+}
+
+function standingSlotsFromAsk(
+  question: string,
+  history: ChatTurn[],
+  defaultPeriod: 'week' | 'month'
+): ToolSlots {
+  const ytd = parseYtdRange(question);
+  if (ytd) return { period: 'custom', from: ytd.from, to: ytd.to, vendor: null, status: null };
+  const day = parseStandingDayHint(question);
+  if (day) return { period: 'custom', from: day, to: day, vendor: null, status: null };
+  const prior = history
+    .slice(-6)
+    .map((t) => t.text.toLowerCase())
+    .join(' ');
+  // Bare date / “it was about sale” after a sales thread.
+  if (/sale|sales|standing|dmr/.test(prior)) {
+    const fromPrior = parseStandingDayHint(question);
+    if (fromPrior) return { period: 'custom', from: fromPrior, to: fromPrior, vendor: null, status: null };
+  }
+  return { period: defaultPeriod, from: null, to: null, vendor: null, status: null };
 }
 
 const CONFIDENT_BOOKS_TOOLS = new Set([
@@ -214,7 +264,12 @@ const CONFIDENT_BOOKS_TOOLS = new Set([
   'open_invoices',
   'invoice_period_summary',
   'missing_closes',
+  'staff_schedule',
+  'ops_today',
   'help_capabilities',
+  'list_connectors',
+  'list_gmail_rules',
+  'create_gmail_rule',
 ]);
 
 /** High-confidence keyword hit — safe to skip the LLM router. */
@@ -250,10 +305,10 @@ export function demoteNotAiChatForAskChannel(
   if (channel === 'whatsapp' && looksLikeCapture) return route;
   return {
     agentId: 'books',
-    toolId: 'clarify',
-    clarity: 'clarify',
+    toolId: 'ops_today',
+    clarity: 'ok',
     slots: {},
-    ask: 'What do you want to know — standing/DMR, open invoices, who was paid last, or invoice counts?',
+    ask: null,
   };
 }
 
@@ -286,11 +341,78 @@ export function planFromKeywords(question: string, history: ChatTurn[] = []): As
       steps: [{ toolId: 'unsupported', slots: {}, purpose: 'unsupported' }],
     };
   }
-  if (/\b(help|what can you)\b/.test(q)) {
+  // Explicit capability ask only — not "hi" or vague follow-ups.
+  if (
+    /^(help|what can you( do| help with)?|what do you (do|support)|capabilities)\b/.test(q) ||
+    /\bwhat can you (do|help)\b/.test(q)
+  ) {
     return {
       clarity: 'ok',
       ask: null,
       steps: [{ toolId: 'help_capabilities', slots: {}, purpose: 'help' }],
+    };
+  }
+
+  // Connector / Gmail automation setup (chat + app dual path).
+  const priorGmailThread =
+    /\b(gmail|email|alert rules?|custom alert|connectors?|from\s+\S+@\S+)\b/i.test(prior) ||
+    /\b(past due|overdue|action termite|test-sza)\b/i.test(prior);
+  if (
+    /\b(add|create|set\s*up|make)\b.{0,40}\b(gmail|email)\b.{0,40}\b(rule|alert|automation)\b/.test(q) ||
+    /\b(alert|notify|ping)\s+me\b.{0,60}\b(mail|email|gmail)\b/.test(q) ||
+    /\bwhen\b.{0,40}\b(mail|email)\b.{0,40}\b(from|contains)\b/.test(q) ||
+    /\b(post|send).{0,40}\b(mail|email).{0,40}\bgroup\b/.test(q) ||
+    /\bcan (we|i)\s+add\b.{0,40}\b(alert|rule|automation)s?\b/.test(q) ||
+    /\b(add|create)\b.{0,24}\banother\b.{0,16}\b(alert|rule)s?\b/.test(q) ||
+    /\banother\s+(gmail\s+)?(alert|rule)s?\b/.test(q) ||
+    (priorGmailThread &&
+      (/\b(add|create|new|another)\b.{0,24}\b(alert|rule)s?\b/.test(q) ||
+        /^(yes|yeah|yep|sure|ok|please)\b/.test(q)))
+  ) {
+    return {
+      clarity: 'ok',
+      ask: null,
+      steps: [{ toolId: 'create_gmail_rule', slots: {}, purpose: 'create_gmail_rule' }],
+    };
+  }
+  if (
+    /\b(gmail|email)\b.{0,20}\b(rules?|alerts?|automations?)\b/.test(q) ||
+    /\b(show|list|what).{0,24}\b(gmail|email)\b.{0,20}\b(rules?|alerts?)\b/.test(q) ||
+    /\bwhat (are|is) the (alerts?|rules?)\b/.test(q) ||
+    (priorGmailThread && /\b(the )?(alerts?|rules?)\b/.test(q) && !/\btask\b/.test(q))
+  ) {
+    return {
+      clarity: 'ok',
+      ask: null,
+      steps: [{ toolId: 'list_gmail_rules', slots: {}, purpose: 'list_gmail_rules' }],
+    };
+  }
+  if (
+    /\b(connectors?|connected apps?|integrations?)\b/.test(q) ||
+    /\b(is|are)\s+gmail\b/.test(q) ||
+    /\bgmail\s+(connected|set\s*up|status)\b/.test(q) ||
+    /\bwhat('?s| is) connected\b/.test(q) ||
+    /\bwhatsapp group\b.{0,20}\b(linked|connected|set\s*up)\b/.test(q)
+  ) {
+    return {
+      clarity: 'ok',
+      ask: null,
+      steps: [{ toolId: 'list_connectors', slots: {}, purpose: 'list_connectors' }],
+    };
+  }
+
+  // Greetings / “anything to follow?” → today’s briefing (not a menu).
+  if (
+    /^(hi|hii+|hello|hey|yo|good (morning|afternoon|evening))\b/.test(q) ||
+    /\b(anything|what).{0,24}(follow|due|need|check|attention|todo|to-?do|priority|priorities)\b/.test(q) ||
+    /\b(what('?s| is) (due|open|left|next)|what should i (do|check|follow))\b/.test(q) ||
+    /\bfollow\s*up\b/.test(q) ||
+    /\bneeds?\s+attention\b/.test(q)
+  ) {
+    return {
+      clarity: 'ok',
+      ask: null,
+      steps: [{ toolId: 'ops_today', slots: {}, purpose: 'ops_today' }],
     };
   }
 
@@ -320,17 +442,22 @@ export function planFromKeywords(question: string, history: ChatTurn[] = []): As
 
   if (aboutInvoices) {
     if (wantsVendorDirectoryAsk(q)) {
-      return {
-        clarity: 'ok',
-        ask: null,
-        steps: [
-          {
-            toolId: 'invoice_period_summary',
-            slots: { period, vendor: null, status: 'all' },
-            purpose: 'vendor_directory',
-          },
-        ],
-      };
+      const steps: AskPlanStep[] = [
+        {
+          toolId: 'invoice_period_summary',
+          slots: { period, vendor: null, status: 'all' },
+          purpose: 'vendor_directory',
+        },
+      ];
+      // “how many vendors and any pending payment?” → directory + open invoices.
+      if (wantsOpenDueAsk(q) || /\bpending\b/.test(q)) {
+        steps.push({
+          toolId: 'open_invoices',
+          slots: { period: null, vendor: null, status: null },
+          purpose: 'open_due',
+        });
+      }
+      return { clarity: 'ok', ask: null, steps };
     }
 
     if (wantsVendorPaymentMethodAsk(q) && !wantsOpenDueAsk(q)) {
@@ -417,28 +544,71 @@ export function planFromKeywords(question: string, history: ChatTurn[] = []): As
   }
 
   if (
-    /stand|standing|dmr|how (are|is) (we|sales)|\bsales\b/.test(q) ||
-    /\b(buying|expenses?|till)\b/.test(q)
+    /stand|standing|dmr|how (are|is) (we|sales?)|\bsales?\b/.test(q) ||
+    /\b(buying|expenses?|till)\b/.test(q) ||
+    /\bwhat was (the )?sale\b/.test(q)
   ) {
     return {
       clarity: 'ok',
       ask: null,
-      steps: [{ toolId: 'standing_report', slots: { period, vendor: null, status: null }, purpose: 'standing' }],
+      steps: [
+        {
+          toolId: 'standing_report',
+          slots: standingSlotsFromAsk(question, history, period),
+          purpose: 'standing',
+        },
+      ],
     };
   }
 
-  if (/standing|dmr|sales/.test(prior) && /^(total|more|and|this month|this week)\b/.test(q)) {
+  // Follow-ups after a sales/standing thread: bare date, "it was about sale", week/month tweak.
+  if (/sale|sales|standing|dmr/.test(prior)) {
+    if (
+      /^(total|more|and|this month|this week)\b/.test(q) ||
+      /\bit was about sale/.test(q) ||
+      parseStandingDayHint(q)
+    ) {
+      return {
+        clarity: 'ok',
+        ask: null,
+        steps: [
+          {
+            toolId: 'standing_report',
+            slots: standingSlotsFromAsk(question, history, period),
+            purpose: 'standing',
+          },
+        ],
+      };
+    }
+  }
+
+  // Who worked / roster — hours from confirmed schedule (never pay). Not “who was the vendor paid”.
+  if (
+    /\bwho\s+worked\b/.test(q) ||
+    /\bwho\s+was\s+on\b/.test(q) ||
+    /\bwho\s+is\s+on\b/.test(q) ||
+    /\bwho\s+is\s+working\b/.test(q) ||
+    /\bwho\s+was\s+working\b/.test(q) ||
+    /\bwho'?s\s+(on|working)\b/.test(q) ||
+    /\bstaff\s+schedule\b/.test(q) ||
+    /\bshift\s+schedule\b/.test(q) ||
+    /\bschedule\s+hours\b/.test(q) ||
+    (/\b(schedule|roster|shifts?)\b/.test(q) && /\b(yesterday|today|week|who)\b/.test(q))
+  ) {
     return {
       clarity: 'ok',
       ask: null,
-      steps: [{ toolId: 'standing_report', slots: { period, vendor: null, status: null }, purpose: 'standing' }],
+      steps: [{ toolId: 'staff_schedule', slots: { period: null, vendor: null, status: null }, purpose: 'staff_schedule' }],
     };
   }
 
+  // Do NOT add a new keyword branch for every novel phrasing.
+  // Unknown business ask → today’s ops briefing; LLM polish makes it relative.
+  // Grow capability by improving tools + tool descriptions, not this regex list.
   return {
-    clarity: 'clarify',
-    ask: 'Do you want standing/DMR, open invoices still owed, or invoice counts (paid vs open) for this month?',
-    steps: [{ toolId: 'clarify', slots: {}, purpose: 'clarify' }],
+    clarity: 'ok',
+    ask: null,
+    steps: [{ toolId: 'ops_today', slots: {}, purpose: 'ops_today' }],
   };
 }
 
@@ -505,14 +675,26 @@ export function normalizeRoute(
       ...route,
       toolId: 'clarify',
       clarity: 'clarify',
-      ask: route.ask || 'What do you want to know — standing, open invoices, or invoice counts?',
+      ask:
+        route.ask ||
+        'I can pull today’s follow-ups, or dig into standing, invoices, or the schedule — what do you need?',
     };
   }
 
   const allowed = new Set(
     toolsForSupervisor({ booksEnrolled, agentFilter, pack }).map((t) => t.id)
   );
-  if (!booksEnrolled && !['help_capabilities', 'clarify', 'unsupported', 'not_ai_chat'].includes(toolId)) {
+  const alwaysOkWithoutBooks = [
+    'help_capabilities',
+    'list_connectors',
+    'list_gmail_rules',
+    'create_gmail_rule',
+    'clarify',
+    'unsupported',
+    'not_ai_chat',
+    'ops_today',
+  ];
+  if (!booksEnrolled && !alwaysOkWithoutBooks.includes(toolId)) {
     return {
       agentId: 'books',
       toolId: 'clarify',
@@ -526,7 +708,9 @@ export function normalizeRoute(
       agentId: 'books',
       toolId: 'clarify',
       clarity: 'clarify',
-      ask: route.ask || 'That tool is not available. Try standing, open invoices, or invoice counts.',
+      ask:
+        route.ask ||
+        'That isn’t available for this store pack. Try today’s follow-ups, standing, invoices, or the schedule.',
       slots: {},
     };
   }
@@ -535,6 +719,10 @@ export function normalizeRoute(
     period: route.slots?.period ?? 'month',
     vendor: route.slots?.vendor ?? null,
     status: route.slots?.status ?? (toolId === 'invoice_period_summary' ? 'all' : null),
+    ruleLabel: route.slots?.ruleLabel ?? null,
+    ruleFrom: route.slots?.ruleFrom ?? null,
+    ruleContains: route.slots?.ruleContains ?? null,
+    route: route.slots?.route ?? null,
   };
   return { ...route, agentId: 'books', toolId, clarity: 'ok', slots };
 }
@@ -621,6 +809,15 @@ function normalizePlan(
 }
 
 /** Multi-step ask plan — preferred entry for web/WhatsApp Books answers. */
+/** Money / schedule tools — keywords win if AI drifts to menu/ops_today. Soft tools trust AI. */
+const HARD_KEYWORD_TOOLS = new Set([
+  'standing_report',
+  'open_invoices',
+  'invoice_period_summary',
+  'missing_closes',
+  'staff_schedule',
+]);
+
 export async function runAskPlan(
   question: string,
   options: {
@@ -631,30 +828,41 @@ export async function runAskPlan(
     env?: NodeJS.ProcessEnv;
     route?: SupervisorRouter;
     channel?: 'web' | 'whatsapp';
+    lastAsk?: LastAskState | null;
   }
 ): Promise<AskPlan> {
   const history = options.history ?? [];
   const keywordPlan = planFromKeywords(question, history);
 
-  // Deterministic multi- or single-step plans skip the LLM.
-  if (isConfidentAskPlan(keywordPlan) && !options.route) {
-    return normalizePlan(keywordPlan, options.booksEnrolled, options.agentFilter, options.pack);
+  // Compound paid+open plans stay keyword — multi-tool JSON from the LLM is flaky.
+  if (keywordPlan.steps.length > 1 && isConfidentAskPlan(keywordPlan) && !options.route) {
+    return applyLastAskToPlan(
+      question,
+      normalizePlan(keywordPlan, options.booksEnrolled, options.agentFilter, options.pack),
+      options.lastAsk
+    );
   }
 
+  // Entry AI (with keyword safety net inside runSupervisor).
   const route = await runSupervisor(question, options);
-  // If keywords already planned multiple tools, keep them even when LLM ran.
+
   if (keywordPlan.steps.length > 1 && isConfidentAskPlan(keywordPlan)) {
-    return normalizePlan(keywordPlan, options.booksEnrolled, options.agentFilter, options.pack);
+    return applyLastAskToPlan(
+      question,
+      normalizePlan(keywordPlan, options.booksEnrolled, options.agentFilter, options.pack),
+      options.lastAsk
+    );
   }
 
-  return normalizePlan(
+  const slots = enrichToolSlots(question, route.toolId, route.slots || {});
+  const planned = normalizePlan(
     {
       clarity: route.clarity,
       ask: route.ask ?? null,
       steps: [
         {
           toolId: route.toolId,
-          slots: route.slots || {},
+          slots,
           purpose: route.toolId,
         },
       ],
@@ -663,6 +871,18 @@ export async function runAskPlan(
     options.agentFilter,
     options.pack
   );
+  return applyLastAskToPlan(question, planned, options.lastAsk);
+}
+
+/** Fill from/to when the question names a day but the router omitted slots. */
+export function enrichToolSlots(question: string, toolId: CrewToolId, slots: ToolSlots): ToolSlots {
+  if (toolId !== 'standing_report' && toolId !== 'missing_closes') return slots;
+  if (slots.from && slots.to) return slots;
+  const ytd = parseYtdRange(question);
+  if (ytd) return { ...slots, period: 'custom', from: ytd.from, to: ytd.to };
+  const day = parseStandingDayHint(question);
+  if (!day) return slots;
+  return { ...slots, period: 'custom', from: day, to: day };
 }
 
 export async function runSupervisor(
@@ -681,22 +901,31 @@ export async function runSupervisor(
   const history = options.history ?? [];
   const channel = options.channel ?? 'web';
   const keyword = routeFromKeywords(question, history);
-
-  // Production default: known intents are deterministic — no LLM roulette.
-  if (isConfidentBooksRoute(keyword) && !options.route) {
-    return normalizeRoute(keyword, options.booksEnrolled, options.agentFilter, options.pack);
-  }
-
   const digest = toolDigestForPrompt(options.booksEnrolled, options.agentFilter, options.pack);
   const env = options.env ?? process.env;
+
+  // Entry AI first when possible; keywords are fallback + hard-tool safety net.
   const fromAi = options.route
     ? await options.route({ question, history, toolDigest: digest })
     : await defaultSupervisorRoute(question, history, digest, env);
 
-  let raw =
-    fromAi && shouldPreferKeywordRoute(question, fromAi, keyword)
-      ? keyword
-      : fromAi || keyword;
+  let raw: SupervisorRoute = fromAi || keyword;
+
+  if (fromAi && shouldPreferKeywordRoute(question, fromAi, keyword)) {
+    raw = keyword;
+  } else if (
+    fromAi &&
+    isConfidentBooksRoute(keyword) &&
+    HARD_KEYWORD_TOOLS.has(keyword.toolId) &&
+    (fromAi.toolId !== keyword.toolId ||
+      (keyword.slots?.status && fromAi.slots?.status !== keyword.slots.status))
+  ) {
+    // AI drifted off a clear money/schedule ask → keep keyword tool + slots.
+    raw = keyword;
+  } else if (!fromAi && isConfidentBooksRoute(keyword)) {
+    raw = keyword;
+  }
+
   raw = demoteNotAiChatForAskChannel(raw, question, channel);
   return normalizeRoute(raw, options.booksEnrolled, options.agentFilter, options.pack);
 }

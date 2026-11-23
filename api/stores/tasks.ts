@@ -7,7 +7,7 @@ import { TaskTemplateInputSchema, describeSchedule } from '../../lib/tasks/sched
 import { STORE_FEATURE_LABEL, TASK_BUCKETS, TASK_PRESETS, bucketFor, getPreset, inspectionApplies, presetIsOnStore, presetsForStore } from '../../lib/tasks/presets';
 import { scoreRuns } from '../../lib/tasks/score';
 import { isValidTimeZone, localDateString } from '../../lib/tasks/time';
-import { runTaskTick } from '../../lib/tasks/tick';
+import { diagnoseTaskAlertDelivery, runTaskTick, sendTaskAlertTest } from '../../lib/tasks/tick';
 import { predictInspection } from '../../lib/tasks/inspection';
 import { customTemplate, parseInspectorReport, presetTemplate, proposeFromReport, type ParsedReport } from '../../lib/tasks/inspectorReport';
 import { extractPdfText, NotAPdfError } from '../../lib/tasks/pdfText';
@@ -60,10 +60,11 @@ import {
 } from '../../lib/googleSheetsRows';
 import { emptyGmailStatus, getGmailPublicStatus } from '../../lib/gmail/connection';
 import {
-  AI_CHAT_USD_PER_STORE_PER_MONTH,
   aiChatSelfEnrollAllowed,
+  isBooksChatAllowed,
   readAiChatState,
   withAiChatEnrollment,
+  withBooksAlignedToPlan,
 } from '../../lib/aiChatAccess';
 import {
   agentsBoardPayload,
@@ -74,6 +75,7 @@ import {
 } from '../../lib/agents/crew';
 import { channelsBoardPayload, withChannelPrefs } from '../../lib/notify/channels';
 import { syncStripeSubscriptionQuantity } from '../../lib/billing/stripeActions';
+import { planBoardPayload } from '../../lib/billing/plans';
 
 const prisma = new PrismaClient();
 
@@ -89,6 +91,7 @@ const BodySchema = z.discriminatedUnion('action', [
   // A manager accepts the photo the AI would not pass.
   z.object({ action: z.literal('approve'), runId: z.string().min(1) }),
   z.object({ action: z.literal('run_now') }),
+  z.object({ action: z.literal('test_whatsapp_alert') }),
   // Store setup: shifts, hours and type. Preview shows the starter tasks placed to fit; apply saves the setup and adds the chosen ones.
   z.object({ action: z.literal('setup_preview'), setup: z.unknown() }),
   z.object({ action: z.literal('setup_apply'), setup: z.unknown(), presetIds: z.array(z.string().trim().min(1).max(60)).max(60) }),
@@ -164,6 +167,8 @@ const BodySchema = z.discriminatedUnion('action', [
     staff: z.boolean().optional(),
     books: z.boolean().optional(),
     autonomy: z.enum(['draft_only', 'auto_remind']).optional(),
+    /** WhatsApp-facing assistant name from onboarding / Tools. */
+    leadName: z.string().min(2).max(32).optional(),
   }),
   z.object({
     action: z.literal('set_channels'),
@@ -262,13 +267,29 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
     const canManageOwners = access.role === 'OWNER';
     const actor = { userId: access.user.userId, role: access.role };
 
-    const store = await prisma.storeConfig.findUnique({
+    let store = await prisma.storeConfig.findUnique({
       where: { storeId },
       select: { storeName: true, timezone: true, setupJson: true, profileJson: true, sheetId: true },
     });
     if (!store) {
       res.status(404).json({ error: 'Store not found' });
       return;
+    }
+    const billingUser = await prisma.user.findUnique({
+      where: { id: access.user.userId },
+      select: { plan: true },
+    });
+    const accountPlan = planBoardPayload(billingUser?.plan);
+    const planIncludesBooks = accountPlan.features.booksLookups;
+    // Pro/Premium: books chat is on by plan — sync enroll so Agents/crew stay aligned.
+    const alignedProfile = withBooksAlignedToPlan(store.profileJson, planIncludesBooks);
+    if (alignedProfile) {
+      const nextProfile = syncAgentsBooksFromAiChat(alignedProfile);
+      await prisma.storeConfig.update({
+        where: { storeId },
+        data: { profileJson: nextProfile as object },
+      });
+      store = { ...store, profileJson: nextProfile };
     }
     const googleSheets = {
       connected: isSheetConnected(store.sheetId),
@@ -279,18 +300,26 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
     const gmail = canManageOwners
       ? await getGmailPublicStatus(prisma, storeId)
       : emptyGmailStatus();
+    const booksAllowed = isBooksChatAllowed(store.profileJson, planIncludesBooks);
     const aiChat = {
       ...readAiChatState(store.profileJson),
-      selfEnroll: aiChatSelfEnrollAllowed(),
-      monthlyUsd: AI_CHAT_USD_PER_STORE_PER_MONTH,
+      enrolled: booksAllowed,
+      selfEnroll: planIncludesBooks || aiChatSelfEnrollAllowed(),
+      includedInPlan: planIncludesBooks,
       adminOnly: true,
       agentId: 'books' as const,
       agentName: 'Books',
     };
     const setup = readStoredSetup(store.setupJson);
+    const agentsPayload = agentsBoardPayload(store.profileJson, setup?.storeType ?? null);
+    if (planIncludesBooks && booksAllowed && agentsPayload.enabled) {
+      agentsPayload.enabled = { ...agentsPayload.enabled, books: true };
+    }
     const agents = {
-      ...agentsBoardPayload(store.profileJson, setup?.storeType ?? null),
-      selfEnrollBooks: aiChatSelfEnrollAllowed(),
+      ...agentsPayload,
+      selfEnrollBooks: planIncludesBooks || aiChatSelfEnrollAllowed(),
+      planIncludesBooks,
+      planIncludesAutoRemind: accountPlan.features.autoRemind,
     };
     const channels = channelsBoardPayload(store.profileJson);
     const timeZone = isValidTimeZone(store.timezone) ? store.timezone : 'America/New_York';
@@ -315,6 +344,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         gmail,
         aiChat,
         agents,
+        plan: accountPlan,
         channels,
         buckets: TASK_BUCKETS,
       });
@@ -366,6 +396,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         loadStoreTeam(prisma, storeId),
       ]);
       const todayRuns = recent.filter((r) => r.localDate === today || r.status === 'OPEN');
+      const delivery = await diagnoseTaskAlertDelivery(prisma, storeId);
       res.status(200).json({
         success: true,
         storeName: store.storeName,
@@ -373,6 +404,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         canEdit,
         canManageOwners,
         people,
+        delivery,
         today,
         templates: templates.map(templateView),
         runs: todayRuns.map((r) => ({
@@ -398,6 +430,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         gmail,
         aiChat,
         agents,
+        plan: accountPlan,
         channels,
         buckets: TASK_BUCKETS,
       });
@@ -418,7 +451,23 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
 
     if (body.action === 'run_now') {
       const result = await runTaskTick(prisma, new Date(), { storeId });
-      res.status(200).json({ success: true, ...result });
+      const delivery = await diagnoseTaskAlertDelivery(prisma, storeId);
+      res.status(200).json({ success: true, ...result, delivery });
+      return;
+    }
+
+    if (body.action === 'test_whatsapp_alert') {
+      if (!canEdit) {
+        res.status(403).json({ error: 'Only owners and managers can send a test alert' });
+        return;
+      }
+      const result = await sendTaskAlertTest(prisma, storeId);
+      res.status(200).json({
+        success: true,
+        sent: result.sent,
+        welcomed: result.welcomed,
+        delivery: result.delivery,
+      });
       return;
     }
 
@@ -468,7 +517,13 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         success: true,
         added: toAdd.length,
         skipped: chosen.length - toAdd.length,
-        agents: { ...agentsBoardPayload(nextProfile, parsedSetup.data.storeType), selfEnrollBooks: aiChatSelfEnrollAllowed() },
+        agents: {
+          ...agentsBoardPayload(nextProfile, parsedSetup.data.storeType),
+          selfEnrollBooks: planIncludesBooks || aiChatSelfEnrollAllowed(),
+          planIncludesBooks,
+          planIncludesAutoRemind: accountPlan.features.autoRemind,
+        },
+        plan: accountPlan,
       });
       return;
     }
@@ -658,9 +713,14 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         res.status(403).json({ error: 'Only the store owner can change Books (AI chat) enrollment' });
         return;
       }
-      if (body.enrolled && !aiChatSelfEnrollAllowed() && !readAiChatState(store.profileJson).enrolled) {
+      if (
+        body.enrolled &&
+        !planIncludesBooks &&
+        !aiChatSelfEnrollAllowed() &&
+        !readAiChatState(store.profileJson).enrolled
+      ) {
         res.status(402).json({
-          error: `Books enrollment is temporarily closed ($${AI_CHAT_USD_PER_STORE_PER_MONTH}/store/mo add-on). Try again later or contact support.`,
+          error: 'Books look-ups are on Pro and Premium. Open Billing to change plan.',
         });
         return;
       }
@@ -674,17 +734,20 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       void syncStripeSubscriptionQuantity(prisma, access.user.userId).catch(() => undefined);
       res.status(200).json({
         success: true,
+        plan: accountPlan,
         aiChat: {
           ...readAiChatState(nextProfile),
-          selfEnroll: aiChatSelfEnrollAllowed(),
-          monthlyUsd: AI_CHAT_USD_PER_STORE_PER_MONTH,
+          selfEnroll: planIncludesBooks || aiChatSelfEnrollAllowed(),
+          includedInPlan: planIncludesBooks,
           adminOnly: true,
           agentId: 'books',
           agentName: 'Books',
         },
         agents: {
           ...agentsBoardPayload(nextProfile, setup?.storeType ?? null),
-          selfEnrollBooks: aiChatSelfEnrollAllowed(),
+          selfEnrollBooks: planIncludesBooks || aiChatSelfEnrollAllowed(),
+          planIncludesBooks,
+          planIncludesAutoRemind: accountPlan.features.autoRemind,
         },
       });
       return;
@@ -697,22 +760,35 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       }
       if (
         body.books === true &&
+        !planIncludesBooks &&
         !aiChatSelfEnrollAllowed() &&
         !readAiChatState(store.profileJson).enrolled
       ) {
         res.status(402).json({
-          error: `Books enrollment is temporarily closed ($${AI_CHAT_USD_PER_STORE_PER_MONTH}/store/mo add-on). Try again later or contact support.`,
+          error: 'Books look-ups are on Pro and Premium. Open Billing to change plan.',
         });
         return;
       }
-      if (body.staff === undefined && body.books === undefined && body.autonomy === undefined) {
-        res.status(400).json({ error: 'Send staff, books, and/or autonomy to update' });
+      if (body.autonomy === 'auto_remind' && !accountPlan.features.autoRemind) {
+        res.status(402).json({
+          error: 'Follow-up auto-remind is on Premium. Open Billing to change plan.',
+        });
+        return;
+      }
+      if (
+        body.staff === undefined &&
+        body.books === undefined &&
+        body.autonomy === undefined &&
+        body.leadName === undefined
+      ) {
+        res.status(400).json({ error: 'Send staff, books, autonomy, and/or leadName to update' });
         return;
       }
       const nextProfile = withStoreAgentsUpdate(store.profileJson, {
         staff: body.staff,
         books: body.books,
         autonomy: body.autonomy,
+        leadName: body.leadName,
       });
       await prisma.storeConfig.update({
         where: { storeId },
@@ -723,14 +799,17 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       }
       res.status(200).json({
         success: true,
+        plan: accountPlan,
         agents: {
           ...agentsBoardPayload(nextProfile, setup?.storeType ?? null),
-          selfEnrollBooks: aiChatSelfEnrollAllowed(),
+          selfEnrollBooks: planIncludesBooks || aiChatSelfEnrollAllowed(),
+          planIncludesBooks,
+          planIncludesAutoRemind: accountPlan.features.autoRemind,
         },
         aiChat: {
           ...readAiChatState(nextProfile),
-          selfEnroll: aiChatSelfEnrollAllowed(),
-          monthlyUsd: AI_CHAT_USD_PER_STORE_PER_MONTH,
+          selfEnroll: planIncludesBooks || aiChatSelfEnrollAllowed(),
+          includedInPlan: planIncludesBooks,
           adminOnly: true,
           agentId: 'books',
           agentName: 'Books',
@@ -756,9 +835,14 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         res.status(400).json({ error: 'Send a tool or channel preference to update' });
         return;
       }
-      if (body.tools?.books === true && !aiChatSelfEnrollAllowed() && !readAiChatState(store.profileJson).enrolled) {
+      if (
+        body.tools?.books === true &&
+        !planIncludesBooks &&
+        !aiChatSelfEnrollAllowed() &&
+        !readAiChatState(store.profileJson).enrolled
+      ) {
         res.status(402).json({
-          error: `Books enrollment is temporarily closed ($${AI_CHAT_USD_PER_STORE_PER_MONTH}/store/mo add-on).`,
+          error: 'Books look-ups are on Pro and Premium. Open Billing to change plan.',
         });
         return;
       }
@@ -787,15 +871,18 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       }
       res.status(200).json({
         success: true,
+        plan: accountPlan,
         channels: channelsBoardPayload(nextProfile),
         agents: {
           ...agentsBoardPayload(nextProfile, setup?.storeType ?? null),
-          selfEnrollBooks: aiChatSelfEnrollAllowed(),
+          selfEnrollBooks: planIncludesBooks || aiChatSelfEnrollAllowed(),
+          planIncludesBooks,
+          planIncludesAutoRemind: accountPlan.features.autoRemind,
         },
         aiChat: {
           ...readAiChatState(nextProfile),
-          selfEnroll: aiChatSelfEnrollAllowed(),
-          monthlyUsd: AI_CHAT_USD_PER_STORE_PER_MONTH,
+          selfEnroll: planIncludesBooks || aiChatSelfEnrollAllowed(),
+          includedInPlan: planIncludesBooks,
           adminOnly: true,
           agentId: 'books',
           agentName: 'Books',

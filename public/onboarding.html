@@ -133,6 +133,24 @@
             display: inline-block; margin-top: 6px; font-size: 11px; font-weight: 600;
             color: #0f766e; background: #ccfbf1; padding: 2px 8px; border-radius: 999px;
         }
+        .agent-create { text-align: center; margin: 8px 0 18px; }
+        .agent-avatar {
+            width: 88px; height: 88px; border-radius: 50%; margin: 0 auto 18px;
+            background: var(--primary-soft); color: var(--secondary);
+            display: grid; place-items: center; font-size: 34px; font-weight: 750;
+            letter-spacing: -0.02em; border: 3px solid #fff;
+            box-shadow: 0 0 0 2px var(--primary);
+        }
+        .agent-name-chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 4px; }
+        .agent-name-chips button {
+            border: 1px solid var(--border); background: #fff; color: var(--text);
+            border-radius: var(--radius-pill); padding: 8px 14px; font-size: 13px; font-weight: 550;
+            cursor: pointer; font-family: inherit;
+        }
+        .agent-name-chips button.is-on {
+            background: var(--primary-soft); border-color: var(--primary); color: var(--secondary); font-weight: 650;
+        }
+        .agent-create .form-group { text-align: left; }
         .family-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text-light); margin: 14px 0 8px; }
         .family-label:first-child { margin-top: 0; }
         .type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px; }
@@ -310,11 +328,33 @@
             </div>
         </div>
 
+        <div id="agentPanel" class="step-panel">
+            <div class="auth-header">
+                <h1>Create your first agent</h1>
+                <p>Name the teammate that reads closes and invoices on WhatsApp. You can change this later in Tools.</p>
+            </div>
+            <div class="error-message" id="agentError"></div>
+            <div class="agent-create">
+                <div class="agent-avatar" id="agentAvatar" aria-hidden="true">O</div>
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <label for="agentLeadName">Name your agent</label>
+                    <input type="text" id="agentLeadName" maxlength="32" placeholder="opsAi" autocomplete="off">
+                </div>
+                <p class="help-text" id="agentJobLine" style="margin-bottom: 14px;"></p>
+                <div class="agent-name-chips" id="agentNameChips" role="group" aria-label="Suggested names"></div>
+            </div>
+            <div class="back-row">
+                <button type="button" class="btn-secondary" id="agentBackBtn">Back</button>
+                <button type="button" class="btn-secondary" id="agentSkipBtn">Use opsAi</button>
+                <button type="button" class="btn-primary" id="agentSaveBtn" style="margin-top: 10px;">Continue</button>
+            </div>
+        </div>
+
         <div id="successPanel" class="step-panel">
             <div class="success-icon">✅</div>
             <div class="auth-header">
                 <h1>Business created</h1>
-                <p><span id="groupNameHint">Your business</span> <span class="store-badge" id="successStoreId"></span> is ready. Start on WhatsApp:</p>
+                <p><span id="groupNameHint">Your business</span> <span class="store-badge" id="successStoreId"></span> is ready. <span id="agentReadyHint"></span> Start on WhatsApp:</p>
             </div>
             <ol class="steps-list">
                 <li>Save the <strong>opsAi WhatsApp number</strong> in your phone as “opsAi”:<br>
@@ -441,7 +481,7 @@
             {
                 id: 'books',
                 name: 'Books',
-                blurb: 'Ask standing and invoices in Crew ($20/business add-on).',
+                blurb: 'Ask standing and invoices in chat (included on Pro & Premium).',
                 icon: '/integrations/books.svg',
                 defaultWanted: false,
                 badge: 'Add-on'
@@ -851,6 +891,60 @@
             showPanel('profilePanel');
         });
 
+        let agentLeadName = 'opsAi';
+
+        function agentInitial(name) {
+            const t = String(name || 'opsAi').trim();
+            return (t.charAt(0) || 'O').toUpperCase();
+        }
+
+        function syncAgentAvatar() {
+            const input = document.getElementById('agentLeadName');
+            const name = (input && input.value.trim()) || 'opsAi';
+            document.getElementById('agentAvatar').textContent = agentInitial(name);
+            document.querySelectorAll('#agentNameChips button').forEach(function (b) {
+                b.classList.toggle('is-on', b.getAttribute('data-name').toLowerCase() === name.toLowerCase());
+            });
+        }
+
+        function suggestedAgentNames() {
+            const fromStore = String(setupStoreName || '').trim().split(/\s+/)[0];
+            const list = ['opsAi', 'Mira', 'Jules'];
+            if (fromStore && fromStore.length >= 2 && !/^(the|store|shop)$/i.test(fromStore)) {
+                list.splice(1, 0, fromStore.slice(0, 32));
+            }
+            return Array.from(new Set(list));
+        }
+
+        function agentJobBlurb() {
+            const kind = setupState && setupState.storeType;
+            if (kind === 'seven_eleven' || kind === 'convenience' || kind === 'gas_station') {
+                return 'Reads daily closes, invoices, and deposits on WhatsApp — you reply OK or FIX.';
+            }
+            if (kind === 'appointments') {
+                return 'Captures day closes and supplier bills on WhatsApp — you confirm before anything saves.';
+            }
+            return 'Your WhatsApp teammate for numbers and invoices — you confirm every save.';
+        }
+
+        function showAgentStep() {
+            document.getElementById('agentLeadName').value = agentLeadName || 'opsAi';
+            document.getElementById('agentJobLine').textContent = agentJobBlurb();
+            const chips = document.getElementById('agentNameChips');
+            chips.innerHTML = suggestedAgentNames().map(function (n) {
+                return '<button type="button" data-name="' + n.replace(/"/g, '&quot;') + '">' + n + '</button>';
+            }).join('');
+            showError('agentError', '');
+            syncAgentAvatar();
+            showPanel('agentPanel');
+        }
+
+        async function saveAgentLeadName(raw) {
+            const name = String(raw || '').trim() || 'opsAi';
+            await setupApi('POST', { action: 'set_agents', leadName: name });
+            agentLeadName = name;
+        }
+
         function finishSetup(added) {
             if (isSetupMode) {
                 window.location.href = '/tasks?storeId=' + encodeURIComponent(setupStoreId);
@@ -922,7 +1016,7 @@
         });
 
         document.getElementById('toolsSkipBtn').addEventListener('click', function () {
-            finishSetup(window._tasksAdded);
+            showAgentStep();
         });
 
         document.getElementById('toolsSaveBtn').addEventListener('click', async function (e) {
@@ -931,9 +1025,44 @@
             btn.disabled = true;
             try {
                 await saveToolsWanted();
-                finishSetup(window._tasksAdded);
+                showAgentStep();
             } catch (err) {
                 showError('toolsError', err.message);
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        document.getElementById('agentLeadName').addEventListener('input', syncAgentAvatar);
+        document.getElementById('agentNameChips').addEventListener('click', function (e) {
+            const btn = e.target.closest('[data-name]');
+            if (!btn) return;
+            document.getElementById('agentLeadName').value = btn.getAttribute('data-name');
+            syncAgentAvatar();
+        });
+        document.getElementById('agentBackBtn').addEventListener('click', function () {
+            showPanel('toolsPanel');
+        });
+        document.getElementById('agentSkipBtn').addEventListener('click', async function () {
+            showError('agentError', '');
+            try {
+                await saveAgentLeadName('opsAi');
+                finishSetup(window._tasksAdded);
+            } catch (err) {
+                showError('agentError', err.message);
+            }
+        });
+        document.getElementById('agentSaveBtn').addEventListener('click', async function (e) {
+            const btn = e.currentTarget;
+            showError('agentError', '');
+            btn.disabled = true;
+            try {
+                const name = document.getElementById('agentLeadName').value.trim() || 'opsAi';
+                if (name.length < 2) throw new Error('Pick a name with at least 2 characters.');
+                await saveAgentLeadName(name);
+                finishSetup(window._tasksAdded);
+            } catch (err) {
+                showError('agentError', err.message);
             } finally {
                 btn.disabled = false;
             }
@@ -1194,6 +1323,12 @@
                 return;
             }
             document.getElementById('groupNameHint').textContent = storeName || 'Your business';
+            const agentHint = document.getElementById('agentReadyHint');
+            if (agentHint) {
+                agentHint.textContent = agentLeadName
+                    ? agentLeadName + ' is ready on WhatsApp.'
+                    : '';
+            }
             document.getElementById('opsNumberDisplay').textContent =
                 opsDisplayNumber || 'Add the opsAi number from your welcome email or dashboard';
         }
