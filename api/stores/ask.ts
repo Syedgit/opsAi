@@ -7,6 +7,7 @@ import { planBoardPayload } from '../../lib/billing/plans';
 import { syncAgentsBooksFromAiChat } from '../../lib/agents/crew';
 import { answerAiChatQuestion } from '../../lib/aiChatAsk';
 import { AGENT_DISPLAY, resolveAgentPack } from '../../lib/agents/crew';
+import { parseLastAsk } from '../../lib/agents/lastAsk';
 import { readStoredSetup } from '../../lib/tasks/storeSetup';
 import { logApp, logAppError, loggedHandler, serializeError } from '../../lib/requestLog';
 
@@ -83,7 +84,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   });
   const planFeatures = planBoardPayload(billingUser?.plan).features;
   const planIncludesBooks = planFeatures.booksLookups;
-  let profileJson = store.profileJson;
+  let profileJson: unknown = store.profileJson;
   const aligned = withBooksAlignedToPlan(profileJson, planIncludesBooks);
   if (aligned) {
     profileJson = syncAgentsBooksFromAiChat(aligned);
@@ -112,7 +113,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       booksEnrolled,
       pack,
       channel: 'web',
-      lastAsk: parsed.data.lastAsk ?? null,
+      lastAsk: parseLastAsk(parsed.data.lastAsk),
     });
     // Soft-fail: always return a usable reply on web — never a dead-end 400 for routing.
     const answer =

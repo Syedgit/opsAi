@@ -289,7 +289,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         where: { storeId },
         data: { profileJson: nextProfile as object },
       });
-      store = { ...store, profileJson: nextProfile };
+      store = { ...store, profileJson: nextProfile as typeof store.profileJson };
     }
     const googleSheets = {
       connected: isSheetConnected(store.sheetId),
